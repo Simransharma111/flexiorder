@@ -145,7 +145,7 @@ export default function Homepage() {
             }
             className="border border-white/10 hover:border-orange-500 transition px-6 py-3 rounded-2xl bg-white/5 font-semibold"
           >
-            Admin Login
+            Login
           </button>
 
         </div>
