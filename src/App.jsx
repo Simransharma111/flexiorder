@@ -9,6 +9,9 @@ import ProtectedRoute from "./components/ProtectedRoute";
 import TrackOrderPage from "./pages/TrackOrderPage";
 import SuperAdminDashboard from "./pages/SuperAdminDashboard";
 import Homepage from "./pages/Homepage";
+import QRInventoryPage from "./pages/QRInventoryPage";
+import HotelSetupPage from "./pages/HotelSetupPage";
+import InstallPWA from "./components/InstallPWA";
 export default function App() {
   return (
     <>
@@ -18,10 +21,15 @@ export default function App() {
           path="/"
           element={<Homepage />}
         />
-        <Route path="/menu/table/:tableId" element={<GuestMenuPage />} />
+        <Route path="/qr/:qrId" element={<GuestMenuPage />} />
+        {/* <Route path="/menu/table/:tableId" element={<GuestMenuPage />} /> */}
         <Route
           path="/login"
           element={<LoginPage />}
+        />
+       <Route
+          path="/qr"
+          element={<QRInventoryPage />}
         />
         <Route
           path="/superadmin"
@@ -35,6 +43,19 @@ export default function App() {
             </ProtectedRoute>
           }
         />
+        <Route
+  path="/setup-hotel"
+  element={
+    <ProtectedRoute
+      allowedRoles={[
+        "owner",
+        "superadmin",
+      ]}
+    >
+      <HotelSetupPage />
+    </ProtectedRoute>
+  }
+/>
         <Route
           path="/owner/dashboard"
           element={
@@ -67,7 +88,7 @@ export default function App() {
           element={<TrackOrderPage />}
         />
       </Routes>
-
+<InstallPWA />
     </>
   );
 }

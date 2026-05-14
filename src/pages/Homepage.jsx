@@ -145,7 +145,7 @@ export default function Homepage() {
             }
             className="border border-white/10 hover:border-orange-500 transition px-6 py-3 rounded-2xl bg-white/5 font-semibold"
           >
-            Admin Login
+            Login
           </button>
 
         </div>
@@ -159,11 +159,6 @@ export default function Homepage() {
           {/* LEFT */}
 
           <div>
-
-            <div className="inline-flex items-center gap-2 bg-orange-500/10 border border-orange-500/20 rounded-full px-4 py-2 text-sm text-orange-300 mb-6">
-              🚀 Smart QR Ordering SaaS
-            </div>
-
             <h1 className="text-5xl lg:text-7xl font-black leading-tight">
 
               Transform Your Restaurant Into a

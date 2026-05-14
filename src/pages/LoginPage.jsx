@@ -116,38 +116,52 @@ export default function LoginPage() {
       // ROLE BASED REDIRECT
       // =====================
 
-      switch (
-        res.data.user.role
-      ) {
+      // =====================
+// ROLE BASED REDIRECT
+// =====================
 
-        case "superadmin":
+const user = res.data.user;
 
-          navigate(
-            "/superadmin"
-          );
+switch (user.role) {
 
-          break;
+  case "superadmin":
 
-        case "owner":
+    navigate("/superadmin");
 
-          navigate(
-            "/owner/dashboard"
-          );
+    break;
 
-          break;
+  case "owner":
 
-        case "staff":
+    // FIRST TIME SETUP CHECK
 
-          navigate(
-            "/kitchen"
-          );
+    if (
+      !user.hotelId?.setupCompleted
+    ) {
 
-          break;
+      navigate(
+        "/setup-hotel"
+      );
 
-        default:
+    } else {
 
-          navigate("/");
-      }
+      navigate(
+        "/owner/dashboard"
+      );
+
+    }
+
+    break;
+
+  case "staff":
+
+    navigate("/kitchen");
+
+    break;
+
+  default:
+
+    navigate("/");
+}
 
     } catch (err) {
 
