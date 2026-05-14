@@ -144,7 +144,7 @@ export default function Homepage() {
   {/* LOGO */}
   <div className="flex items-center gap-3">
     <img
-      src="/logo.png"
+      src="/logo.jpg"
       alt="FlexiOrder"
       className="h-10 w-auto object-contain"
     />
