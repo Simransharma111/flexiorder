@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-
 import api from "../api/axios";
 import { useCart } from "../context/CartContext";
 
@@ -40,21 +39,15 @@ export default function GuestMenuPage() {
   const [scheduleEnabled, setScheduleEnabled] = useState(false);
   const [scheduledTime, setScheduledTime] = useState("");
 
-  /* ================= THEME (FIXED) ================= */
-  const themeConfig =
-    THEME_MAP[hotel?.theme?.themeId] || {};
+  // THEME SAFE
+  const themeConfig = THEME_MAP[hotel?.theme?.themeId] || {};
 
   const primaryColor =
-    hotel?.theme?.primaryColor ||
-    themeConfig.primary ||
-    "#F97316";
+    hotel?.theme?.primaryColor || themeConfig.primary || "#F97316";
 
   const secondaryColor =
-    hotel?.theme?.secondaryColor ||
-    themeConfig.secondary ||
-    "#0F172A";
+    hotel?.theme?.secondaryColor || themeConfig.secondary || "#0F172A";
 
-  /* ================= FETCH MENU ================= */
   useEffect(() => {
     fetchMenu();
   }, []);
@@ -62,7 +55,6 @@ export default function GuestMenuPage() {
   const fetchMenu = async () => {
     try {
       const res = await api.get(`/qr/${qrId}`);
-
       setDishes(res.data.dishes || []);
       setTableInfo(res.data.table);
       setHotel(res.data.hotel);
@@ -73,26 +65,26 @@ export default function GuestMenuPage() {
     }
   };
 
-  /* ================= CART ================= */
+  // CART QTY
   const getItemQty = (id) => {
-    const item = cartItems.find((i) => i._id === id);
+    const item = cartItems.find((i) => (i._id || i.id) === id);
     return item ? item.quantity : 0;
   };
 
-  /* ================= ORDER ================= */
+  // PLACE ORDER
   const placeOrder = async () => {
     try {
       if (!cartItems.length) return alert("Cart is empty");
       if (!guestName.trim()) return alert("Enter guest name");
 
       if (scheduleEnabled && !scheduledTime)
-        return alert("Select time");
+        return alert("Select schedule time");
 
       if (
         scheduleEnabled &&
         new Date(scheduledTime) < new Date()
       )
-        return alert("Invalid time");
+        return alert("Invalid schedule time");
 
       setPlacingOrder(true);
 
@@ -101,19 +93,17 @@ export default function GuestMenuPage() {
         guestName,
         scheduledFor: scheduleEnabled ? scheduledTime : null,
         items: cartItems.map((i) => ({
-          menuId: i._id,
+          menuId: i._id || i.id,
           quantity: i.quantity,
         })),
       };
 
       const res = await api.post("/orders", payload);
 
-      const orderId = res.data.order?._id;
-
       clearCart();
       setShowCart(false);
 
-      navigate(`/track-order/${orderId}`);
+      navigate(`/track-order/${res.data.order._id}`);
     } catch (err) {
       alert(err?.response?.data?.message || "Order failed");
     } finally {
@@ -121,11 +111,12 @@ export default function GuestMenuPage() {
     }
   };
 
-  /* ================= LOADING ================= */
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center text-white"
-        style={{ background: secondaryColor }}>
+      <div
+        className="min-h-screen flex items-center justify-center text-white"
+        style={{ background: secondaryColor }}
+      >
         Loading Menu...
       </div>
     );
@@ -139,6 +130,8 @@ export default function GuestMenuPage() {
       {/* HEADER */}
       <div className="sticky top-0 z-50 bg-black/40 backdrop-blur border-b border-white/10">
         <div className="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
+
+          {/* HOTEL INFO */}
           <div className="flex items-center gap-3">
             {hotel?.logo && (
               <img
@@ -149,47 +142,35 @@ export default function GuestMenuPage() {
 
             <div>
               <h1 className="text-2xl font-bold">
-                {hotel?.name || "Hotel"}
+                {hotel?.name}
               </h1>
               <p className="text-xs text-gray-300">
                 {hotel?.tagline}
               </p>
               <p className="text-sm text-gray-300 mt-1">
-                {tableInfo?.type === "room"
-                  ? `Room: ${tableInfo?.tableNumber}`
-                  : `Table: ${tableInfo?.tableNumber}`}
+                Table: {tableInfo?.tableNumber}
               </p>
             </div>
           </div>
 
+          {/* CART BUTTON */}
           <button
-            onClick={() => setShowCart(true)}
+            onClick={() => {
+              console.log("Cart opened");
+              setShowCart(true);
+            }}
             className="px-5 py-2 rounded-full font-semibold"
             style={{ background: primaryColor }}
           >
-            Cart
+            Cart ({cartItems.length})
           </button>
         </div>
       </div>
 
-      {/* HERO */}
-      <section className="relative h-[320px] overflow-hidden">
-        <img
-          src={hotel?.coverImage || "https://images.unsplash.com/photo-1504674900247-0877df9cc836"}
-          className="w-full h-full object-cover"
-        />
-
-        <div className="absolute inset-0 bg-black/60 flex items-end">
-          <div className="p-6">
-            <h2 className="text-4xl font-bold">{hotel?.name}</h2>
-            <p className="text-gray-300">{hotel?.tagline}</p>
-          </div>
-        </div>
-      </section>
-
-      {/* MENU (UNCHANGED UI) */}
+      {/* MENU */}
       <section className="max-w-7xl mx-auto px-4 py-10">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
+
           {dishes.map((dish) => {
             const qty = getItemQty(dish._id);
 
@@ -205,9 +186,6 @@ export default function GuestMenuPage() {
 
                 <div className="p-5">
                   <h3 className="text-xl font-bold">{dish.name}</h3>
-                  <p className="text-gray-400 text-sm">
-                    {dish.description}
-                  </p>
 
                   <div className="flex justify-between mt-4">
                     <span style={{ color: primaryColor }}>
@@ -216,7 +194,14 @@ export default function GuestMenuPage() {
 
                     {qty === 0 ? (
                       <button
-                        onClick={() => addToCart(dish)}
+                        onClick={() =>
+                          addToCart({
+                            _id: dish._id,
+                            name: dish.name,
+                            price: dish.price,
+                            image: dish.image,
+                          })
+                        }
                         style={{ background: primaryColor }}
                         className="px-4 py-1 rounded-full"
                       >
@@ -234,8 +219,87 @@ export default function GuestMenuPage() {
               </div>
             );
           })}
+
         </div>
       </section>
+
+      {/* CART MODAL */}
+      {showCart && (
+        <div className="fixed inset-0 bg-black/70 z-50 flex justify-center items-end">
+          <div
+            className="w-full max-w-2xl rounded-t-3xl p-6 max-h-[90vh] overflow-y-auto"
+            style={{ background: secondaryColor }}
+          >
+
+            {/* CLOSE */}
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-2xl font-bold">Your Cart</h2>
+              <button onClick={() => setShowCart(false)}>✕</button>
+            </div>
+
+            {/* ITEMS */}
+            {cartItems.map((item) => (
+              <div
+                key={item._id}
+                className="flex justify-between items-center bg-white/5 p-4 rounded-2xl mb-3"
+              >
+                <div>
+                  <h3>{item.name}</h3>
+                  <p>₹{item.price}</p>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button onClick={() => decreaseQty(item._id)}>-</button>
+                  <span>{item.quantity}</span>
+                  <button onClick={() => increaseQty(item._id)}>+</button>
+                </div>
+              </div>
+            ))}
+
+            {/* GUEST NAME */}
+            <input
+              className="w-full mt-4 p-3 rounded-xl text-black"
+              placeholder="Enter name"
+              value={guestName}
+              onChange={(e) => setGuestName(e.target.value)}
+            />
+
+            {/* SCHEDULE */}
+            <label className="flex items-center gap-2 mt-4">
+              <input
+                type="checkbox"
+                checked={scheduleEnabled}
+                onChange={(e) => setScheduleEnabled(e.target.checked)}
+              />
+              Schedule Order
+            </label>
+
+            {scheduleEnabled && (
+              <input
+                type="datetime-local"
+                className="w-full mt-3 p-3 rounded-xl text-black"
+                value={scheduledTime}
+                onChange={(e) => setScheduledTime(e.target.value)}
+              />
+            )}
+
+            {/* TOTAL */}
+            <div className="mt-4 text-lg font-bold">
+              Total: ₹{totalPrice}
+            </div>
+
+            {/* ORDER */}
+            <button
+              onClick={placeOrder}
+              disabled={placingOrder}
+              className="w-full mt-4 py-3 rounded-xl font-bold"
+              style={{ background: primaryColor }}
+            >
+              {placingOrder ? "Placing..." : "Place Order"}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
