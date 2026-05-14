@@ -13,23 +13,62 @@ import api from "../api/axios";
    THEME SYSTEM
 ========================= */
 const THEME_MAP = {
-  stormy_morning: { primary: "#64748B", secondary: "#0F172A" },
-  mossy_hollow: { primary: "#4D7C0F", secondary: "#1A2E05" },
-  blue_eclipse: { primary: "#1E293B", secondary: "#020617" },
-  lush_forest: { primary: "#14532D", secondary: "#052E16" },
-  green_juice: { primary: "#16A34A", secondary: "#052E16" },
-  chili_spice: { primary: "#DC2626", secondary: "#1F0A0A" },
-  chocolate_truffle: { primary: "#7C2D12", secondary: "#1C0A00" },
-  ink_wash: { primary: "#111827", secondary: "#F8FAFC" },
+  stormy_morning: {
+    primary: "#64748B",
+    secondary: "#0F172A",
+  },
+
+  mossy_hollow: {
+    primary: "#4D7C0F",
+    secondary: "#1A2E05",
+  },
+
+  blue_eclipse: {
+    primary: "#1E293B",
+    secondary: "#020617",
+  },
+
+  lush_forest: {
+    primary: "#14532D",
+    secondary: "#052E16",
+  },
+
+  green_juice: {
+    primary: "#16A34A",
+    secondary: "#052E16",
+  },
+
+  chili_spice: {
+    primary: "#DC2626",
+    secondary: "#1F0A0A",
+  },
+
+  chocolate_truffle: {
+    primary: "#7C2D12",
+    secondary: "#1C0A00",
+  },
+
+  ink_wash: {
+    primary: "#111827",
+    secondary: "#F8FAFC",
+  },
 };
 
 export default function OwnerDashboard() {
-  const [activeTab, setActiveTab] = useState("menu");
   const navigate = useNavigate();
 
+  const [activeTab, setActiveTab] =
+    useState("menu");
+
   const [orders, setOrders] = useState([]);
-  const [loadingOrders, setLoadingOrders] = useState(false);
+
+  const [loadingOrders, setLoadingOrders] =
+    useState(false);
+
   const [hotel, setHotel] = useState(null);
+
+  const [refreshKey, setRefreshKey] =
+    useState(0);
 
   /* =========================
      FETCH HOTEL
@@ -38,7 +77,9 @@ export default function OwnerDashboard() {
     try {
       const res = await api.get("/hotel/me", {
         headers: {
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
+          Authorization: `Bearer ${localStorage.getItem(
+            "token"
+          )}`,
         },
       });
 
@@ -57,7 +98,9 @@ export default function OwnerDashboard() {
 
       const res = await api.get("/orders", {
         headers: {
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
+          Authorization: `Bearer ${localStorage.getItem(
+            "token"
+          )}`,
         },
       });
 
@@ -69,16 +112,30 @@ export default function OwnerDashboard() {
     }
   };
 
+  /* =========================
+     INITIAL LOAD
+  ========================= */
   useEffect(() => {
     fetchHotel();
   }, []);
 
+  /* =========================
+     LIVE ORDER REFRESH
+  ========================= */
   useEffect(() => {
-    if (activeTab === "orders") fetchOrders();
+    if (activeTab !== "orders") return;
+
+    fetchOrders();
+
+    const interval = setInterval(() => {
+      fetchOrders();
+    }, 5000);
+
+    return () => clearInterval(interval);
   }, [activeTab]);
 
   /* =========================
-     THEME RESOLVE
+     THEME
   ========================= */
   const theme =
     THEME_MAP[hotel?.theme?.themeId] || {};
@@ -93,161 +150,232 @@ export default function OwnerDashboard() {
     theme.secondary ||
     "#0F172A";
 
+  /* =========================
+     LOGOUT
+  ========================= */
   const handleLogout = () => {
     localStorage.removeItem("token");
     localStorage.removeItem("user");
+
     navigate("/login");
   };
 
+  /* =========================
+     BUTTON STYLE
+  ========================= */
   const getButtonStyle = (active) => ({
-    background: active ? primaryColor : "rgba(255,255,255,0.05)",
+    background: active
+      ? primaryColor
+      : "rgba(255,255,255,0.06)",
+
     color: "white",
   });
 
+  const tabs = [
+    {
+      key: "menu",
+      label: "Menu",
+    },
+
+    {
+      key: "orders",
+      label: "Orders",
+    },
+
+    {
+      key: "staff",
+      label: "Staff",
+    },
+
+    {
+      key: "analytics",
+      label: "Analytics",
+    },
+
+    {
+      key: "tables",
+      label: "QR Tables",
+    },
+
+    {
+      key: "inventory",
+      label: "Inventory",
+    },
+  ];
+
   return (
     <div
-      className="min-h-screen text-white flex"
-      style={{ background: secondaryColor }}
+      className="min-h-screen text-white flex flex-col md:flex-row"
+      style={{
+        background: secondaryColor,
+      }}
     >
-      {/* ================= SIDEBAR ================= */}
+      {/* =========================
+          MOBILE NAVBAR
+      ========================= */}
+      <div className="md:hidden sticky top-0 z-50 bg-black/80 backdrop-blur-xl border-b border-white/10 p-3">
+        <div className="flex gap-2 overflow-x-auto no-scrollbar">
+          {tabs.map((tab) => (
+            <button
+              key={tab.key}
+              onClick={() =>
+                setActiveTab(tab.key)
+              }
+              className="px-4 py-2 rounded-xl whitespace-nowrap text-sm"
+              style={getButtonStyle(
+                activeTab === tab.key
+              )}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* =========================
+          SIDEBAR
+      ========================= */}
       <aside
         className="w-[260px] border-r border-white/10 p-6 hidden md:block backdrop-blur-lg"
-        style={{ background: "#111827" }}
+        style={{
+          background: "#111827",
+        }}
       >
-        <h1 className="text-3xl font-bold flex items-center gap-3">
-          {hotel?.logo && (
-            <img
-              src={hotel.logo}
-              className="w-10 h-10 rounded-full object-cover"
-              alt="logo"
-            />
-          )}
-          {hotel?.name || "FlexiOrder"}
-        </h1>
+        {/* LOGO */}
+        <div>
+          <h1 className="text-3xl font-bold flex items-center gap-3">
+            {hotel?.logo && (
+              <img
+                src={hotel.logo}
+                alt="logo"
+                className="w-10 h-10 rounded-full object-cover"
+              />
+            )}
 
-        <p className="text-gray-400 mt-2">
-          {hotel?.tagline || "Owner Panel"}
-        </p>
+            {hotel?.name || "FlexiOrder"}
+          </h1>
 
+          <p className="text-gray-400 mt-2">
+            {hotel?.tagline ||
+              "Owner Panel"}
+          </p>
+        </div>
+
+        {/* NAVIGATION */}
         <div className="mt-10 space-y-3">
-          <button
-            onClick={() => setActiveTab("menu")}
-            className="w-full text-left px-4 py-3 rounded-2xl"
-            style={getButtonStyle(activeTab === "menu")}
-          >
-            Menu Management
-          </button>
-
-          <button
-            onClick={() => setActiveTab("orders")}
-            className="w-full text-left px-4 py-3 rounded-2xl"
-            style={getButtonStyle(activeTab === "orders")}
-          >
-            Orders
-          </button>
-
-          <button
-            onClick={() => setActiveTab("staff")}
-            className="w-full text-left px-4 py-3 rounded-2xl"
-            style={getButtonStyle(activeTab === "staff")}
-          >
-            Staff
-          </button>
-
-          <button
-            onClick={() => setActiveTab("analytics")}
-            className="w-full text-left px-4 py-3 rounded-2xl"
-            style={getButtonStyle(activeTab === "analytics")}
-          >
-            Analytics
-          </button>
-
-          <button
-            onClick={() => setActiveTab("qr")}
-            className="w-full text-left px-4 py-3 rounded-2xl"
-            style={getButtonStyle(activeTab === "qr")}
-          >
-            QR Tables
-          </button>
-          <button
-  onClick={() => setActiveTab("qr")}
-  className="w-full text-left px-4 py-3 rounded-2xl"
-  style={getButtonStyle(activeTab === "qr")}
->
-  QR Inventory
-</button>
+          {tabs.map((tab) => (
+            <button
+              key={tab.key}
+              onClick={() =>
+                setActiveTab(tab.key)
+              }
+              className="w-full text-left px-4 py-3 rounded-2xl transition-all"
+              style={getButtonStyle(
+                activeTab === tab.key
+              )}
+            >
+              {tab.label}
+            </button>
+          ))}
         </div>
       </aside>
 
-      {/* ================= MAIN ================= */}
-      <main className="flex-1 p-6">
-        
-        {/* HEADER WITH COVER IMAGE */}
+      {/* =========================
+          MAIN CONTENT
+      ========================= */}
+      <main className="flex-1 p-3 md:p-6">
+        {/* =========================
+            HEADER
+        ========================= */}
         <div
-          className="flex justify-between items-center p-6 rounded-3xl mb-6"
+          className="
+            flex flex-col md:flex-row
+            gap-5
+            md:justify-between
+            md:items-center
+            p-4 md:p-6
+            rounded-3xl
+            mb-6
+            overflow-hidden
+          "
           style={{
-            backgroundImage: hotel?.coverImage
-              ? `url(${hotel.coverImage})`
-              : "none",
+            backgroundImage:
+              hotel?.coverImage
+                ? `url(${hotel.coverImage})`
+                : "none",
+
             backgroundSize: "cover",
+
             backgroundPosition: "center",
-            backgroundColor: secondaryColor,
+
+            backgroundColor:
+              secondaryColor,
           }}
         >
+          {/* LEFT */}
           <div className="flex items-center gap-4">
             {hotel?.logo && (
               <img
                 src={hotel.logo}
-                className="w-14 h-14 rounded-full object-cover border"
                 alt="logo"
+                className="w-14 h-14 rounded-full object-cover border border-white/20"
               />
             )}
 
             <div>
-              <h2 className="text-4xl font-bold">
-                {hotel?.name || "Owner Dashboard"}
+              <h2 className="text-2xl md:text-4xl font-bold">
+                {hotel?.name ||
+                  "Owner Dashboard"}
               </h2>
-              <p className="text-gray-300">
-                Manage your hotel operations
+
+              <p className="text-gray-300 mt-1">
+                Manage your hotel
+                operations
               </p>
             </div>
           </div>
 
+          {/* RIGHT */}
           <button
             onClick={handleLogout}
-            className="px-5 py-3 rounded-2xl font-medium"
-            style={{ background: primaryColor }}
+            className="w-full md:w-auto px-5 py-3 rounded-2xl font-medium"
+            style={{
+              background: primaryColor,
+            }}
           >
             Logout
           </button>
         </div>
 
-        {/* CONTENT */}
-        <div className="mt-10">
-          
+        {/* =========================
+            TAB CONTENT
+        ========================= */}
+        <div className="mt-6">
+          {/* MENU */}
           {activeTab === "menu" && (
-            <OwnerMenuManager />
+            <OwnerMenuManager
+              refreshKey={refreshKey}
+              setRefreshKey={
+                setRefreshKey
+              }
+            />
           )}
 
-          {activeTab === "qr" && (
-            <div className="bg-white/5 border border-white/10 rounded-3xl p-6">
-              <h2 className="text-3xl font-bold">QR Manager</h2>
-              <div className="mt-8">
-                <TableQRManager />
-              </div>
-            </div>
-          )}
-
+          {/* ORDERS */}
           {activeTab === "orders" && (
-            <div className="bg-white/5 border border-white/10 rounded-3xl p-6">
-              
-              <div className="flex justify-between items-center mb-8">
-                <h2 className="text-3xl font-bold">Live Orders</h2>
+            <div className="bg-white/5 border border-white/10 rounded-3xl p-4 md:p-6">
+              <div className="flex flex-col md:flex-row gap-4 md:justify-between md:items-center mb-8">
+                <h2 className="text-2xl md:text-3xl font-bold">
+                  Live Orders
+                </h2>
 
                 <button
                   onClick={fetchOrders}
                   className="px-5 py-2 rounded-xl"
-                  style={{ background: primaryColor }}
+                  style={{
+                    background:
+                      primaryColor,
+                  }}
                 >
                   Refresh
                 </button>
@@ -263,69 +391,162 @@ export default function OwnerDashboard() {
                 </div>
               ) : (
                 <div className="space-y-5">
-                  {orders.map((order) => (
-                    <div
-                      key={order._id}
-                      className="bg-black/30 border border-white/10 rounded-3xl p-6"
-                    >
-                      <div className="flex justify-between">
-                        <div>
-                          <h3 className="text-2xl font-bold">
-                            {order.table?.type === "room"
-                              ? "Room"
-                              : "Table"}{" "}
-                            {order.table?.tableNumber}
-                          </h3>
-                          <p className="text-gray-400">
-                            Guest: {order.guestName}
-                          </p>
-                        </div>
+                  {orders.map(
+                    (order) => (
+                      <div
+                        key={order._id}
+                        className="bg-black/30 border border-white/10 rounded-3xl p-4 md:p-6"
+                      >
+                        {/* TOP */}
+                        <div className="flex flex-col md:flex-row gap-4 md:justify-between">
+                          <div>
+                            <h3 className="text-xl md:text-2xl font-bold">
+                              {order.table
+                                ?.type ===
+                              "room"
+                                ? "Room"
+                                : "Table"}{" "}
+                              {
+                                order
+                                  .table
+                                  ?.tableNumber
+                              }
+                            </h3>
 
-                        <div className="text-right">
-                          <p
-                            className="text-2xl font-bold"
-                            style={{ color: primaryColor }}
-                          >
-                            ₹{order.totalAmount}
-                          </p>
-                          <span className="text-yellow-300 text-sm">
-                            {order.status}
-                          </span>
-                        </div>
-                      </div>
+                            <p className="text-gray-400 mt-1">
+                              Guest:{" "}
+                              {
+                                order.guestName
+                              }
+                            </p>
+                          </div>
 
-                      <div className="mt-4 space-y-2">
-                        {order.items.map((item, i) => (
-                          <div
-                            key={i}
-                            className="flex justify-between bg-white/5 p-3 rounded-xl"
-                          >
-                            <span>{item.name}</span>
-                            <span style={{ color: primaryColor }}>
-                              ₹{item.price * item.quantity}
+                          <div className="md:text-right">
+                            <p
+                              className="text-2xl font-bold"
+                              style={{
+                                color:
+                                  primaryColor,
+                              }}
+                            >
+                              ₹
+                              {
+                                order.totalAmount
+                              }
+                            </p>
+
+                            <span className="text-yellow-300 text-sm">
+                              {
+                                order.status
+                              }
                             </span>
                           </div>
-                        ))}
+                        </div>
+
+                        {/* ITEMS */}
+                        <div className="mt-5 space-y-3">
+                          {order.items.map(
+                            (
+                              item,
+                              index
+                            ) => (
+                              <div
+                                key={index}
+                                className="
+                                  flex justify-between items-center
+                                  gap-3
+                                  bg-white/5
+                                  p-3
+                                  rounded-xl
+                                "
+                              >
+                                <div>
+                                  <p className="font-medium">
+                                    {
+                                      item.name
+                                    }
+                                  </p>
+
+                                  <p className="text-sm text-gray-400">
+                                    Qty:{" "}
+                                    {
+                                      item.quantity
+                                    }
+                                  </p>
+                                </div>
+
+                                <span
+                                  className="font-semibold"
+                                  style={{
+                                    color:
+                                      primaryColor,
+                                  }}
+                                >
+                                  ₹
+                                  {item.price *
+                                    item.quantity}
+                                </span>
+                              </div>
+                            )
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    )
+                  )}
                 </div>
               )}
             </div>
           )}
 
-          {activeTab === "staff" && <StaffManager />}
+          {/* STAFF */}
+          {activeTab === "staff" && (
+            <StaffManager />
+          )}
 
-          {activeTab === "analytics" && (
+          {/* ANALYTICS */}
+          {activeTab ===
+            "analytics" && (
             <AnalyticsDashboard />
           )}
-          {activeTab === "qr" && (
-  <div className="bg-white/5 border border-white/10 rounded-3xl p-6">
-    <h2 className="text-3xl font-bold mb-6">QR Inventory</h2>
 
-    <QRInventory />
-  </div>
-)}
+          {/* QR TABLES */}
+          {activeTab === "tables" && (
+            <div className="bg-white/5 border border-white/10 rounded-3xl p-4 md:p-6">
+              <h2 className="text-2xl md:text-3xl font-bold">
+                QR Tables
+              </h2>
+
+              <div className="mt-6">
+                <TableQRManager
+                  refreshKey={
+                    refreshKey
+                  }
+                  setRefreshKey={
+                    setRefreshKey
+                  }
+                />
+              </div>
+            </div>
+          )}
+
+          {/* INVENTORY */}
+          {activeTab ===
+            "inventory" && (
+            <div className="bg-white/5 border border-white/10 rounded-3xl p-4 md:p-6">
+              <h2 className="text-2xl md:text-3xl font-bold mb-6">
+                QR Inventory
+              </h2>
+
+              <QRInventory
+                refreshKey={
+                  refreshKey
+                }
+                setRefreshKey={
+                  setRefreshKey
+                }
+              />
+            </div>
+          )}
         </div>
       </main>
     </div>
