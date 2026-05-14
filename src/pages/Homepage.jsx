@@ -138,6 +138,7 @@ export default function Homepage() {
           <h1 className="text-3xl font-black text-orange-500">
             FlexiOrder
           </h1>
+          </div>
 <div className="relative flex justify-between items-center mb-16">
   
   {/* LOGO */}
