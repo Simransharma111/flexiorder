@@ -133,35 +133,31 @@ export default function Homepage() {
 
         {/* NAVBAR */}
 
-        <div className="relative flex justify-between items-center mb-16">
+     <div className="relative flex justify-between items-center mb-16">
 
-          <h1 className="text-3xl font-black text-orange-500">
-            FlexiOrder
-          </h1>
-          </div>
-<div className="relative flex justify-between items-center mb-16">
-  
-  {/* LOGO */}
+  {/* LEFT - LOGO */}
   <div className="flex items-center gap-3">
     <img
-      src="/logo.jpg"
+      src={`${import.meta.env.BASE_URL}logo.jpg`}
       alt="FlexiOrder"
       className="h-10 w-auto object-contain"
     />
+
+    <h1 className="text-2xl font-bold text-orange-500">
+      FlexiOrder
+    </h1>
   </div>
-          <button
-            onClick={() =>
-              navigate("/login")
-            }
-            className="border border-white/10 hover:border-orange-500 transition px-6 py-3 rounded-2xl bg-white/5 font-semibold"
-          >
-            Login
-          </button>
 
-        </div>
+  {/* RIGHT - LOGIN */}
+  <button
+    onClick={() => navigate("/login")}
+    className="border border-white/10 hover:border-orange-500 transition px-6 py-3 rounded-2xl bg-white/5 font-semibold"
+  >
+    Login
+  </button>
 
-
-
+</div>
+       
         {/* HERO CONTENT */}
 
         <div className="relative grid lg:grid-cols-2 gap-14 items-center">
