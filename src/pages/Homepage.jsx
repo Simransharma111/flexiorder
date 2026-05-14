@@ -132,23 +132,28 @@ export default function Homepage() {
 
 
         {/* NAVBAR */}
+<div className="relative flex justify-between items-center mb-16">
 
-     <div className="relative flex justify-between items-center mb-16">
+  {/* BRAND */}
+  <div className="flex items-center gap-4">
 
-  {/* LEFT - LOGO */}
-  <div className="flex items-center gap-3">
-    <img
-      src={`${import.meta.env.BASE_URL}logo.jpg`}
-      alt="FlexiOrder"
-      className="h-10 w-auto object-contain"
-    />
+    {/* LOGO */}
+    <div className="flex items-center justify-center">
+      <img
+        src={`${import.meta.env.BASE_URL}logo.jpg`}
+        alt="FlexiOrder"
+        className="h-12 w-12 object-contain"
+      />
+    </div>
 
-    <h1 className="text-2xl font-bold text-orange-500">
-      FlexiOrder
+    {/* BRAND NAME */}
+    <h1 className="text-3xl font-black tracking-wide text-white">
+      Flexi<span className="text-orange-500">Order</span>
     </h1>
+
   </div>
 
-  {/* RIGHT - LOGIN */}
+  {/* LOGIN */}
   <button
     onClick={() => navigate("/login")}
     className="border border-white/10 hover:border-orange-500 transition px-6 py-3 rounded-2xl bg-white/5 font-semibold"
@@ -157,7 +162,7 @@ export default function Homepage() {
   </button>
 
 </div>
-       
+        
         {/* HERO CONTENT */}
 
         <div className="relative grid lg:grid-cols-2 gap-14 items-center">
