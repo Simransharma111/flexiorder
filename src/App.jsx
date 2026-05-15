@@ -16,6 +16,7 @@ export default function App() {
   return (
     <>
 
+        <InstallPWA />
       <Routes>
          <Route
           path="/"
@@ -88,7 +89,6 @@ export default function App() {
           element={<TrackOrderPage />}
         />
       </Routes>
-<InstallPWA />
     </>
   );
 }
