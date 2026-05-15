@@ -203,14 +203,14 @@ export default function Homepage() {
                 Create Restaurant
               </button>
 
-              <button
+              {/* <button
                 onClick={() =>
                   setShowOrderModal(true)
                 }
                 className="border border-white/10 hover:border-orange-500 transition px-8 py-4 rounded-2xl font-semibold bg-white/5"
               >
                 Order Food
-              </button>
+              </button> */}
 
             </div>
 
