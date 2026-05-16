@@ -56,11 +56,14 @@ useEffect(() => {
   fetchMenu();
 
   // RESTORE ACTIVE ORDERS
-  const savedActiveOrders =
-    localStorage.getItem("activeOrders");
+ const activeOrdersKey = `activeOrders_${qrId}`;
+const previousOrdersKey = `previousOrders_${qrId}`;
 
-  const savedPreviousOrders =
-    localStorage.getItem("previousOrders");
+const savedActiveOrders =
+  localStorage.getItem(activeOrdersKey);
+
+const savedPreviousOrders =
+  localStorage.getItem(previousOrdersKey);
 
   if (savedActiveOrders) {
     setActiveOrders(
@@ -114,19 +117,15 @@ useEffect(() => {
         updatedPreviousOrders
       );
 
-      localStorage.setItem(
-        "activeOrders",
-        JSON.stringify(
-          updatedActiveOrders
-        )
-      );
+    localStorage.setItem(
+  `activeOrders_${qrId}`,
+  JSON.stringify(updatedActiveOrders)
+);
 
-      localStorage.setItem(
-        "previousOrders",
-        JSON.stringify(
-          updatedPreviousOrders
-        )
-      );
+    localStorage.setItem(
+  `previousOrders_${qrId}`,
+  JSON.stringify(updatedPreviousOrders)
+);
 
       return;
     }
@@ -242,7 +241,7 @@ const updatedOrders = [
 setActiveOrders(updatedOrders);
 
 localStorage.setItem(
-  "activeOrders",
+  `activeOrders_${qrId}`,
   JSON.stringify(updatedOrders)
 );
 
