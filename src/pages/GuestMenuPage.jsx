@@ -406,79 +406,7 @@ alert(
   </section>
 
 )}
-{/* PREVIOUS ORDERS */}
 
-{previousOrders.length > 0 && (
-
-  <section className="max-w-7xl mx-auto px-4 mt-8">
-
-    <h2 className="text-xl font-bold mb-4 text-gray-300">
-      Previous Orders
-    </h2>
-
-    <div className="space-y-3">
-
-      {previousOrders.map((order) => (
-
-        <div
-          key={order._id}
-          className="bg-white/[0.03] border border-white/5 rounded-2xl p-4 opacity-70"
-        >
-
-          <div className="flex justify-between flex-wrap gap-3">
-
-            <div>
-
-              <p className="text-xs text-gray-500">
-                ORDER ID
-              </p>
-
-              <h3 className="text-sm break-all">
-                {order._id}
-              </h3>
-
-              <div className="mt-3 space-y-1">
-
-                {(order.items || []).map(
-                  (item, index) => (
-
-                    <p
-                      key={index}
-                      className="text-sm text-gray-400"
-                    >
-                      • {item.name} × {item.quantity}
-                    </p>
-
-                  )
-                )}
-
-              </div>
-
-            </div>
-
-            <div className="text-right">
-
-              <p className="text-xs text-gray-500">
-                STATUS
-              </p>
-
-              <h3 className="capitalize text-sm text-gray-400">
-                {order.status}
-              </h3>
-
-            </div>
-
-          </div>
-
-        </div>
-
-      ))}
-
-    </div>
-
-  </section>
-
-)}
       {/* MENU */}
       <section className="max-w-7xl mx-auto px-4 py-10">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
@@ -497,46 +425,139 @@ alert(
                 />
 
                 <div className="p-5">
-                  <h3 className="text-xl font-bold">{dish.name}</h3>
 
-                  <div className="flex justify-between mt-4">
-                    <span style={{ color: primaryColor }}>
-                      ₹{dish.price}
-                    </span>
+  {/* TITLE + VEG/NONVEG */}
+  <div className="flex items-start justify-between gap-3">
 
-                    {!dish.isAvailable ? (
+    <div className="flex-1">
 
-  <button
-    disabled
-    className="px-4 py-1 rounded-full bg-gray-500 cursor-not-allowed"
-  >
-    Unavailable
-  </button>
+      <div className="flex items-center gap-2 flex-wrap">
 
-) : qty === 0 ? (
-                      <button
-                        onClick={() =>
-                          addToCart({
-                            _id: dish._id,
-                            name: dish.name,
-                            price: dish.price,
-                            image: dish.image,
-                          })
-                        }
-                        style={{ background: primaryColor }}
-                        className="px-4 py-1 rounded-full"
-                      >
-                        Add
-                      </button>
-                    ) : (
-                      <div className="flex gap-2 items-center">
-                        <button onClick={() => decreaseQty(dish._id)}>-</button>
-                        <span>{qty}</span>
-                        <button onClick={() => increaseQty(dish._id)}>+</button>
-                      </div>
-                    )}
-                  </div>
-                </div>
+        <h3 className="text-xl font-bold">
+          {dish.name}
+        </h3>
+
+        {/* VEG/NONVEG */}
+        <span
+          className={`w-4 h-4 rounded-sm border-2 flex items-center justify-center ${
+            dish.foodType === "veg"
+              ? "border-green-500"
+              : "border-red-500"
+          }`}
+        >
+          <span
+            className={`w-2 h-2 rounded-full ${
+              dish.foodType === "veg"
+                ? "bg-green-500"
+                : "bg-red-500"
+            }`}
+          ></span>
+        </span>
+
+      </div>
+
+      {/* DESCRIPTION */}
+      <p className="text-gray-400 text-sm mt-2 line-clamp-2">
+        {dish.description}
+      </p>
+
+    </div>
+
+  </div>
+
+  {/* BADGES */}
+  <div className="flex gap-2 flex-wrap mt-4">
+
+    {dish.isBestseller && (
+      <span className="bg-yellow-500/20 text-yellow-300 text-xs px-3 py-1 rounded-full border border-yellow-500/30">
+        Bestseller
+      </span>
+    )}
+
+    {dish.isRecommended && (
+      <span className="bg-green-500/20 text-green-300 text-xs px-3 py-1 rounded-full border border-green-500/30">
+        Chef Recommended
+      </span>
+    )}
+
+    {!dish.isAvailable && (
+      <span className="bg-red-500/20 text-red-300 text-xs px-3 py-1 rounded-full border border-red-500/30">
+        Currently Unavailable
+      </span>
+    )}
+
+  </div>
+
+  {/* PREP TIME */}
+  <p className="text-xs text-gray-400 mt-3">
+    Prep Time: {dish.prepTime || 15} mins
+  </p>
+
+  {/* PRICE + ACTION */}
+  <div className="flex justify-between items-center mt-5">
+
+    <span
+      className="text-2xl font-bold"
+      style={{ color: primaryColor }}
+    >
+      ₹{dish.price}
+    </span>
+
+    {!dish.isAvailable ? (
+
+      <button
+        disabled
+        className="px-4 py-2 rounded-full bg-gray-500 cursor-not-allowed"
+      >
+        Unavailable
+      </button>
+
+    ) : qty === 0 ? (
+
+      <button
+        onClick={() =>
+          addToCart({
+            _id: dish._id,
+            name: dish.name,
+            price: dish.price,
+            image: dish.image,
+          })
+        }
+        style={{ background: primaryColor }}
+        className="px-5 py-2 rounded-full font-semibold"
+      >
+        Add
+      </button>
+
+    ) : (
+
+      <div className="flex gap-3 items-center bg-white/10 px-3 py-2 rounded-full">
+
+        <button
+          onClick={() => decreaseQty(dish._id)}
+          className="text-lg"
+        >
+          −
+        </button>
+
+        <span className="font-bold">
+          {qty}
+        </span>
+
+        <button
+          onClick={() => increaseQty(dish._id)}
+          className="text-lg"
+        >
+          +
+        </button>
+
+      </div>
+
+    )}
+
+  </div>
+
+</div>
               </div>
             );
           })}
