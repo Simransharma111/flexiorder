@@ -71,6 +71,20 @@ export default function GuestMenuPage() {
     return item ? item.quantity : 0;
   };
 
+  // MINIMUM 1 HOUR SCHEDULE
+const getMinScheduleTime = () => {
+  const now = new Date();
+
+  // ADD 1 HOUR
+  now.setHours(now.getHours() + 1);
+
+  // REMOVE SECONDS
+  now.setSeconds(0);
+  now.setMilliseconds(0);
+
+  // FORMAT FOR datetime-local
+  return now.toISOString().slice(0, 16);
+};
   // PLACE ORDER
   const placeOrder = async () => {
     try {
@@ -80,11 +94,19 @@ export default function GuestMenuPage() {
       if (scheduleEnabled && !scheduledTime)
         return alert("Select schedule time");
 
-      if (
-        scheduleEnabled &&
-        new Date(scheduledTime) < new Date()
-      )
-        return alert("Invalid schedule time");
+      if (scheduleEnabled) {
+  const selectedTime = new Date(scheduledTime);
+  const minimumTime = new Date();
+
+  // MUST BE AT LEAST 1 HOUR LATER
+  minimumTime.setHours(minimumTime.getHours() + 1);
+
+  if (selectedTime < minimumTime) {
+    return alert(
+      "Scheduled order must be at least 1 hour from now"
+    );
+  }
+}
 
       setPlacingOrder(true);
 
@@ -275,12 +297,13 @@ export default function GuestMenuPage() {
             </label>
 
             {scheduleEnabled && (
-              <input
-                type="datetime-local"
-                className="w-full mt-3 p-3 rounded-xl text-black"
-                value={scheduledTime}
-                onChange={(e) => setScheduledTime(e.target.value)}
-              />
+             <input
+  type="datetime-local"
+  className="w-full mt-3 p-3 rounded-xl text-black"
+  value={scheduledTime}
+  min={getMinScheduleTime()}
+  onChange={(e) => setScheduledTime(e.target.value)}
+/>
             )}
 
             {/* TOTAL */}
