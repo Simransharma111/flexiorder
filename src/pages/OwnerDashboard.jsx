@@ -431,18 +431,18 @@ export default function OwnerDashboard() {
                         {/* TOP */}
                         <div className="flex flex-col md:flex-row gap-4 md:justify-between">
                           <div>
-                            <h3 className="text-xl md:text-2xl font-bold">
-                              {order.table
-                                ?.type ===
-                              "room"
-                                ? "Room"
-                                : "Table"}{" "}
-                              {
-                                order
-                                  .table
-                                  ?.tableNumber
-                              }
-                            </h3>
+                            <h2
+  className="text-3xl font-black"
+  style={{ color: primaryColor }}
+>
+  {order.locationType === "room"
+    ? `Room: ${
+        order.locationNumber || order.roomNumber
+      }`
+    : `Table: ${
+        order.locationNumber || order.roomNumber
+      }`}
+</h2>
 
                             <p className="text-gray-400 mt-1">
                               Guest:{" "}

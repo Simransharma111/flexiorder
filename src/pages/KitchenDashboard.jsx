@@ -185,8 +185,17 @@ export default function KitchenDashboard() {
 
               <div className="flex justify-between">
                 <div>
-                  <h2 className="text-xl font-bold">
-  Table {order.table?.tableNumber}
+      <h2
+  className="text-3xl font-black"
+  style={{ color: primaryColor }}
+>
+  {order.locationType === "room"
+    ? `Room: ${
+        order.locationNumber || order.roomNumber
+      }`
+    : `Table: ${
+        order.locationNumber || order.roomNumber
+      }`}
 </h2>
                   <p className="text-gray-400">
                     {order.guestName}
@@ -217,12 +226,12 @@ export default function KitchenDashboard() {
         TABLE / ROOM
       </p>
 
-      <h2
-        className="text-3xl font-black"
-        style={{ color: primaryColor }}
-      >
-        {order.table?.tableNumber || "N/A"}
-      </h2>
+      {/* <h2
+  className="text-3xl font-black"
+  style={{ color: primaryColor }}
+>
+  Table: {order.roomNumber || "N/A"}
+</h2> */}
 
     </div>
 
