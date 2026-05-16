@@ -186,11 +186,17 @@ export default function KitchenDashboard() {
               <div className="flex justify-between">
                 <div>
                   <h2 className="text-xl font-bold">
-                    {order.table?.tableNumber}
-                  </h2>
+  Table {order.table?.tableNumber}
+</h2>
                   <p className="text-gray-400">
                     {order.guestName}
                   </p>
+                  <p className="text-xs text-gray-500 mt-1">
+  {new Date(order.createdAt).toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+  })}
+</p>
                 </div>
 
                 <span
@@ -201,19 +207,76 @@ export default function KitchenDashboard() {
                 </span>
               </div>
 
-              <div className="mt-4 space-y-2">
-                {order.items.map((item, i) => (
-                  <div
-                    key={i}
-                    className="flex justify-between bg-white/5 p-3 rounded-xl"
-                  >
-                    <span>{item.name}</span>
-                    <span style={{ color: primaryColor }}>
-                      ₹{item.price * item.quantity}
-                    </span>
-                  </div>
-                ))}
-              </div>
+          <div className="mt-5">
+
+  <div className="flex items-center justify-between mb-4">
+
+    <div>
+
+      <p className="text-xs text-gray-400">
+        TABLE / ROOM
+      </p>
+
+      <h2
+        className="text-3xl font-black"
+        style={{ color: primaryColor }}
+      >
+        {order.table?.tableNumber || "N/A"}
+      </h2>
+
+    </div>
+
+    <div className="text-right">
+
+      <p className="text-xs text-gray-400">
+        ITEMS
+      </p>
+
+      <h3 className="text-2xl font-bold">
+        {order.items.length}
+      </h3>
+
+    </div>
+
+  </div>
+
+  <div className="space-y-3">
+
+    {order.items.map((item, i) => (
+
+      <div
+        key={i}
+        className="flex justify-between items-center bg-white/5 border border-white/10 p-4 rounded-2xl"
+      >
+
+        <div>
+
+          <h3 className="text-lg font-bold">
+            {item.name}
+          </h3>
+
+          <p className="text-sm text-gray-400 mt-1">
+            ₹{item.price} each
+          </p>
+
+        </div>
+
+        <div
+          className="min-w-[70px] h-[70px] rounded-2xl flex items-center justify-center text-3xl font-black"
+          style={{
+            background: primaryColor,
+          }}
+        >
+          ×{item.quantity}
+        </div>
+
+      </div>
+
+    ))}
+
+  </div>
+
+</div>
 
               {/* ACTIONS */}
               <div className="mt-6 flex gap-3 flex-wrap">

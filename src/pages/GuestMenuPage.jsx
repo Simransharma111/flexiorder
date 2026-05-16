@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import api from "../api/axios";
 import { useCart } from "../context/CartContext";
+import socket from "../socket";
 
 const THEME_MAP = {
   stormy_morning: { primary: "#64748B", secondary: "#0F172A" },
@@ -39,6 +40,9 @@ export default function GuestMenuPage() {
   const [scheduleEnabled, setScheduleEnabled] = useState(false);
   const [scheduledTime, setScheduledTime] = useState("");
 
+ const [activeOrders, setActiveOrders] = useState([]);
+ const [previousOrders, setPreviousOrders] = useState([]);
+
   // THEME SAFE
   const themeConfig = THEME_MAP[hotel?.theme?.themeId] || {};
 
@@ -48,9 +52,116 @@ export default function GuestMenuPage() {
   const secondaryColor =
     hotel?.theme?.secondaryColor || themeConfig.secondary || "#0F172A";
 
-  useEffect(() => {
-    fetchMenu();
-  }, []);
+useEffect(() => {
+  fetchMenu();
+
+  // RESTORE ACTIVE ORDERS
+  const savedActiveOrders =
+    localStorage.getItem("activeOrders");
+
+  const savedPreviousOrders =
+    localStorage.getItem("previousOrders");
+
+  if (savedActiveOrders) {
+    setActiveOrders(
+      JSON.parse(savedActiveOrders)
+    );
+  }
+
+  if (savedPreviousOrders) {
+    setPreviousOrders(
+      JSON.parse(savedPreviousOrders)
+    );
+  }
+}, []);
+useEffect(() => {
+
+  if (!activeOrders.length) return;
+
+  activeOrders.forEach((order) => {
+
+    socket.emit(
+      "joinOrderRoom",
+      order._id
+    );
+
+  });
+
+  const handleOrderUpdate = (
+    updatedOrder
+  ) => {
+
+    // ORDER COMPLETED
+    if (
+      updatedOrder.status === "delivered"
+    ) {
+
+      const updatedActiveOrders =
+        activeOrders.filter(
+          (o) => o._id !== updatedOrder._id
+        );
+
+      const updatedPreviousOrders = [
+        updatedOrder,
+        ...previousOrders,
+      ];
+
+      setActiveOrders(
+        updatedActiveOrders
+      );
+
+      setPreviousOrders(
+        updatedPreviousOrders
+      );
+
+      localStorage.setItem(
+        "activeOrders",
+        JSON.stringify(
+          updatedActiveOrders
+        )
+      );
+
+      localStorage.setItem(
+        "previousOrders",
+        JSON.stringify(
+          updatedPreviousOrders
+        )
+      );
+
+      return;
+    }
+
+    // UPDATE ACTIVE ORDER
+    const updatedOrders =
+      activeOrders.map((o) =>
+        o._id === updatedOrder._id
+          ? updatedOrder
+          : o
+      );
+
+    setActiveOrders(updatedOrders);
+
+    localStorage.setItem(
+      "activeOrders",
+      JSON.stringify(updatedOrders)
+    );
+  };
+
+  socket.on(
+    "orderUpdated",
+    handleOrderUpdate
+  );
+
+  return () => {
+
+    socket.off(
+      "orderUpdated",
+      handleOrderUpdate
+    );
+
+  };
+
+}, [activeOrders, previousOrders]);
 
   const fetchMenu = async () => {
     try {
@@ -121,11 +232,31 @@ const getMinScheduleTime = () => {
       };
 
       const res = await api.post("/orders", payload);
+const newOrder = res.data.order;
 
-      clearCart();
-      setShowCart(false);
+const updatedOrders = [
+  newOrder,
+  ...activeOrders,
+];
 
-      navigate(`/track-order/${res.data.order._id}`);
+setActiveOrders(updatedOrders);
+
+localStorage.setItem(
+  "activeOrders",
+  JSON.stringify(updatedOrders)
+);
+
+clearCart();
+
+setShowCart(false);
+
+setScheduleEnabled(false);
+
+setScheduledTime("");
+
+alert(
+  "Order placed successfully. You can continue ordering."
+);
     } catch (err) {
       alert(err?.response?.data?.message || "Order failed");
     } finally {
@@ -189,6 +320,165 @@ const getMinScheduleTime = () => {
         </div>
       </div>
 
+{/* ACTIVE ORDERS */}
+
+{activeOrders.length > 0 && (
+
+  <section className="max-w-7xl mx-auto px-4 mt-6">
+
+    <div className="flex items-center justify-between mb-4">
+
+      <h2 className="text-2xl font-bold">
+        Active Orders
+      </h2>
+
+      <span className="text-sm text-gray-400">
+        Live Tracking
+      </span>
+
+    </div>
+
+    <div className="space-y-4">
+
+      {activeOrders.map((order) => (
+
+        <div
+          key={order._id}
+          className="bg-white/5 border border-white/10 rounded-3xl p-5"
+        >
+
+          <div className="flex justify-between gap-4 flex-wrap">
+
+            <div>
+
+              <p className="text-xs text-gray-400">
+                ORDER ID
+              </p>
+
+              <h3 className="font-bold break-all">
+                {order._id}
+              </h3>
+
+              <div className="mt-4 space-y-1">
+
+                {(order.items || []).map(
+                  (item, index) => (
+
+                    <p
+                      key={index}
+                      className="text-sm text-gray-300"
+                    >
+                      • {item.name} × {item.quantity}
+                    </p>
+
+                  )
+                )}
+
+              </div>
+
+            </div>
+
+            <div className="text-right">
+
+              <p className="text-xs text-gray-400">
+                STATUS
+              </p>
+
+              <h3
+                className="font-bold capitalize text-lg"
+                style={{
+                  color: primaryColor,
+                }}
+              >
+                {order.status}
+              </h3>
+
+            </div>
+
+          </div>
+
+        </div>
+
+      ))}
+
+    </div>
+
+  </section>
+
+)}
+{/* PREVIOUS ORDERS */}
+
+{previousOrders.length > 0 && (
+
+  <section className="max-w-7xl mx-auto px-4 mt-8">
+
+    <h2 className="text-xl font-bold mb-4 text-gray-300">
+      Previous Orders
+    </h2>
+
+    <div className="space-y-3">
+
+      {previousOrders.map((order) => (
+
+        <div
+          key={order._id}
+          className="bg-white/[0.03] border border-white/5 rounded-2xl p-4 opacity-70"
+        >
+
+          <div className="flex justify-between flex-wrap gap-3">
+
+            <div>
+
+              <p className="text-xs text-gray-500">
+                ORDER ID
+              </p>
+
+              <h3 className="text-sm break-all">
+                {order._id}
+              </h3>
+
+              <div className="mt-3 space-y-1">
+
+                {(order.items || []).map(
+                  (item, index) => (
+
+                    <p
+                      key={index}
+                      className="text-sm text-gray-400"
+                    >
+                      • {item.name} × {item.quantity}
+                    </p>
+
+                  )
+                )}
+
+              </div>
+
+            </div>
+
+            <div className="text-right">
+
+              <p className="text-xs text-gray-500">
+                STATUS
+              </p>
+
+              <h3 className="capitalize text-sm text-gray-400">
+                {order.status}
+              </h3>
+
+            </div>
+
+          </div>
+
+        </div>
+
+      ))}
+
+    </div>
+
+  </section>
+
+)}
       {/* MENU */}
       <section className="max-w-7xl mx-auto px-4 py-10">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">

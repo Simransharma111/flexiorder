@@ -5,15 +5,17 @@ export default function OwnerMenuManager() {
   const [dishes, setDishes] = useState([]);
   const [editingId, setEditingId] = useState(null);
   const [loading, setLoading] = useState(false);
-
-  const [formData, setFormData] = useState({
-    name: "",
-    description: "",
-    category: "Main Course",
-    foodType: "veg",
-    price: "",
-    prepTime: "",
-  });
+const [formData, setFormData] = useState({
+  name: "",
+  description: "",
+  category: "Main Course",
+  foodType: "veg",
+  price: "",
+  prepTime: "",
+  isAvailable: true,
+  isRecommended: false,
+  isBestseller: false,
+});
 
   const [imageFile, setImageFile] = useState(null);
 
@@ -60,6 +62,9 @@ export default function OwnerMenuManager() {
       form.append("foodType", formData.foodType);
       form.append("price", formData.price);
       form.append("prepTime", formData.prepTime);
+      form.append("isAvailable", formData.isAvailable);
+      form.append("isRecommended", formData.isRecommended);
+      form.append("isBestseller", formData.isBestseller); 
 
       // ✅ image upload
       if (imageFile) {
@@ -101,6 +106,9 @@ export default function OwnerMenuManager() {
         foodType: "veg",
         price: "",
         prepTime: "",
+        isAvailable: true,
+        isRecommended: false,
+        isBestseller: false,  
       });
 
       setImageFile(null);
@@ -141,6 +149,9 @@ export default function OwnerMenuManager() {
       foodType: dish.foodType,
       price: dish.price,
       prepTime: dish.prepTime,
+      isAvailable: dish.isAvailable,
+      isRecommended: dish.isRecommended,
+      isBestseller: dish.isBestseller,  
     });
 
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -223,6 +234,56 @@ export default function OwnerMenuManager() {
             Non-Veg
           </button>
         </div>
+        {/* FLAGS */}
+
+<div className="md:col-span-2 flex flex-wrap gap-4">
+
+  <label className="flex items-center gap-2">
+    <input
+      type="checkbox"
+      checked={formData.isAvailable}
+      onChange={(e) =>
+        setFormData((p) => ({
+          ...p,
+          isAvailable: e.target.checked,
+        }))
+      }
+    />
+
+    Available
+  </label>
+
+  <label className="flex items-center gap-2">
+    <input
+      type="checkbox"
+      checked={formData.isRecommended}
+      onChange={(e) =>
+        setFormData((p) => ({
+          ...p,
+          isRecommended: e.target.checked,
+        }))
+      }
+    />
+
+    Recommended
+  </label>
+
+  <label className="flex items-center gap-2">
+    <input
+      type="checkbox"
+      checked={formData.isBestseller}
+      onChange={(e) =>
+        setFormData((p) => ({
+          ...p,
+          isBestseller: e.target.checked,
+        }))
+      }
+    />
+
+    Bestseller
+  </label>
+
+</div>
 
         {/* IMAGE */}
         <input
@@ -269,6 +330,27 @@ export default function OwnerMenuManager() {
               <div className="p-4">
                 <h3 className="text-xl font-bold">{dish.name}</h3>
                 <p className="text-gray-400">{dish.description}</p>
+                <div className="flex gap-2 flex-wrap mt-2">
+
+  {!dish.isAvailable && (
+    <span className="bg-red-500 text-xs px-2 py-1 rounded-full">
+      Unavailable
+    </span>
+  )}
+
+  {dish.isRecommended && (
+    <span className="bg-blue-500 text-xs px-2 py-1 rounded-full">
+      Recommended
+    </span>
+  )}
+
+  {dish.isBestseller && (
+    <span className="bg-yellow-500 text-xs px-2 py-1 rounded-full">
+      Bestseller
+    </span>
+  )}
+
+</div>
 
                 <div className="flex justify-between mt-4">
                   <span>₹{dish.price}</span>
