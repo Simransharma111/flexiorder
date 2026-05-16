@@ -504,7 +504,16 @@ alert(
                       ₹{dish.price}
                     </span>
 
-                    {qty === 0 ? (
+                    {!dish.isAvailable ? (
+
+  <button
+    disabled
+    className="px-4 py-1 rounded-full bg-gray-500 cursor-not-allowed"
+  >
+    Unavailable
+  </button>
+
+) : qty === 0 ? (
                       <button
                         onClick={() =>
                           addToCart({
