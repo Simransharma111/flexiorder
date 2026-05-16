@@ -3,32 +3,27 @@ import { QRCodeCanvas } from "qrcode.react";
 import api from "../api/axios";
 
 export default function TableQRManager() {
-
   const [tableName, setTableName] = useState("");
   const [tables, setTables] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [qrInputs, setQrInputs] = useState({});
-const [assigning, setAssigning] = useState(false);
-
+  const [assigning, setAssigning] = useState(false);
   const [type, setType] = useState("table");
 
-  // FETCH TABLES
+  // inputs
+  const [qrInputs, setQrInputs] = useState({});
+  const [showReassign, setShowReassign] = useState({});
+
+  /* ================= FETCH ================= */
   const fetchTables = async () => {
-
     try {
-
       const res = await api.get("/table", {
         headers: {
           Authorization: `Bearer ${localStorage.getItem("token")}`,
         },
       });
-
       setTables(res.data);
-
     } catch (err) {
-
       console.log(err);
-
     }
   };
 
@@ -36,23 +31,16 @@ const [assigning, setAssigning] = useState(false);
     fetchTables();
   }, []);
 
-  // CREATE ROOM/TABLE
+  /* ================= CREATE ================= */
   const createTable = async () => {
-
     if (!tableName.trim()) return;
 
     try {
-
       setLoading(true);
 
       await api.post(
         "/table",
-
-        {
-          tableNumber: tableName,
-          type,
-        },
-
+        { tableNumber: tableName, type },
         {
           headers: {
             Authorization: `Bearer ${localStorage.getItem("token")}`,
@@ -61,265 +49,217 @@ const [assigning, setAssigning] = useState(false);
       );
 
       setTableName("");
-
       fetchTables();
-
     } catch (err) {
-
       console.log(err);
-
     } finally {
-
       setLoading(false);
-
     }
   };
+
+  /* ================= ASSIGN / REASSIGN (SAME API) ================= */
   const assignQR = async (tableId) => {
+    try {
+      const qrId = qrInputs[tableId];
 
-  try {
-
-    const qrId = qrInputs[tableId];
-
-    if (!qrId?.trim()) {
-      alert("Enter QR ID");
-      return;
-    }
-
-    setAssigning(true);
-
-    await api.put(
-      "/table/assign-qr",
-
-      {
-        tableId,
-        qrId: qrId.trim(),
-      },
-
-      {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
-        },
+      if (!qrId?.trim()) {
+        alert("Enter QR ID");
+        return;
       }
-    );
 
-    fetchTables();
+      setAssigning(true);
 
-    alert("QR Assigned");
+      await api.put(
+        "/table/assign-qr",
+        { tableId, qrId: qrId.trim() },
+        {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem("token")}`,
+          },
+        }
+      );
 
-  } catch (err) {
+      setQrInputs((p) => ({ ...p, [tableId]: "" }));
+      setShowReassign((p) => ({ ...p, [tableId]: false }));
 
-    console.log(err);
+      fetchTables();
+    } catch (err) {
+      console.log(err);
+      alert("Failed to assign/reassign QR");
+    } finally {
+      setAssigning(false);
+    }
+  };
 
-    alert(
-      err.response?.data?.message ||
-      "Failed to assign QR"
-    );
+  /* ================= REMOVE ASSIGNMENT ================= */
+  const removeQR = async (tableId) => {
+    try {
+      await api.put(
+        "/qr/remove-qr",
+        { tableId },
+        {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem("token")}`,
+          },
+        }
+      );
 
-  } finally {
-
-    setAssigning(false);
-
-  }
-};
+      fetchTables();
+    } catch (err) {
+      console.log(err);
+    }
+  };
 
   return (
-
     <div className="p-6 min-h-screen bg-[#0F172A] text-white">
 
       {/* HEADER */}
-
-      <div className="flex flex-col md:flex-row gap-4 mb-8">
-
-        {/* TYPE */}
-
+      <div className="flex gap-4 mb-8">
         <select
           value={type}
           onChange={(e) => setType(e.target.value)}
-          className="bg-white/10 border border-white/10 rounded-2xl px-4 py-3 outline-none"
+          className="bg-white/10 px-4 py-3 rounded-xl"
         >
-
-          <option value="table">
-            Table
-          </option>
-
-          <option value="room">
-            Room
-          </option>
-
+          <option value="table">Table</option>
+          <option value="room">Room</option>
         </select>
 
-        {/* NAME */}
-
         <input
-          type="text"
-          placeholder={
-            type === "room"
-              ? "Room 101"
-              : "Table A1"
-          }
           value={tableName}
           onChange={(e) => setTableName(e.target.value)}
-          className="flex-1 bg-white/10 border border-white/10 rounded-2xl px-4 py-3 outline-none"
+          placeholder={type === "room" ? "Room 101" : "Table A1"}
+          className="flex-1 bg-white/10 px-4 py-3 rounded-xl"
         />
-
-        {/* BUTTON */}
 
         <button
           onClick={createTable}
-          disabled={loading}
-          className="bg-orange-500 hover:bg-orange-600 transition px-6 py-3 rounded-2xl font-bold"
+          className="bg-orange-500 px-6 py-3 rounded-xl"
         >
-
-          {loading
-            ? "Creating..."
-            : `Create ${type === "room" ? "Room" : "Table"}`
-          }
-
+          {loading ? "Creating..." : "Create"}
         </button>
-
       </div>
 
       {/* GRID */}
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-3 gap-6">
 
         {tables.map((t) => (
+          <div key={t._id} className="bg-white/5 p-6 rounded-2xl">
 
-          <div
-            key={t._id}
-            className="bg-white/5 border border-white/10 rounded-3xl p-6 flex flex-col items-center hover:scale-[1.02] transition"
-          >
-
-            {/* TYPE */}
-
-            <p className="text-sm uppercase text-orange-400 mb-4">
-
+            <p className="text-orange-400 text-lg font-bold mb-2 uppercase ml-2">
               {t.type}
-
             </p>
 
             {/* QR */}
-
             {t.qrId ? (
-
               <QRCodeCanvas
                 value={`${window.location.origin}/qr/${t.qrId}`}
-                size={180}
-                bgColor="#ffffff"
-                fgColor="#000000"
+                size={160}
               />
-
             ) : (
-
-              <div className="w-[180px] h-[180px] rounded-2xl bg-white/5 border border-dashed border-white/10 flex items-center justify-center text-gray-400 text-center px-4">
-
-                No QR Assigned
-
+              <div className="h-[160px] flex items-center justify-center border border-dashed">
+                No QR
               </div>
-
             )}
 
             {/* NAME */}
-
-            <h3 className="text-xl font-bold mt-5 text-center">
-
+            <h2 className="mt-3 font-bold text-lg">
               {t.type === "room"
-                ? `Room ${t.tableNumber}`
-                : `Table ${t.tableNumber}`
-              }
-
-            </h3>
+                ? `Room: ${t.tableNumber}`
+                : `Table: ${t.tableNumber}`}
+            </h2>
 
             {/* QR ID */}
-
-            <p className="text-gray-400 text-sm mt-2">
-
+            <p className="text-gray-400 text-sm">
               {t.qrId || "QR Pending"}
-
             </p>
 
-            {/* LINK */}
+            {/* ================= NO QR ================= */}
+            {!t.qrId && (
+              <div className="mt-3 space-y-2">
+                <input
+                  value={qrInputs[t._id] || ""}
+                  onChange={(e) =>
+                    setQrInputs({
+                      ...qrInputs,
+                      [t._id]: e.target.value,
+                    })
+                  }
+                  className="w-full bg-white/10 px-3 py-2 rounded"
+                  placeholder="Enter QR ID"
+                />
 
-            {t.qrId && (
-
-              <p className="text-gray-500 text-xs mt-2 text-center break-all">
-
-                {window.location.origin}/qr/{t.qrId}
-
-              </p>
-
+                <button
+                  onClick={() => assignQR(t._id)}
+                  className="w-full bg-green-500 py-2 rounded"
+                >
+                  Assign QR
+                </button>
+              </div>
             )}
-            {/* ASSIGN QR */}
 
-{!t.qrId && (
-
-  <div className="w-full mt-5">
-
-    <input
-      type="text"
-      placeholder="Enter QR ID"
-      value={qrInputs[t._id] || ""}
-      onChange={(e) =>
-        setQrInputs({
-          ...qrInputs,
-          [t._id]: e.target.value,
-        })
-      }
-      className="w-full bg-white/10 border border-white/10 rounded-xl px-4 py-3 outline-none"
-    />
-
-    <button
-      onClick={() => assignQR(t._id)}
-      disabled={assigning}
-      className="w-full mt-3 bg-orange-500 hover:bg-orange-600 transition px-4 py-3 rounded-xl font-bold"
-    >
-
-      {assigning
-        ? "Assigning..."
-        : "Assign QR"
-      }
-
-    </button>
-
-  </div>
-
-)}
-
-            {/* OPEN MENU */}
-
+            {/* ================= ACTIONS ================= */}
             {t.qrId && (
+              <div className="mt-4 space-y-2">
 
-              <a
-                href={`/qr/${t.qrId}`}
-                target="_blank"
-                rel="noreferrer"
-                className="mt-5 bg-orange-500 hover:bg-orange-600 transition px-5 py-2 rounded-xl"
-              >
+                {/* OPEN MENU */}
+                <a
+                  href={`/qr/${t.qrId}`}
+                  className="block text-center bg-orange-500 py-2 rounded font-bold"
+                >
+                  Open Menu
+                </a>
 
-                Open Menu
+                {/* REASSIGN BUTTON */}
+                <button
+                  onClick={() =>
+                    setShowReassign((p) => ({
+                      ...p,
+                      [t._id]: !p[t._id],
+                    }))
+                  }
+                  className="w-full bg-white/10 py-2 rounded"
+                >
+                  Reassign
+                </button>
 
-              </a>
+                {/* REASSIGN INPUT */}
+                {showReassign[t._id] && (
+                  <>
+                    <input
+                      value={qrInputs[t._id] || ""}
+                      onChange={(e) =>
+                        setQrInputs({
+                          ...qrInputs,
+                          [t._id]: e.target.value,
+                        })
+                      }
+                      className="w-full bg-white/10 px-3 py-2 rounded"
+                      placeholder="New QR ID"
+                    />
 
+                    <button
+                      onClick={() => assignQR(t._id)}
+                      className="w-full bg-blue-500 py-2 rounded"
+                    >
+                      Confirm Reassign
+                    </button>
+                  </>
+                )}
+
+                {/* REMOVE */}
+                <button
+                  onClick={() => removeQR(t._id)}
+                  className="w-full bg-red-500 py-2 rounded"
+                >
+                  Remove Assignment
+                </button>
+
+              </div>
             )}
 
           </div>
-
         ))}
-
       </div>
-
-      {/* EMPTY */}
-
-      {tables.length === 0 && (
-
-        <div className="text-center text-gray-400 mt-20">
-
-          No rooms or tables created yet
-
-        </div>
-
-      )}
-
     </div>
   );
 }

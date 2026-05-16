@@ -1,12 +1,18 @@
 import { useState } from "react";
 import api from "../api/axios";
 
+import jsPDF from "jspdf";
+
 export default function QRInventoryPage() {
 
   const [count, setCount] = useState(10);
-  const [qrs, setQrs] = useState([]);
-  const [loading, setLoading] = useState(false);
 
+  const [qrs, setQrs] = useState([]);
+
+  const [loading, setLoading] =
+    useState(false);
+
+  // GENERATE QR
   const generateQRs = async () => {
 
     try {
@@ -31,10 +37,68 @@ export default function QRInventoryPage() {
     }
   };
 
+  // DOWNLOAD ALL PDF
+  const downloadPDF = async () => {
+
+    const pdf = new jsPDF({
+      orientation: "portrait",
+      unit: "mm",
+      format: "a4",
+    });
+
+    let x = 10;
+    let y = 20;
+
+    const qrSize = 40;
+
+    for (let i = 0; i < qrs.length; i++) {
+
+      const qr = qrs[i];
+
+      // ADD QR IMAGE
+      pdf.addImage(
+        qr.qrImage,
+        "PNG",
+        x,
+        y,
+        qrSize,
+        qrSize
+      );
+
+      // QR CODE LABEL
+      pdf.setFontSize(12);
+
+      pdf.text(
+        qr.qrId,
+        x,
+        y + 48
+      );
+
+      // NEXT POSITION
+      x += 65;
+
+      // NEW ROW
+      if (x > 140) {
+        x = 10;
+        y += 70;
+      }
+
+      // NEW PAGE
+      if (y > 240) {
+        pdf.addPage();
+        x = 10;
+        y = 20;
+      }
+    }
+
+    pdf.save("hotel-qrs.pdf");
+  };
+
   return (
     <div className="p-6 text-white">
 
-      <div className="flex gap-4 mb-8">
+      {/* TOP */}
+      <div className="flex gap-4 mb-8 flex-wrap">
 
         <input
           type="number"
@@ -42,27 +106,67 @@ export default function QRInventoryPage() {
           onChange={(e) =>
             setCount(e.target.value)
           }
-          className="bg-black border p-3 rounded-xl"
+          className="
+            bg-black
+            border
+            p-3
+            rounded-xl
+          "
         />
 
         <button
           onClick={generateQRs}
-          className="bg-orange-500 px-6 py-3 rounded-xl"
+          className="
+            bg-orange-500
+            px-6
+            py-3
+            rounded-xl
+          "
         >
           {loading
             ? "Generating..."
             : "Generate QR"}
         </button>
 
+        {qrs.length > 0 && (
+          <button
+            onClick={downloadPDF}
+            className="
+              bg-green-600
+              px-6
+              py-3
+              rounded-xl
+            "
+          >
+            Download PDF
+          </button>
+        )}
+
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+      {/* GRID */}
+      <div
+        className="
+          grid
+          grid-cols-2
+          md:grid-cols-4
+          gap-6
+        "
+      >
 
         {qrs.map((qr) => (
 
           <div
             key={qr.qrId}
-            className="bg-white text-black p-4 rounded-2xl flex flex-col items-center"
+            className="
+              bg-white
+              text-black
+              p-4
+              rounded-2xl
+              flex
+              flex-col
+              items-center
+            "
           >
 
             <img
@@ -74,14 +178,6 @@ export default function QRInventoryPage() {
             <h3 className="mt-3 font-bold">
               {qr.qrId}
             </h3>
-
-            <a
-              href={qr.qrImage}
-              download={`${qr.qrId}.png`}
-              className="mt-3 bg-black text-white px-4 py-2 rounded-xl"
-            >
-              Download
-            </a>
 
           </div>
 
