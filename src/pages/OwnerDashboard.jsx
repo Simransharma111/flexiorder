@@ -6,6 +6,7 @@ import TableQRManager from "../components/TableQRManager";
 import AnalyticsDashboard from "../components/AnalyticsDashboard";
 import StaffManager from "../components/StaffManager";
 import QRInventory from "./QRInventoryPage";
+import socket from "../socket";
 
 import api from "../api/axios";
 
@@ -122,17 +123,47 @@ export default function OwnerDashboard() {
   /* =========================
      LIVE ORDER REFRESH
   ========================= */
-  useEffect(() => {
-    if (activeTab !== "orders") return;
+ useEffect(() => {
 
-    fetchOrders();
+  if (activeTab !== "orders") return;
 
-    const interval = setInterval(() => {
-      fetchOrders();
-    }, 5000);
+  fetchOrders();
 
-    return () => clearInterval(interval);
-  }, [activeTab]);
+  // NEW ORDER
+  socket.on("newOrder", (newOrder) => {
+
+    setOrders((prev) => [
+      newOrder,
+      ...prev,
+    ]);
+
+  });
+
+  // ORDER UPDATED
+  socket.on(
+    "orderUpdated",
+    (updatedOrder) => {
+
+      setOrders((prev) =>
+        prev.map((o) =>
+          o._id === updatedOrder._id
+            ? updatedOrder
+            : o
+        )
+      );
+
+    }
+  );
+
+  return () => {
+
+    socket.off("newOrder");
+
+    socket.off("orderUpdated");
+
+  };
+
+}, [activeTab]);
 
   /* =========================
      THEME
