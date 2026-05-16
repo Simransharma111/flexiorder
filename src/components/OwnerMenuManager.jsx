@@ -93,13 +93,17 @@ const hotelId =
         );
 
         setEditingId(null);
+
+alert("Dish updated successfully");
       }
 
       // ================= CREATE =================
       else {
         res = await api.post("/menu/dish", form, config);
 
-        setDishes((prev) => [res.data, ...prev]);
+      setDishes((prev) => [res.data, ...prev]);
+
+alert("Dish added successfully");
       }
 
       // ================= RESET =================
@@ -310,7 +314,7 @@ const hotelId =
         <button
           type="submit"
           disabled={loading}
-          className="md:col-span-2 bg-orange-500 py-3 rounded-xl font-bold"
+          className="md:col-span-2 btn-primary bg-orange-500 px-4 py-2 rounded-xl font-bold"
         >
           {editingId ? "Update Dish" : "Add Dish"}
         </button>
