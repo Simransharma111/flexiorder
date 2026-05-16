@@ -18,9 +18,13 @@ const [formData, setFormData] = useState({
 });
 
   const [imageFile, setImageFile] = useState(null);
+const user =
+  JSON.parse(localStorage.getItem("user"));
 
-  const user = JSON.parse(localStorage.getItem("user"));
-  const hotelId = user?.hotelId;
+const hotelId =
+  typeof user?.hotelId === "object"
+    ? user?.hotelId?._id
+    : user?.hotelId;
 
   // ================= FETCH DISHES =================
   useEffect(() => {
