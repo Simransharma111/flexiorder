@@ -14,3 +14,24 @@ The React Compiler is not enabled on this template because of its impact on dev 
 ## Expanding the ESLint configuration
 
 If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+
+## Android APK build
+
+This project is configured for Capacitor with app ID `com.flexiorder.app`, app name `FlexiOrder`, and Vite output directory `dist`.
+
+To generate a debug APK on a machine with Android Studio or the Android SDK installed:
+
+```bash
+npm install
+npm install @capacitor/android@8.3.4
+npx cap add android
+npm run android:build:debug
+```
+
+After a successful build, the APK will be available at:
+
+```text
+android/app/build/outputs/apk/debug/app-debug.apk
+```
+
+For a release APK, open the generated `android` project in Android Studio or configure signing in Gradle, then run the appropriate release build task.
