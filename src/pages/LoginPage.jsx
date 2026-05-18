@@ -89,20 +89,6 @@ export default function LoginPage() {
         res.data.token
       );
 
-      // LOCAL STORAGE
-
-      localStorage.setItem(
-        "token",
-        res.data.token
-      );
-
-      localStorage.setItem(
-        "user",
-        JSON.stringify(
-          res.data.user
-        )
-      );
-
       console.log(
         "USER STORED:",
         JSON.parse(
