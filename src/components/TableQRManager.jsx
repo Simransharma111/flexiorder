@@ -114,7 +114,7 @@ export default function TableQRManager() {
     <div className="p-6 min-h-screen bg-[#0F172A] text-white">
 
       {/* HEADER */}
-      <div className="flex gap-4 mb-8">
+      <div className="flex flex-col sm:flex-row gap-4 mb-8">
         <select
           value={type}
           onChange={(e) => setType(e.target.value)}
@@ -128,22 +128,22 @@ export default function TableQRManager() {
           value={tableName}
           onChange={(e) => setTableName(e.target.value)}
           placeholder={type === "room" ? "Room 101" : "Table A1"}
-          className="flex-1 bg-white/10 px-4 py-3 rounded-xl"
+          className="w-full sm:flex-1 bg-white/10 px-4 py-3 rounded-xl"
         />
 
         <button
           onClick={createTable}
-          className="bg-orange-500 px-6 py-3 rounded-xl"
+          className="bg-orange-500 px-6 py-3 rounded-xl w-full sm:w-auto"
         >
           {loading ? "Creating..." : "Create"}
         </button>
       </div>
 
       {/* GRID */}
-      <div className="grid grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
 
         {tables.map((t) => (
-          <div key={t._id} className="bg-white/5 p-6 rounded-2xl">
+          <div key={t._id} className="bg-white/5 p-4 sm:p-6 rounded-2xl">
 
             <p className="text-orange-400 text-lg font-bold mb-2 uppercase ml-2">
               {t.type}
@@ -151,12 +151,14 @@ export default function TableQRManager() {
 
             {/* QR */}
             {t.qrId ? (
-              <QRCodeCanvas
-                value={`${window.location.origin}/qr/${t.qrId}`}
-                size={160}
-              />
+             <div className="flex justify-center">
+  <QRCodeCanvas
+    value={`${window.location.origin}/qr/${t.qrId}`}
+    size={140}
+  />
+</div>
             ) : (
-              <div className="h-[160px] flex items-center justify-center border border-dashed">
+              <div className="h-[140px] flex items-center justify-center border border-dashed rounded-xl">
                 No QR
               </div>
             )}

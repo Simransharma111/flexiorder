@@ -7,23 +7,23 @@ import App from "./App";
 import "./index.css";
 
 import CartProvider from "./context/CartContext";
-import { registerSW } from "virtual:pwa-register";
+// import { registerSW } from "virtual:pwa-register";
 
-registerSW({
-  immediate: true,
-});
+// registerSW({
+//   immediate: true,
+// });
 
-if ("serviceWorker" in navigator) {
-  window.addEventListener("load", async () => {
-    await navigator.serviceWorker.register(
-      "/sw.js"
-    );
+// if ("serviceWorker" in navigator) {
+//   window.addEventListener("load", async () => {
+//     await navigator.serviceWorker.register(
+//       "/sw.js"
+//     );
 
-    console.log(
-      "Custom Service Worker Registered"
-    );
-  });
-}
+//     console.log(
+//       "Custom Service Worker Registered"
+//     );
+//   });
+// }
 
 ReactDOM.createRoot(document.getElementById("root")).render(
 <React.StrictMode>
