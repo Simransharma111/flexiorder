@@ -20,11 +20,15 @@ export const AuthProvider = ({
   useEffect(() => {
 
     const storedUser =
-  localStorage.getItem("user") ||
-  sessionStorage.getItem("user");
+      localStorage.getItem("user") ||
+      sessionStorage.getItem("user");
 
     if (storedUser) {
-      setUser(JSON.parse(storedUser));
+
+      setUser(
+        JSON.parse(storedUser)
+      );
+
     }
 
     setLoading(false);
@@ -33,36 +37,53 @@ export const AuthProvider = ({
 
   // LOGIN
   const login = (
-  userData,
-  token,
-  rememberMe = false
-) => {
-const storage = rememberMe
-  ? localStorage
-  : sessionStorage;
+    userData,
+    token,
+    rememberMe = false
+  ) => {
 
-storage.setItem("token", token);
+    const storage =
+      rememberMe
+        ? localStorage
+        : sessionStorage;
 
-storage.setItem(
-  "user",
-  JSON.stringify(userData)
-);
+    // REMOVE OLD LOGIN
+    localStorage.removeItem("token");
+    localStorage.removeItem("user");
+
+    sessionStorage.removeItem("token");
+    sessionStorage.removeItem("user");
+
+    // SAVE NEW LOGIN
+    storage.setItem(
+      "token",
+      token
+    );
+
+    storage.setItem(
+      "user",
+      JSON.stringify(userData)
+    );
+
     setUser(userData);
+
   };
 
   // LOGOUT
   const logout = () => {
 
-  localStorage.removeItem("token");
-  localStorage.removeItem("user");
+    localStorage.removeItem("token");
+    localStorage.removeItem("user");
 
-  sessionStorage.removeItem("token");
-  sessionStorage.removeItem("user");
+    sessionStorage.removeItem("token");
+    sessionStorage.removeItem("user");
 
-  setUser(null);
-};
+    setUser(null);
+
+  };
 
   return (
+
     <AuthContext.Provider
       value={{
         user,
@@ -71,8 +92,11 @@ storage.setItem(
         loading,
       }}
     >
+
       {children}
+
     </AuthContext.Provider>
+
   );
 };
 
