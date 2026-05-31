@@ -11,56 +11,67 @@ export const AuthProvider = ({
   children,
 }) => {
 
-  const [user, setUser] = useState(null);
+  const [user, setUser] =
+    useState(null);
 
   const [loading, setLoading] =
     useState(true);
 
-  // LOAD USER FROM STORAGE
+  // LOAD USER
   useEffect(() => {
 
-    const storedUser =
-      localStorage.getItem("user") ||
-      sessionStorage.getItem("user");
+    try {
 
-    if (storedUser) {
+      const token =
+        localStorage.getItem("token");
 
-      setUser(
-        JSON.parse(storedUser)
-      );
+      const storedUser =
+        localStorage.getItem("user");
+
+      if (token && storedUser) {
+
+        setUser(
+          JSON.parse(storedUser)
+        );
+
+      } else {
+
+        localStorage.removeItem("token");
+        localStorage.removeItem("user");
+
+      }
+
+    } catch (err) {
+
+      console.log(err);
+
+      localStorage.removeItem("token");
+      localStorage.removeItem("user");
+
+    } finally {
+
+      setLoading(false);
 
     }
-
-    setLoading(false);
 
   }, []);
 
   // LOGIN
   const login = (
     userData,
-    token,
-    rememberMe = false
+    token
   ) => {
 
-    const storage =
-      rememberMe
-        ? localStorage
-        : sessionStorage;
+    // REMOVE OLD USER
+    localStorage.clear();
 
-    // REMOVE OLD LOGIN
-    localStorage.removeItem("token");
-    localStorage.removeItem("user");
-
-    sessionStorage.removeItem("token");
-    sessionStorage.removeItem("user");
-
-    // SAVE NEW LOGIN
-    storage.setItem(
+    // SAVE NEW USER
+    localStorage.setItem(
       "token",
       token
     );
 
-    storage.setItem(
+    localStorage.setItem(
       "user",
       JSON.stringify(userData)
     );
@@ -73,12 +84,12 @@ export const AuthProvider = ({
   const logout = () => {
 
     localStorage.removeItem("token");
+
     localStorage.removeItem("user");
 
-    sessionStorage.removeItem("token");
-    sessionStorage.removeItem("user");
-
     setUser(null);
+
+    window.location.href = "/login";
 
   };
 
@@ -98,6 +109,7 @@ export const AuthProvider = ({
     </AuthContext.Provider>
 
   );
+
 };
 
 export const useAuth = () =>

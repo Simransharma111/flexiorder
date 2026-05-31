@@ -36,7 +36,7 @@ export default function LoginPage() {
       password: "",
     });
 
-    const [rememberMe, setRememberMe] = useState(false);
+  
   const [loading, setLoading] =
     useState(false);
 
@@ -88,7 +88,6 @@ export default function LoginPage() {
       login(
   res.data.user,
   res.data.token,
-  rememberMe
 );
       console.log(
         "USER STORED:",
