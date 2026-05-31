@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "25768514366",
+    "project_id": "flexiorder-1ab9c",
+    "storage_bucket": "flexiorder-1ab9c.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:25768514366:android:dc084bde75c0f520a5926f",
+        "android_client_info": {
+          "package_name": "com.flexiorder.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCvlEw-Qc0E0iNy5SUNIbhUs4djt3kTh70"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

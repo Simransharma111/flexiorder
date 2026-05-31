@@ -71,7 +71,6 @@ export default function KitchenDashboard() {
     fetchHotel();
     fetchOrders();
 
-    subscribeToPush(api);
 
     socket.on("newOrder", (newOrder) => {
       setOrders((prev) => [newOrder, ...prev]);

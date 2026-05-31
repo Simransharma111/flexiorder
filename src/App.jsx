@@ -1,6 +1,6 @@
 import { Routes, Route } from "react-router-dom";
 import "./App.css";
-
+import BackButtonHandler from "./components/BackButtonHandler";
 import GuestMenuPage from "./pages/GuestMenuPage";
 import KitchenDashboard from "./pages/KitchenDashboard";
 import LoginPage from "./pages/LoginPage";
@@ -13,11 +13,16 @@ import Homepage from "./pages/Homepage";
 import QRInventoryPage from "./pages/QRInventoryPage";
 import HotelSetupPage from "./pages/HotelSetupPage";
 import InstallPWA from "./components/InstallPWA";
+import { initFCM } from "./utils/fcmPush";
 export default function App() {
+   useEffect(() => {
+    initFCM(api);
+  }, []);
   return (
     <>
 
         <InstallPWA />
+         <BackButtonHandler />
       <Routes>
          <Route
           path="/"
