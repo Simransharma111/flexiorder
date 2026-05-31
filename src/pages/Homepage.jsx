@@ -140,7 +140,7 @@ export default function Homepage() {
     {/* LOGO */}
     <div className="flex items-center justify-center">
       <img
-        src={`${import.meta.env.BASE_URL}logo.png`}
+        src={`${import.meta.env.BASE_URL}logo.jpg`}
         alt="FlexiOrder"
         className="h-12 w-12 object-contain"
       />
