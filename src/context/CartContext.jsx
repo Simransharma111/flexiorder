@@ -5,8 +5,6 @@ import {
   useState,
 } from "react";
 
-import { useParams } from "react-router-dom";
-
 const CartContext = createContext();
 
 export const useCart = () =>
@@ -16,22 +14,25 @@ export default function CartProvider({
   children,
 }) {
 
-  const { tableId } = useParams();
+  const [cartKey, setCartKey] =
+    useState("cart_default");
 
-  // UNIQUE CART KEY
-  const cartKey = tableId
-    ? `cart_${tableId}`
-    : "cart_default";
-
-  // LOAD CART
   const [cartItems, setCartItems] =
-    useState(() => {
+    useState([]);
 
-      return JSON.parse(
-        localStorage.getItem(cartKey)
-      ) || [];
+  // LOAD CART WHEN KEY CHANGES
+  useEffect(() => {
 
-    });
+    const savedCart =
+      localStorage.getItem(cartKey);
+
+    setCartItems(
+      savedCart
+        ? JSON.parse(savedCart)
+        : []
+    );
+
+  }, [cartKey]);
 
   // SAVE CART
   useEffect(() => {
@@ -42,6 +43,13 @@ export default function CartProvider({
     );
 
   }, [cartItems, cartKey]);
+
+  // CHANGE ACTIVE CART
+  const setCartSession = (qrId) => {
+
+    setCartKey(`cart_${qrId}`);
+
+  };
 
   // ADD
   const addToCart = (dish) => {
@@ -117,7 +125,7 @@ export default function CartProvider({
 
   };
 
-  // CLEAR CART
+  // CLEAR
   const clearCart = () => {
 
     setCartItems([]);
@@ -136,7 +144,6 @@ export default function CartProvider({
     );
 
   return (
-
     <CartContext.Provider
       value={{
         cartItems,
@@ -145,12 +152,10 @@ export default function CartProvider({
         decreaseQty,
         clearCart,
         totalPrice,
+        setCartSession,
       }}
     >
-
       {children}
-
     </CartContext.Provider>
-
   );
 }

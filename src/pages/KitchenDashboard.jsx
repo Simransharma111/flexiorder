@@ -325,6 +325,14 @@ export default function KitchenDashboard() {
                 >
                   Delivered
                 </button>
+                <button
+  onClick={() =>
+    updateStatus(order._id, "cancelled")
+  }
+  className="px-4 py-2 rounded-xl bg-red-600"
+>
+  Cancel Order
+</button>
 
               </div>
 

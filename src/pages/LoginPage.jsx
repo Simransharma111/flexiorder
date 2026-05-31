@@ -36,6 +36,7 @@ export default function LoginPage() {
       password: "",
     });
 
+    const [rememberMe, setRememberMe] = useState(false);
   const [loading, setLoading] =
     useState(false);
 
@@ -85,10 +86,10 @@ export default function LoginPage() {
       // =====================
 
       login(
-        res.data.user,
-        res.data.token
-      );
-
+  res.data.user,
+  res.data.token,
+  rememberMe
+);
       console.log(
         "USER STORED:",
         JSON.parse(
@@ -255,7 +256,16 @@ switch (user.role) {
               : "Login"}
 
           </button>
-
+        <label className="flex items-center gap-2 mt-3">
+  <input
+    type="checkbox"
+    checked={rememberMe}
+    onChange={(e) =>
+      setRememberMe(e.target.checked)
+    }
+  />
+  Remember Me
+</label>
         </form>
 
       </div>

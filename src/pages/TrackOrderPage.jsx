@@ -68,6 +68,7 @@ export default function TrackOrderPage() {
   // STATUS STEPS
 const steps = [
   "pending",
+   "accepted",
   "preparing",
   "ready",
   "delivered",
@@ -88,7 +89,37 @@ const steps = [
 
   // NO ORDER
   if (!order) {
+// CANCELLED
+if (order.status === "cancelled") {
 
+  return (
+
+    <div className="min-h-screen bg-[#0F172A] text-white flex items-center justify-center px-4">
+
+      <div className="bg-white/5 border border-red-500/30 rounded-3xl p-10 text-center max-w-lg w-full">
+
+        <div className="text-7xl mb-5">
+          ❌
+        </div>
+
+        <h1 className="text-4xl font-black text-red-500">
+          Order Cancelled
+        </h1>
+
+        <p className="text-gray-300 mt-5 text-lg">
+          Unfortunately your order was cancelled by staff.
+        </p>
+
+        <p className="text-gray-500 mt-3">
+          Please contact the restaurant or place a new order.
+        </p>
+
+      </div>
+
+    </div>
+
+  );
+}
     return (
       <div className="min-h-screen bg-[#0F172A] text-white flex justify-center items-center text-2xl">
         Order not found

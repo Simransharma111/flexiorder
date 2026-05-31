@@ -26,6 +26,7 @@ export default function GuestMenuPage() {
     increaseQty,
     decreaseQty,
     clearCart,
+    setCartSession,
   } = useCart();
 
   const [dishes, setDishes] = useState([]);
@@ -79,6 +80,15 @@ const savedPreviousOrders =
 }, []);
 useEffect(() => {
 
+  if(qrId){
+
+    setCartSession(qrId);
+
+  }
+
+}, [qrId]);
+useEffect(() => {
+
   if (!activeOrders.length) return;
 
   activeOrders.forEach((order) => {
@@ -95,19 +105,25 @@ useEffect(() => {
   ) => {
 
     // ORDER COMPLETED
-    if (
-      updatedOrder.status === "delivered"
-    ) {
+   // ORDER COMPLETED OR CANCELLED
+if (
+  updatedOrder.status === "delivered" ||
+  updatedOrder.status === "cancelled"
+) {
 
       const updatedActiveOrders =
         activeOrders.filter(
           (o) => o._id !== updatedOrder._id
         );
 
-      const updatedPreviousOrders = [
-        updatedOrder,
-        ...previousOrders,
-      ];
+    const updatedPreviousOrders = [
+  {
+    ...updatedOrder,
+    cancelled:
+      updatedOrder.status === "cancelled",
+  },
+  ...previousOrders,
+];
 
       setActiveOrders(
         updatedActiveOrders
@@ -140,8 +156,8 @@ useEffect(() => {
 
     setActiveOrders(updatedOrders);
 
-    localStorage.setItem(
-      "activeOrders",
+   localStorage.setItem(
+  `activeOrders_${qrId}`,
       JSON.stringify(updatedOrders)
     );
   };
@@ -384,13 +400,22 @@ alert(
               </p>
 
               <h3
-                className="font-bold capitalize text-lg"
-                style={{
-                  color: primaryColor,
-                }}
-              >
-                {order.status}
-              </h3>
+  className="font-bold capitalize text-lg"
+  style={{
+    color:
+      order.status === "cancelled"
+        ? "#EF4444"
+        : primaryColor,
+  }}
+>
+  {order.status}
+</h3>
+
+{order.status === "cancelled" && (
+  <p className="text-red-400 text-sm mt-2">
+    Your order was cancelled by staff.
+  </p>
+)}
 
             </div>
 

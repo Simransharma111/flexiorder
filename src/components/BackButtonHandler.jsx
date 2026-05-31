@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { App as CapacitorApp } from "@capacitor/app";
 
 export default function BackButtonHandler() {
+
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -13,17 +14,14 @@ export default function BackButtonHandler() {
         "backButton",
         () => {
 
-          // If not homepage
-          if (location.pathname !== "/") {
+          // EXIT ONLY ON HOME
+          if (location.pathname === "/") {
 
-            navigate("/", {
-              replace: true,
-            });
+            CapacitorApp.exitApp();
 
           } else {
 
-            // Exit app only on homepage
-            CapacitorApp.exitApp();
+            navigate(-1);
 
           }
 

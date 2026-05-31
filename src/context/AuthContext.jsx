@@ -20,7 +20,8 @@ export const AuthProvider = ({
   useEffect(() => {
 
     const storedUser =
-      localStorage.getItem("user");
+  localStorage.getItem("user") ||
+  sessionStorage.getItem("user");
 
     if (storedUser) {
       setUser(JSON.parse(storedUser));
@@ -31,30 +32,35 @@ export const AuthProvider = ({
   }, []);
 
   // LOGIN
-  const login = (userData, token) => {
+  const login = (
+  userData,
+  token,
+  rememberMe = false
+) => {
+const storage = rememberMe
+  ? localStorage
+  : sessionStorage;
 
-    localStorage.setItem(
-      "token",
-      token
-    );
+storage.setItem("token", token);
 
-    localStorage.setItem(
-      "user",
-      JSON.stringify(userData)
-    );
-
+storage.setItem(
+  "user",
+  JSON.stringify(userData)
+);
     setUser(userData);
   };
 
   // LOGOUT
   const logout = () => {
 
-    localStorage.removeItem("token");
+  localStorage.removeItem("token");
+  localStorage.removeItem("user");
 
-    localStorage.removeItem("user");
+  sessionStorage.removeItem("token");
+  sessionStorage.removeItem("user");
 
-    setUser(null);
-  };
+  setUser(null);
+};
 
   return (
     <AuthContext.Provider
