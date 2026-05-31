@@ -36,7 +36,6 @@ export default function LoginPage() {
       password: "",
     });
 
-  
   const [loading, setLoading] =
     useState(false);
 
@@ -86,9 +85,24 @@ export default function LoginPage() {
       // =====================
 
       login(
-  res.data.user,
-  res.data.token,
-);
+        res.data.user,
+        res.data.token
+      );
+
+      // LOCAL STORAGE
+
+      localStorage.setItem(
+        "token",
+        res.data.token
+      );
+
+      localStorage.setItem(
+        "user",
+        JSON.stringify(
+          res.data.user
+        )
+      );
+
       console.log(
         "USER STORED:",
         JSON.parse(
@@ -102,52 +116,38 @@ export default function LoginPage() {
       // ROLE BASED REDIRECT
       // =====================
 
-      // =====================
-// ROLE BASED REDIRECT
-// =====================
+      switch (
+        res.data.user.role
+      ) {
 
-const user = res.data.user;
+        case "superadmin":
 
-switch (user.role) {
+          navigate(
+            "/superadmin"
+          );
 
-  case "superadmin":
+          break;
 
-    navigate("/superadmin");
+        case "owner":
 
-    break;
+          navigate(
+            "/owner/dashboard"
+          );
 
-  case "owner":
+          break;
 
-    // FIRST TIME SETUP CHECK
+        case "staff":
 
-    if (
-      !user.hotelId?.setupCompleted
-    ) {
+          navigate(
+            "/kitchen"
+          );
 
-      navigate(
-        "/setup-hotel"
-      );
+          break;
 
-    } else {
+        default:
 
-      navigate(
-        "/owner/dashboard"
-      );
-
-    }
-
-    break;
-
-  case "staff":
-
-    navigate("/kitchen");
-
-    break;
-
-  default:
-
-    navigate("/");
-}
+          navigate("/");
+      }
 
     } catch (err) {
 
@@ -255,16 +255,7 @@ switch (user.role) {
               : "Login"}
 
           </button>
-        <label className="flex items-center gap-2 mt-3">
-  <input
-    type="checkbox"
-    checked={rememberMe}
-    onChange={(e) =>
-      setRememberMe(e.target.checked)
-    }
-  />
-  Remember Me
-</label>
+
         </form>
 
       </div>
