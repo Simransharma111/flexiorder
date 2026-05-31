@@ -1,43 +1,66 @@
+import { useEffect } from "react";
+
 import { Routes, Route } from "react-router-dom";
+
 import "./App.css";
+
+import api from "./api/axios";
+
 import BackButtonHandler from "./components/BackButtonHandler";
+
+import InstallPWA from "./components/InstallPWA";
+
+import ProtectedRoute from "./components/ProtectedRoute";
+
+import { initFCM } from "./utils/fcmPush";
+
 import GuestMenuPage from "./pages/GuestMenuPage";
 import KitchenDashboard from "./pages/KitchenDashboard";
 import LoginPage from "./pages/LoginPage";
 import OwnerDashboard from "./pages/OwnerDashboard";
-
-import ProtectedRoute from "./components/ProtectedRoute";
 import TrackOrderPage from "./pages/TrackOrderPage";
 import SuperAdminDashboard from "./pages/SuperAdminDashboard";
 import Homepage from "./pages/Homepage";
 import QRInventoryPage from "./pages/QRInventoryPage";
 import HotelSetupPage from "./pages/HotelSetupPage";
-import InstallPWA from "./components/InstallPWA";
-import { initFCM } from "./utils/fcmPush";
+
 export default function App() {
-   useEffect(() => {
+
+  useEffect(() => {
+
     initFCM(api);
+
   }, []);
+
   return (
     <>
 
-        <InstallPWA />
-         <BackButtonHandler />
+      <InstallPWA />
+
+      <BackButtonHandler />
+
       <Routes>
-         <Route
+
+        <Route
           path="/"
           element={<Homepage />}
         />
-        <Route path="/qr/:qrId" element={<GuestMenuPage />} />
-        {/* <Route path="/menu/table/:tableId" element={<GuestMenuPage />} /> */}
+
+        <Route
+          path="/qr/:qrId"
+          element={<GuestMenuPage />}
+        />
+
         <Route
           path="/login"
           element={<LoginPage />}
         />
-       <Route
+
+        <Route
           path="/qr"
           element={<QRInventoryPage />}
         />
+
         <Route
           path="/superadmin"
           element={
@@ -50,19 +73,21 @@ export default function App() {
             </ProtectedRoute>
           }
         />
+
         <Route
-  path="/setup-hotel"
-  element={
-    <ProtectedRoute
-      allowedRoles={[
-        "owner",
-        "superadmin",
-      ]}
-    >
-      <HotelSetupPage />
-    </ProtectedRoute>
-  }
-/>
+          path="/setup-hotel"
+          element={
+            <ProtectedRoute
+              allowedRoles={[
+                "owner",
+                "superadmin",
+              ]}
+            >
+              <HotelSetupPage />
+            </ProtectedRoute>
+          }
+        />
+
         <Route
           path="/owner/dashboard"
           element={
@@ -76,6 +101,7 @@ export default function App() {
             </ProtectedRoute>
           }
         />
+
         <Route
           path="/kitchen"
           element={
@@ -90,11 +116,14 @@ export default function App() {
             </ProtectedRoute>
           }
         />
+
         <Route
           path="/track-order/:orderId"
           element={<TrackOrderPage />}
         />
+
       </Routes>
+
     </>
   );
 }
