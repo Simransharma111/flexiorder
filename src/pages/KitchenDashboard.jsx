@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import socket from "../socket";
 import api from "../api/axios";
 import { subscribeToPush } from "../utils/push";
+import { useNavigate } from "react-router-dom";
 
 const THEME_MAP = {
   stormy_morning: { primary: "#64748B", secondary: "#0F172A" },
@@ -15,6 +16,7 @@ const THEME_MAP = {
 };
 
 export default function KitchenDashboard() {
+  const navigate = useNavigate();
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [hotel, setHotel] = useState(null);
@@ -118,6 +120,23 @@ export default function KitchenDashboard() {
       alert(err?.response?.data?.message || "Failed");
     }
   };
+ const handleLogout = () => {
+
+  const confirmLogout =
+    window.confirm(
+      "Do you want to logout?"
+    );
+
+  if (!confirmLogout) return;
+
+  localStorage.removeItem("token");
+
+  localStorage.removeItem("user");
+
+  localStorage.removeItem("role");
+
+  navigate("/");
+};
 
   if (loading) {
     return (
@@ -159,15 +178,29 @@ export default function KitchenDashboard() {
             </div>
           </div>
 
-          <div
-            className="px-5 py-3 rounded-2xl"
-            style={{ background: primaryColor }}
-          >
-            <p className="text-sm">Active Orders</p>
-            <h2 className="text-2xl font-bold">
-              {orders.length}
-            </h2>
-          </div>
+         <div className="flex items-center gap-3">
+
+  <div
+    className="px-5 py-3 rounded-2xl"
+    style={{ background: primaryColor }}
+  >
+    <p className="text-sm">
+      Active Orders
+    </p>
+
+    <h2 className="text-2xl font-bold">
+      {orders.length}
+    </h2>
+  </div>
+
+  <button
+    onClick={handleLogout}
+    className="px-5 py-3 rounded-2xl border border-white/10 bg-red-600 hover:bg-red-700 transition font-semibold"
+  >
+    Logout
+  </button>
+
+</div>
 
         </div>
       </div>

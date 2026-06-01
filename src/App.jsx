@@ -16,22 +16,16 @@ import SuperAdminDashboard from "./pages/SuperAdminDashboard";
 import Homepage from "./pages/Homepage";
 import QRInventoryPage from "./pages/QRInventoryPage";
 import HotelSetupPage from "./pages/HotelSetupPage";
+import HomeRedirect from "./components/HomeRedirect";
 
 export default function App() {
-  useEffect(() => {
-    try {
-      initFCM(api);
-    } catch (err) {
-      console.log("FCM INIT ERROR:", err);
-    }
-  }, []);
-
   return (
     <>
       <BackButtonHandler />
 
       <Routes>
-        <Route path="/" element={<Homepage />} />
+        <Route path="/" element={<HomeRedirect />} />
+        <Route path="/homepage" element={<Homepage />} />
         <Route path="/qr/:qrId" element={<GuestMenuPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/qr" element={<QRInventoryPage />} />

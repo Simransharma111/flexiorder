@@ -1,35 +1,67 @@
 import { useEffect } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
-import { App as CapacitorApp } from "@capacitor/app";
+
+import {
+  useLocation,
+  useNavigate,
+} from "react-router-dom";
+
+import {
+  App as CapacitorApp,
+} from "@capacitor/app";
 
 export default function BackButtonHandler() {
 
-  const location = useLocation();
-  const navigate = useNavigate();
+  const location =
+    useLocation();
+
+  const navigate =
+    useNavigate();
 
   useEffect(() => {
 
-    const listener =
-      CapacitorApp.addListener(
-        "backButton",
-        () => {
+    let listener;
 
-          // EXIT ONLY ON HOME
-          if (location.pathname === "/") {
+    const setupListener =
+      async () => {
 
-            CapacitorApp.exitApp();
+        listener =
+          await CapacitorApp.addListener(
+            "backButton",
+            () => {
 
-          } else {
+              // EXIT ONLY ON HOME
 
-            navigate(-1);
+              if (
+                location.pathname === "/" ||
+                location.pathname === "/homepage"
+              ) {
 
-          }
+                CapacitorApp.exitApp();
 
-        }
-      );
+              } else {
+
+                navigate(-1);
+
+              }
+
+            }
+          );
+
+      };
+
+    setupListener();
 
     return () => {
-      listener.remove();
+
+      if (
+        listener &&
+        listener.remove
+      ) {
+
+        listener.remove();
+
+      }
+
     };
 
   }, [location.pathname]);

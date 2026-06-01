@@ -185,8 +185,12 @@ export default function OwnerDashboard() {
      LOGOUT
   ========================= */
   const handleLogout = () => {
-    localStorage.removeItem("token");
-    localStorage.removeItem("user");
+   localStorage.removeItem("token");
+
+  localStorage.removeItem("user");
+
+  localStorage.removeItem("role");
+
 
     navigate("/login");
   };

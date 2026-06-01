@@ -1,5 +1,5 @@
 import { useState } from "react";
-
+import { initFCM } from "../utils/fcmPush";
 import {
   useNavigate,
 } from "react-router-dom";
@@ -90,29 +90,26 @@ export default function LoginPage() {
       );
 
       // LOCAL STORAGE
+// LOCAL STORAGE
 
-      localStorage.setItem(
-        "token",
-        res.data.token
-      );
+localStorage.setItem(
+  "token",
+  res.data.token
+);
 
-      localStorage.setItem(
-        "user",
-        JSON.stringify(
-          res.data.user
-        )
-      );
+localStorage.setItem(
+  "user",
+  JSON.stringify(
+    res.data.user
+  )
+);
 
-      console.log(
-        "USER STORED:",
-        JSON.parse(
-          localStorage.getItem(
-            "user"
-          )
-        )
-      );
+localStorage.setItem(
+  "role",
+  res.data.user.role
+);
+await initFCM(api);
 
-      // =====================
       // ROLE BASED REDIRECT
       // =====================
 
@@ -146,7 +143,7 @@ export default function LoginPage() {
 
         default:
 
-          navigate("/");
+           navigate("/homepage");
       }
 
     } catch (err) {

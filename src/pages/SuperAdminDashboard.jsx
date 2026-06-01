@@ -8,10 +8,11 @@ import {
 } from "react-icons/fa";
 
 import api from "../api/axios";
+import { useNavigate } from "react-router-dom";
 
 export default function SuperAdminDashboard() {
+  const navigate = useNavigate();
 
-  // =========================
   // STATES
   // =========================
 
@@ -201,6 +202,23 @@ export default function SuperAdminDashboard() {
 
     }
   };
+  const handleLogout = () => {
+
+  const confirmLogout =
+    window.confirm(
+      "Do you want to logout?"
+    );
+
+  if (!confirmLogout) return;
+
+  localStorage.removeItem("token");
+
+  localStorage.removeItem("user");
+
+  localStorage.removeItem("role");
+
+  navigate("/");
+};
 
   return (
 
@@ -222,16 +240,27 @@ export default function SuperAdminDashboard() {
 
         </div>
 
-        <button
-          onClick={() =>
-            setShowModal(true)
-          }
-          className="bg-orange-500 hover:bg-orange-600 transition px-6 py-3 rounded-2xl font-semibold flex items-center gap-3"
-        >
-          <FaPlus />
+        <div className="flex gap-3 flex-wrap">
 
-          Create Hotel
-        </button>
+  <button
+    onClick={() =>
+      setShowModal(true)
+    }
+    className="bg-orange-500 hover:bg-orange-600 transition px-6 py-3 rounded-2xl font-semibold flex items-center gap-3"
+  >
+    <FaPlus />
+
+    Create Hotel
+  </button>
+
+  <button
+    onClick={handleLogout}
+    className="bg-red-600 hover:bg-red-700 transition px-6 py-3 rounded-2xl font-semibold"
+  >
+    Logout
+  </button>
+
+</div>
 
       </div>
 
