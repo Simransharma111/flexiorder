@@ -4,6 +4,10 @@ import {
 
 import { Device } from "@capacitor/device";
 
+import {
+  LocalNotifications,
+} from "@capacitor/local-notifications";
+
 export const initFCM = async (api) => {
 
   try {
@@ -26,7 +30,7 @@ export const initFCM = async (api) => {
     }
 
     // =========================
-    // REQUEST PERMISSION
+    // PUSH PERMISSION
     // =========================
 
     const permission =
@@ -42,6 +46,12 @@ export const initFCM = async (api) => {
 
       return;
     }
+
+    // =========================
+    // LOCAL NOTIFICATION PERMISSION
+    // =========================
+
+    await LocalNotifications.requestPermissions();
 
     // =========================
     // REGISTER DEVICE
@@ -64,7 +74,6 @@ export const initFCM = async (api) => {
             token.value
           );
 
-          // GET TOKEN FROM BOTH STORAGES
           const authToken =
             localStorage.getItem(
               "token"
@@ -73,7 +82,6 @@ export const initFCM = async (api) => {
               "token"
             );
 
-          // NO LOGIN TOKEN
           if (!authToken) {
 
             console.log(
@@ -81,9 +89,11 @@ export const initFCM = async (api) => {
             );
 
             return;
+
           }
 
           // SAVE TOKEN TO DATABASE
+
           await api.post(
             "/notifications/save-token",
             {
@@ -135,15 +145,16 @@ export const initFCM = async (api) => {
 
     PushNotifications.addListener(
       "pushNotificationReceived",
-      (notification) => {
+      async (notification) => {
 
         console.log(
           "Notification Received",
           notification
         );
 
-        // PLAY SOUND
         try {
+
+          // PLAY SOUND INSIDE APP
 
           const audio =
             new Audio(
@@ -155,7 +166,46 @@ export const initFCM = async (api) => {
         } catch (err) {
 
           console.log(
-            "Audio play failed"
+            "Audio play failed",
+            err
+          );
+
+        }
+
+        // SHOW SYSTEM NOTIFICATION
+
+        try {
+
+          await LocalNotifications.schedule({
+            notifications: [
+              {
+                id: Date.now(),
+
+                title:
+                  notification.title ||
+                  "New Order",
+
+                body:
+                  notification.body ||
+                  "You received a new order",
+
+                sound:
+                  "orders_received.mp3",
+
+                smallIcon:
+                  "ic_launcher",
+
+                iconColor:
+                  "#F97316",
+              },
+            ],
+          });
+
+        } catch (err) {
+
+          console.log(
+            "Local notification failed",
+            err
           );
 
         }
@@ -175,9 +225,6 @@ export const initFCM = async (api) => {
           "Notification Clicked",
           notification
         );
-
-        // OPTIONAL:
-        // Navigate to kitchen/orders page here
 
       }
     );

@@ -430,6 +430,185 @@ alert(
   </section>
 
 )}
+{/* =========================
+    PREVIOUS ORDERS
+========================= */}
+
+{previousOrders.length > 0 && (
+
+  <section className="max-w-7xl mx-auto px-4 mt-8">
+
+    <div className="flex items-center justify-between mb-4">
+
+      <h2 className="text-2xl font-bold">
+        Previous Orders
+      </h2>
+
+      <span className="text-sm text-gray-400">
+        Order History
+      </span>
+
+    </div>
+
+    <div className="space-y-4">
+
+      {previousOrders.map((order) => {
+
+        const isCancelled =
+          order.status === "cancelled";
+
+        const isDelivered =
+          order.status === "delivered";
+
+        return (
+
+          <div
+            key={order._id}
+            className={`
+              rounded-3xl
+              p-5
+              border
+              backdrop-blur
+              ${
+                isCancelled
+                  ? "bg-red-500/10 border-red-500/30"
+                  : "bg-green-500/10 border-green-500/30"
+              }
+            `}
+          >
+
+            {/* TOP */}
+
+            <div className="flex justify-between gap-4 flex-wrap">
+
+              <div>
+
+                <p className="text-xs text-gray-400">
+                  ORDER ID
+                </p>
+
+                <h3 className="font-bold break-all">
+                  {order._id}
+                </h3>
+
+                <div className="mt-4 space-y-1">
+
+                  {(order.items || []).map(
+                    (item, index) => (
+
+                      <p
+                        key={index}
+                        className="text-sm text-gray-300"
+                      >
+                        • {item.name} × {item.quantity}
+                      </p>
+
+                    )
+                  )}
+
+                </div>
+
+              </div>
+
+              {/* STATUS CARD */}
+
+              <div className="text-right">
+
+                <div
+                  className={`
+                    px-4 py-2 rounded-2xl
+                    font-bold text-sm inline-block
+                    ${
+                      isCancelled
+                        ? "bg-red-500 text-white"
+                        : "bg-green-500 text-white"
+                    }
+                  `}
+                >
+
+                  {isCancelled
+                    ? "Order Cancelled"
+                    : "Order Delivered"}
+
+                </div>
+
+                <p className="text-xs text-gray-400 mt-3">
+                  {new Date(
+                    order.updatedAt || order.createdAt
+                  ).toLocaleString()}
+                </p>
+
+              </div>
+
+            </div>
+
+            {/* MESSAGE */}
+
+            <div
+              className={`
+                mt-5
+                rounded-2xl
+                p-4
+                border
+                ${
+                  isCancelled
+                    ? "bg-red-500/10 border-red-500/20"
+                    : "bg-green-500/10 border-green-500/20"
+                }
+              `}
+            >
+
+              {isCancelled ? (
+
+                <div>
+
+                  <h3 className="font-bold text-red-400 text-lg">
+                    ⚠ Order Cancelled
+                  </h3>
+
+                  <p className="text-red-200 text-sm mt-1">
+                    Unfortunately, your order was cancelled by the restaurant staff.
+                  </p>
+
+                  <p className="text-gray-300 text-sm mt-3">
+                    If payment was made, please contact staff for assistance.
+                  </p>
+
+                </div>
+
+              ) : (
+
+                <div>
+
+                  <h3 className="font-bold text-green-400 text-lg">
+                    ✅ Order Delivered
+                  </h3>
+
+                  <p className="text-green-200 text-sm mt-1">
+                    Your order was successfully delivered.
+                  </p>
+
+                  <p className="text-gray-300 text-sm mt-3">
+                    Thank you for ordering with us.
+                  </p>
+
+                </div>
+
+              )}
+
+            </div>
+
+          </div>
+
+        );
+
+      })}
+
+    </div>
+
+  </section>
+
+)}
 
       {/* MENU */}
       <section className="max-w-7xl mx-auto px-4 py-10">

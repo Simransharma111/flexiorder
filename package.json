@@ -16,6 +16,7 @@
     "@capacitor/cli": "8.3.4",
     "@capacitor/core": "8.3.4",
     "@capacitor/device": "8.0.2",
+    "@capacitor/local-notifications": "8.2.0",
     "@capacitor/push-notifications": "8.1.1",
     "axios": "1.16.0",
     "firebase": "12.14.0",
