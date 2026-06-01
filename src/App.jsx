@@ -1,17 +1,10 @@
 import { useEffect } from "react";
-
 import { Routes, Route } from "react-router-dom";
-
 import "./App.css";
 
 import api from "./api/axios";
-
 import BackButtonHandler from "./components/BackButtonHandler";
-
-import InstallPWA from "./components/InstallPWA";
-
 import ProtectedRoute from "./components/ProtectedRoute";
-
 import { initFCM } from "./utils/fcmPush";
 
 import GuestMenuPage from "./pages/GuestMenuPage";
@@ -25,50 +18,28 @@ import QRInventoryPage from "./pages/QRInventoryPage";
 import HotelSetupPage from "./pages/HotelSetupPage";
 
 export default function App() {
-
   useEffect(() => {
-
-    initFCM(api);
-
+    try {
+      initFCM(api);
+    } catch (err) {
+      console.log("FCM INIT ERROR:", err);
+    }
   }, []);
 
   return (
     <>
-
-      <InstallPWA />
-
       <BackButtonHandler />
 
       <Routes>
-
-        <Route
-          path="/"
-          element={<Homepage />}
-        />
-
-        <Route
-          path="/qr/:qrId"
-          element={<GuestMenuPage />}
-        />
-
-        <Route
-          path="/login"
-          element={<LoginPage />}
-        />
-
-        <Route
-          path="/qr"
-          element={<QRInventoryPage />}
-        />
+        <Route path="/" element={<Homepage />} />
+        <Route path="/qr/:qrId" element={<GuestMenuPage />} />
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/qr" element={<QRInventoryPage />} />
 
         <Route
           path="/superadmin"
           element={
-            <ProtectedRoute
-              allowedRoles={[
-                "superadmin",
-              ]}
-            >
+            <ProtectedRoute allowedRoles={["superadmin"]}>
               <SuperAdminDashboard />
             </ProtectedRoute>
           }
@@ -77,12 +48,7 @@ export default function App() {
         <Route
           path="/setup-hotel"
           element={
-            <ProtectedRoute
-              allowedRoles={[
-                "owner",
-                "superadmin",
-              ]}
-            >
+            <ProtectedRoute allowedRoles={["owner", "superadmin"]}>
               <HotelSetupPage />
             </ProtectedRoute>
           }
@@ -91,12 +57,7 @@ export default function App() {
         <Route
           path="/owner/dashboard"
           element={
-            <ProtectedRoute
-              allowedRoles={[
-                "owner",
-                "superadmin",
-              ]}
-            >
+            <ProtectedRoute allowedRoles={["owner", "superadmin"]}>
               <OwnerDashboard />
             </ProtectedRoute>
           }
@@ -105,25 +66,14 @@ export default function App() {
         <Route
           path="/kitchen"
           element={
-            <ProtectedRoute
-              allowedRoles={[
-                "staff",
-                "owner",
-                "superadmin",
-              ]}
-            >
+            <ProtectedRoute allowedRoles={["staff", "owner", "superadmin"]}>
               <KitchenDashboard />
             </ProtectedRoute>
           }
         />
 
-        <Route
-          path="/track-order/:orderId"
-          element={<TrackOrderPage />}
-        />
-
+        <Route path="/track-order/:orderId" element={<TrackOrderPage />} />
       </Routes>
-
     </>
   );
 }
