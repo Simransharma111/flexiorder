@@ -140,9 +140,24 @@ export default function OwnerDashboard() {
   });
 
   // ORDER UPDATED
-  socket.on(
-    "orderUpdated",
-    (updatedOrder) => {
+ socket.on(
+  "orderUpdated",
+  (updatedOrder) => {
+
+    if (
+      updatedOrder.status ===
+      "delivered"
+    ) {
+
+      setOrders((prev) =>
+        prev.filter(
+          (o) =>
+            o._id !==
+            updatedOrder._id
+        )
+      );
+
+    } else {
 
       setOrders((prev) =>
         prev.map((o) =>
@@ -153,7 +168,10 @@ export default function OwnerDashboard() {
       );
 
     }
-  );
+
+  }
+);
+     
 
   return () => {
 
