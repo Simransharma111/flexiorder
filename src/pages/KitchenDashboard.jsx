@@ -57,7 +57,8 @@ export default function KitchenDashboard() {
 
   const navigate = useNavigate();
 
-  const [orders, setOrders] = useState([]);
+  const [orders, setOrders] =
+    useState([]);
 
   const [loading, setLoading] =
     useState(true);
@@ -66,7 +67,7 @@ export default function KitchenDashboard() {
     useState(null);
 
   /* =========================
-     THEME
+      THEME
   ========================= */
 
   const themeConfig =
@@ -80,13 +81,12 @@ export default function KitchenDashboard() {
     "#F97316";
 
   const secondaryColor =
-    hotel?.theme
-      ?.secondaryColor ||
+    hotel?.theme?.secondaryColor ||
     themeConfig.secondary ||
     "#0F172A";
 
   /* =========================
-     FETCH HOTEL
+      FETCH HOTEL
   ========================= */
 
   const fetchHotel = async () => {
@@ -117,7 +117,7 @@ export default function KitchenDashboard() {
   };
 
   /* =========================
-     FETCH ORDERS
+      FETCH ORDERS
   ========================= */
 
   const fetchOrders = async () => {
@@ -163,7 +163,7 @@ export default function KitchenDashboard() {
   };
 
   /* =========================
-     INITIAL LOAD
+      SOCKETS
   ========================= */
 
   useEffect(() => {
@@ -244,7 +244,7 @@ export default function KitchenDashboard() {
   }, []);
 
   /* =========================
-     UPDATE STATUS
+      UPDATE STATUS
   ========================= */
 
   const updateStatus = async (
@@ -271,7 +271,6 @@ export default function KitchenDashboard() {
           }
         );
 
-      // REMOVE FROM UI
       if (
         status === "delivered" ||
         status === "cancelled"
@@ -288,7 +287,6 @@ export default function KitchenDashboard() {
 
       }
 
-      // UPDATE LIVE
       setOrders((prev) =>
         prev.map((o) =>
           o._id === orderId
@@ -309,7 +307,7 @@ export default function KitchenDashboard() {
   };
 
   /* =========================
-     LOGOUT
+      LOGOUT
   ========================= */
 
   const handleLogout = () => {
@@ -339,7 +337,7 @@ export default function KitchenDashboard() {
   };
 
   /* =========================
-     NEXT STATUS
+      STATUS FLOW
   ========================= */
 
   const getNextStatus = (
@@ -387,7 +385,7 @@ export default function KitchenDashboard() {
   };
 
   /* =========================
-     LOADING
+      LOADING
   ========================= */
 
   if (loading) {
@@ -401,7 +399,8 @@ export default function KitchenDashboard() {
           items-center
           justify-center
           text-white
-          text-2xl
+          text-xl
+          sm:text-2xl
           font-bold
         "
         style={{
@@ -453,10 +452,14 @@ export default function KitchenDashboard() {
             max-w-7xl
             mx-auto
             px-4
-            py-5
+            py-4
             flex
+            flex-col
+            lg:flex-row
+            gap-4
+            lg:gap-0
             justify-between
-            items-center
+            lg:items-center
           "
         >
 
@@ -466,7 +469,8 @@ export default function KitchenDashboard() {
             className="
               flex
               items-center
-              gap-4
+              gap-3
+              min-w-0
             "
           >
 
@@ -476,23 +480,29 @@ export default function KitchenDashboard() {
                 src={hotel.logo}
                 alt="logo"
                 className="
-                  w-14
-                  h-14
+                  w-12
+                  h-12
+                  sm:w-14
+                  sm:h-14
                   rounded-full
                   object-cover
                   border
                   border-white/10
+                  shrink-0
                 "
               />
 
             )}
 
-            <div>
+            <div className="min-w-0">
 
               <h1
                 className="
-                  text-3xl
+                  text-xl
+                  sm:text-2xl
+                  lg:text-3xl
                   font-black
+                  truncate
                 "
               >
                 Kitchen Dashboard
@@ -500,8 +510,10 @@ export default function KitchenDashboard() {
 
               <p
                 className="
-                  text-sm
+                  text-xs
+                  sm:text-sm
                   text-gray-300
+                  truncate
                 "
               >
                 {hotel?.name}
@@ -518,12 +530,16 @@ export default function KitchenDashboard() {
               flex
               items-center
               gap-3
+              w-full
+              lg:w-auto
             "
           >
 
             <div
               className="
-                px-5
+                flex-1
+                lg:flex-none
+                px-4
                 py-3
                 rounded-2xl
                 text-center
@@ -536,7 +552,8 @@ export default function KitchenDashboard() {
 
               <p
                 className="
-                  text-xs
+                  text-[10px]
+                  sm:text-xs
                   uppercase
                 "
               >
@@ -545,7 +562,8 @@ export default function KitchenDashboard() {
 
               <h2
                 className="
-                  text-2xl
+                  text-xl
+                  sm:text-2xl
                   font-black
                 "
               >
@@ -559,13 +577,17 @@ export default function KitchenDashboard() {
                 handleLogout
               }
               className="
-                px-5
+                px-4
+                sm:px-5
                 py-3
                 rounded-2xl
                 bg-red-600
                 hover:bg-red-700
                 transition
                 font-bold
+                text-sm
+                sm:text-base
+                whitespace-nowrap
               "
             >
               Logout
@@ -586,7 +608,8 @@ export default function KitchenDashboard() {
           max-w-7xl
           mx-auto
           px-4
-          py-8
+          py-6
+          sm:py-8
         "
       >
 
@@ -606,7 +629,8 @@ export default function KitchenDashboard() {
 
               <h2
                 className="
-                  text-4xl
+                  text-3xl
+                  sm:text-4xl
                   font-black
                 "
               >
@@ -617,6 +641,8 @@ export default function KitchenDashboard() {
                 className="
                   text-gray-400
                   mt-3
+                  text-sm
+                  sm:text-base
                 "
               >
                 Incoming orders
@@ -632,8 +658,9 @@ export default function KitchenDashboard() {
           <div
             className="
               grid
-              lg:grid-cols-2
-              gap-8
+              grid-cols-1
+              xl:grid-cols-2
+              gap-6
             "
           >
 
@@ -652,9 +679,11 @@ export default function KitchenDashboard() {
                     bg-white/5
                     border
                     border-white/10
-                    rounded-[30px]
-                    p-6
+                    rounded-[28px]
+                    p-4
+                    sm:p-6
                     backdrop-blur-lg
+                    overflow-hidden
                   "
                 >
 
@@ -663,17 +692,23 @@ export default function KitchenDashboard() {
                   <div
                     className="
                       flex
+                      flex-col
+                      sm:flex-row
                       justify-between
-                      gap-4
+                      gap-5
                     "
                   >
 
-                    <div>
+                    {/* LEFT */}
+
+                    <div className="min-w-0">
 
                       <h2
                         className="
-                          text-3xl
+                          text-2xl
+                          sm:text-3xl
                           font-black
+                          break-words
                         "
                         style={{
                           color:
@@ -694,6 +729,9 @@ export default function KitchenDashboard() {
                         className="
                           text-gray-300
                           mt-1
+                          text-sm
+                          sm:text-base
+                          break-words
                         "
                       >
                         {
@@ -726,9 +764,15 @@ export default function KitchenDashboard() {
 
                     </div>
 
+                    {/* RIGHT */}
+
                     <div
                       className="
-                        text-right
+                        flex
+                        sm:block
+                        items-center
+                        justify-between
+                        gap-4
                       "
                     >
 
@@ -737,9 +781,11 @@ export default function KitchenDashboard() {
                           px-4
                           py-2
                           rounded-full
-                          text-sm
+                          text-xs
+                          sm:text-sm
                           font-bold
                           uppercase
+                          text-center
                         "
                         style={{
                           background:
@@ -753,9 +799,11 @@ export default function KitchenDashboard() {
 
                       <h3
                         className="
-                          text-3xl
+                          text-2xl
+                          sm:text-3xl
                           font-black
-                          mt-4
+                          mt-0
+                          sm:mt-4
                         "
                       >
                         ₹
@@ -774,6 +822,7 @@ export default function KitchenDashboard() {
                     className="
                       mt-8
                       overflow-x-auto
+                      pb-2
                     "
                   >
 
@@ -815,16 +864,18 @@ export default function KitchenDashboard() {
 
                                 <div
                                   className="
-                                    w-12
-                                    h-12
+                                    w-10
+                                    h-10
+                                    sm:w-12
+                                    sm:h-12
                                     rounded-full
                                     flex
                                     items-center
                                     justify-center
-                                    text-sm
+                                    text-xs
+                                    sm:text-sm
                                     font-black
                                     border-2
-                                    transition-all
                                   "
                                   style={{
                                     background:
@@ -847,10 +898,12 @@ export default function KitchenDashboard() {
 
                                 <p
                                   className={`
-                                    text-[11px]
+                                    text-[10px]
+                                    sm:text-[11px]
                                     mt-2
                                     font-bold
                                     uppercase
+                                    whitespace-nowrap
                                     ${
                                       active
                                         ? "text-white"
@@ -871,10 +924,12 @@ export default function KitchenDashboard() {
 
                                 <div
                                   className="
-                                    w-10
+                                    w-8
+                                    sm:w-10
                                     h-1
                                     rounded-full
-                                    mx-2
+                                    mx-1
+                                    sm:mx-2
                                     mb-6
                                   "
                                   style={{
@@ -920,6 +975,7 @@ export default function KitchenDashboard() {
                             flex
                             justify-between
                             items-center
+                            gap-3
                             bg-black/20
                             border
                             border-white/10
@@ -928,12 +984,19 @@ export default function KitchenDashboard() {
                           "
                         >
 
-                          <div>
+                          <div
+                            className="
+                              min-w-0
+                              flex-1
+                            "
+                          >
 
                             <h3
                               className="
-                                text-lg
+                                text-base
+                                sm:text-lg
                                 font-bold
+                                break-words
                               "
                             >
                               {item.name}
@@ -941,7 +1004,8 @@ export default function KitchenDashboard() {
 
                             <p
                               className="
-                                text-sm
+                                text-xs
+                                sm:text-sm
                                 text-gray-400
                                 mt-1
                               "
@@ -955,14 +1019,18 @@ export default function KitchenDashboard() {
 
                           <div
                             className="
-                              w-[70px]
-                              h-[70px]
+                              min-w-[55px]
+                              h-[55px]
+                              sm:min-w-[70px]
+                              sm:h-[70px]
                               rounded-2xl
                               flex
                               items-center
                               justify-center
-                              text-3xl
+                              text-xl
+                              sm:text-3xl
                               font-black
+                              shrink-0
                             "
                             style={{
                               background:
@@ -990,8 +1058,9 @@ export default function KitchenDashboard() {
                     className="
                       mt-8
                       flex
-                      flex-wrap
-                      gap-4
+                      flex-col
+                      sm:flex-row
+                      gap-3
                     "
                   >
 
@@ -1010,15 +1079,14 @@ export default function KitchenDashboard() {
                           )
                         }
                         className="
-                          flex-1
-                          min-w-[220px]
+                          w-full
                           py-4
-                          px-6
+                          px-5
                           rounded-2xl
-                          text-lg
+                          text-base
+                          sm:text-lg
                           font-black
                           transition-all
-                          hover:scale-[1.02]
                           active:scale-95
                         "
                         style={{
@@ -1058,6 +1126,8 @@ export default function KitchenDashboard() {
 
                         }}
                         className="
+                          w-full
+                          sm:w-auto
                           px-6
                           py-4
                           rounded-2xl
@@ -1087,5 +1157,7 @@ export default function KitchenDashboard() {
       </section>
 
     </div>
+
   );
+
 }
