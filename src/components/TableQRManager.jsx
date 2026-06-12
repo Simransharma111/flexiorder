@@ -152,10 +152,10 @@ export default function TableQRManager() {
             {/* QR */}
             {t.qrId ? (
              <div className="flex justify-center">
-  <QRCodeCanvas
-    value={`${window.location.origin}/qr/${t.qrId}`}
-    size={140}
-  />
+ <QRCodeCanvas
+  value={`${import.meta.env.VITE_FRONTEND_URL}/qr/${t.qrId}`}
+  size={140}
+/>
 </div>
             ) : (
               <div className="h-[140px] flex items-center justify-center border border-dashed rounded-xl">
