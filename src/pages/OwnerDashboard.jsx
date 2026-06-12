@@ -240,6 +240,11 @@ export default function OwnerDashboard() {
       label: "Staff",
     },
 
+      { key: "kitchen", 
+        label: "Kitchen",
+
+      },
+
     {
       key: "analytics",
       label: "Analytics",
@@ -550,6 +555,31 @@ export default function OwnerDashboard() {
               )}
             </div>
           )}
+          {/* KITCHEN */}
+{activeTab === "kitchen" && (
+  <div className="bg-white/5 border border-white/10 rounded-3xl p-6">
+    <div className="text-center">
+      <h2 className="text-3xl font-bold mb-3">
+        Kitchen Dashboard
+      </h2>
+
+      <p className="text-gray-400 mb-6">
+        Manage live orders, preparation status,
+        delivery updates and kitchen workflow.
+      </p>
+
+      <button
+        onClick={() => navigate("/kitchen")}
+        className="px-8 py-4 rounded-2xl font-bold text-lg"
+        style={{
+          background: primaryColor,
+        }}
+      >
+        Open Kitchen Dashboard
+      </button>
+    </div>
+  </div>
+)}
 
           {/* STAFF */}
           {activeTab === "staff" && (
