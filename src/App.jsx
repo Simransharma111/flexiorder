@@ -1,11 +1,8 @@
-import { useEffect } from "react";
 import { Routes, Route } from "react-router-dom";
 import "./App.css";
 
-import api from "./api/axios";
 import BackButtonHandler from "./components/BackButtonHandler";
 import ProtectedRoute from "./components/ProtectedRoute";
-import { initFCM } from "./utils/fcmPush";
 
 import GuestMenuPage from "./pages/GuestMenuPage";
 import KitchenDashboard from "./pages/KitchenDashboard";
@@ -24,49 +21,104 @@ export default function App() {
       <BackButtonHandler />
 
       <Routes>
-        <Route path="/" element={<HomeRedirect />} />
-        <Route path="/homepage" element={<Homepage />} />
-        <Route path="/qr/:qrId" element={<GuestMenuPage />} />
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/qr" element={<QRInventoryPage />} />
+
+        {/* ================= PUBLIC ================= */}
+
+        <Route
+          path="/"
+          element={<HomeRedirect />}
+        />
+
+        <Route
+          path="/homepage"
+          element={<Homepage />}
+        />
+
+        {/* Guest scans QR */}
+        <Route
+          path="/qr/:qrId"
+          element={<GuestMenuPage />}
+        />
+
+        <Route
+          path="/login"
+          element={<LoginPage />}
+        />
+
+        <Route
+          path="/qr"
+          element={<QRInventoryPage />}
+        />
+
+        {/* ================= SUPER ADMIN ================= */}
 
         <Route
           path="/superadmin"
           element={
-            <ProtectedRoute allowedRoles={["superadmin"]}>
+            <ProtectedRoute
+              allowedRoles={["superadmin"]}
+            >
               <SuperAdminDashboard />
             </ProtectedRoute>
           }
         />
 
+        {/* ================= HOTEL SETUP ================= */}
+
         <Route
           path="/setup-hotel"
           element={
-            <ProtectedRoute allowedRoles={["owner", "superadmin"]}>
+            <ProtectedRoute
+              allowedRoles={[
+                "owner",
+                "superadmin",
+              ]}
+            >
               <HotelSetupPage />
             </ProtectedRoute>
           }
         />
 
+        {/* ================= OWNER ================= */}
+
         <Route
           path="/owner/dashboard"
           element={
-            <ProtectedRoute allowedRoles={["owner", "superadmin"]}>
+            <ProtectedRoute
+              allowedRoles={[
+                "owner",
+                "superadmin",
+              ]}
+            >
               <OwnerDashboard />
             </ProtectedRoute>
           }
         />
 
+        {/* ================= KITCHEN ================= */}
+
         <Route
           path="/kitchen"
           element={
-            <ProtectedRoute allowedRoles={["staff", "owner", "superadmin"]}>
+            <ProtectedRoute
+              allowedRoles={[
+                "staff",
+                "owner",
+                "superadmin",
+              ]}
+            >
               <KitchenDashboard />
             </ProtectedRoute>
           }
         />
 
-        <Route path="/track-order/:orderId" element={<TrackOrderPage />} />
+        {/* ================= ORDER TRACKING ================= */}
+
+        <Route
+          path="/track-order/:orderId"
+          element={<TrackOrderPage />}
+        />
+
       </Routes>
     </>
   );
