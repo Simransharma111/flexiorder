@@ -4,6 +4,9 @@ import {
   FiPlus,
   FiTrash2,
   FiClock,
+  FiCheckCircle,
+  FiAlertCircle,
+  FiLoader,
 } from "react-icons/fi";
 
 import {
@@ -27,8 +30,8 @@ export default function CartPage() {
     increaseQty,
     decreaseQty,
     removeFromCart,
-    setCartSession,
     clearCart,
+    setCartSession,
   } = useCart();
 
   const [orderType, setOrderType] =
@@ -43,12 +46,15 @@ export default function CartPage() {
   const [placingOrder, setPlacingOrder] =
     useState(false);
 
-  const [error, setError] =
+  const [successMessage, setSuccessMessage] =
     useState("");
 
-  // ======================================
+  const [errorMessage, setErrorMessage] =
+    useState("");
+
+  // ==========================================
   // SET CART SESSION
-  // ======================================
+  // ==========================================
 
   useEffect(() => {
     if (qrId) {
@@ -56,9 +62,9 @@ export default function CartPage() {
     }
   }, [qrId, setCartSession]);
 
-  // ======================================
+  // ==========================================
   // MINIMUM SCHEDULE TIME
-  // ======================================
+  // ==========================================
 
   const getMinDateTime = () => {
     const date = new Date();
@@ -88,20 +94,24 @@ export default function CartPage() {
     return `${year}-${month}-${day}T${hours}:${minutes}`;
   };
 
-  // ======================================
+  // ==========================================
   // EMPTY CART
-  // ======================================
+  // ==========================================
 
-  if (!cartItems || cartItems.length === 0) {
+  if (
+    cartItems.length === 0 &&
+    !successMessage
+  ) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6">
+
         <div className="bg-white rounded-2xl p-8 text-center shadow-sm w-full max-w-md">
 
           <div className="text-5xl mb-4">
             🛒
           </div>
 
-          <h2 className="text-xl font-bold">
+          <h2 className="text-xl font-bold text-gray-900">
             Your cart is empty
           </h2>
 
@@ -113,90 +123,129 @@ export default function CartPage() {
             onClick={() =>
               navigate(`/qr/${qrId}`)
             }
-            className="mt-6 w-full bg-orange-500 text-white py-3 rounded-xl font-bold"
+            className="mt-6 w-full bg-orange-500 hover:bg-orange-600 text-white py-3 rounded-xl font-bold"
           >
             Browse Menu
           </button>
 
         </div>
+
       </div>
     );
   }
 
-  // ======================================
+  // ==========================================
   // PLACE ORDER
-  // ======================================
+  // ==========================================
 
   const handlePlaceOrder = async () => {
+
+    // Clear previous messages
+    setErrorMessage("");
+    setSuccessMessage("");
+
+    // ------------------------------------------
+    // CHECK CART
+    // ------------------------------------------
+
+    if (!cartItems.length) {
+      setErrorMessage(
+        "Your cart is empty."
+      );
+      return;
+    }
+
+    // ------------------------------------------
+    // CHECK QR ID
+    // ------------------------------------------
+
+    if (!qrId) {
+      setErrorMessage(
+        "QR information is missing."
+      );
+      return;
+    }
+
+    // ------------------------------------------
+    // CHECK SCHEDULE
+    // ------------------------------------------
+
+    if (
+      orderType === "schedule" &&
+      !scheduledFor
+    ) {
+      setErrorMessage(
+        "Please select a schedule time."
+      );
+      return;
+    }
+
+    // ------------------------------------------
+    // CHECK SCHEDULE IS AT LEAST 1 HOUR
+    // ------------------------------------------
+
+    if (
+      orderType === "schedule" &&
+      scheduledFor
+    ) {
+
+      const selectedTime =
+        new Date(scheduledFor).getTime();
+
+      const minimumTime =
+        Date.now() +
+        60 * 60 * 1000;
+
+      if (selectedTime < minimumTime) {
+        setErrorMessage(
+          "Scheduled orders must be at least 1 hour in advance."
+        );
+        return;
+      }
+    }
+
     try {
-      setError("");
 
-      // -------------------------------
-      // VALIDATION
-      // -------------------------------
+      setPlacingOrder(true);
 
-      if (!qrId) {
-        setError(
-          "QR information is missing."
+      // ----------------------------------------
+      // GET TABLE INFORMATION FROM QR MENU
+      // ----------------------------------------
+
+      let tableId = null;
+
+      try {
+
+        const menuResponse =
+          await api.get(
+            `/qr/menu/${qrId}`
+          );
+
+        tableId =
+          menuResponse.data?.table?._id ||
+          menuResponse.data?.table?.id ||
+          menuResponse.data?.tableId;
+
+      } catch (menuError) {
+
+        console.error(
+          "Failed to get table:",
+          menuError
         );
-        return;
+
       }
 
-      if (!cartItems.length) {
-        setError(
-          "Your cart is empty."
-        );
-        return;
+      // ----------------------------------------
+      // FALLBACK: QR ID MAY BE TABLE ID
+      // ----------------------------------------
+
+      if (!tableId) {
+        tableId = qrId;
       }
 
-      if (
-        orderType === "schedule" &&
-        !scheduledFor
-      ) {
-        setError(
-          "Please select a schedule time."
-        );
-        return;
-      }
-
-      // -------------------------------
-      // GET TABLE INFORMATION
-      // -------------------------------
-
-      /*
-        IMPORTANT:
-
-        Your backend createOrder expects:
-
-        {
-          tableId,
-          guestName,
-          items
-        }
-
-        But this CartPage only knows qrId.
-
-        Therefore we first get the QR information.
-      */
-
-      const qrResponse =
-        await api.get(
-          `/qr/menu/${qrId}`
-        );
-
-      const table =
-        qrResponse.data?.table;
-
-      if (!table?._id) {
-        setError(
-          "Unable to find table information."
-        );
-        return;
-      }
-
-      // -------------------------------
-      // PREPARE ITEMS
-      // -------------------------------
+      // ----------------------------------------
+      // PREPARE ORDER ITEMS
+      // ----------------------------------------
 
       const items = cartItems.map(
         (item) => ({
@@ -207,135 +256,229 @@ export default function CartPage() {
         })
       );
 
-      // -------------------------------
-      // START LOADING
-      // -------------------------------
+      // ----------------------------------------
+      // ORDER DATA
+      // ----------------------------------------
 
-      setPlacingOrder(true);
+      const orderData = {
+        tableId,
 
-      // -------------------------------
-      // PLACE ORDER
-      // -------------------------------
+        guestName:
+          guestName.trim() ||
+          "Guest",
+
+        items,
+
+        // These fields are harmless if your
+        // backend currently doesn't use them.
+        orderType,
+
+        scheduledFor:
+          orderType === "schedule"
+            ? scheduledFor
+            : null,
+      };
+
+      console.log(
+        "📦 ORDER DATA:",
+        orderData
+      );
+
+      // ----------------------------------------
+      // CREATE ORDER
+      // ----------------------------------------
 
       const response =
         await api.post(
           "/orders",
-          {
-            tableId: table._id,
-
-            guestName:
-              guestName.trim() ||
-              "Guest",
-
-            items,
-
-            orderType,
-
-            scheduledFor:
-              orderType === "schedule"
-                ? scheduledFor
-                : null,
-          }
+          orderData
         );
 
-      // -------------------------------
+      console.log(
+        "✅ ORDER RESPONSE:",
+        response.data
+      );
+
+      // ----------------------------------------
       // SUCCESS
-      // -------------------------------
+      // ----------------------------------------
 
       if (
-        response.data?.success
+        response.data?.success ||
+        response.status === 201
       ) {
-        const createdOrder =
-          response.data.order;
 
-        // Save latest order ID
-        // for tracking later.
-        if (createdOrder?._id) {
+        setSuccessMessage(
+          orderType === "schedule"
+            ? "Scheduled order placed successfully!"
+            : "Order placed successfully!"
+        );
+
+        // Save latest order for tracking
+        if (response.data?.order) {
+
           localStorage.setItem(
-            `lastOrder_${qrId}`,
-            createdOrder._id
+            `latestOrder_${qrId}`,
+            JSON.stringify(
+              response.data.order
+            )
           );
-        }
 
-        // Keep order history
-        if (createdOrder?._id) {
-          const historyKey =
-            `orders_${qrId}`;
+          // Keep previous orders
+          const previousOrdersKey =
+            `previousOrders_${qrId}`;
 
           const oldOrders =
             JSON.parse(
               localStorage.getItem(
-                historyKey
+                previousOrdersKey
               )
             ) || [];
 
           const updatedOrders = [
-            createdOrder._id,
-            ...oldOrders.filter(
-              (id) =>
-                id !== createdOrder._id
-            ),
+            response.data.order,
+            ...oldOrders,
           ];
 
           localStorage.setItem(
-            historyKey,
+            previousOrdersKey,
             JSON.stringify(
-              updatedOrders
+              updatedOrders.slice(0, 20)
             )
           );
         }
 
-        // Clear cart after successful order
+        // --------------------------------------
+        // CLEAR CART
+        // --------------------------------------
+
         clearCart();
 
-        /*
-          Go back to GuestMenu.
+        // --------------------------------------
+        // GO BACK TO MENU
+        // --------------------------------------
 
-          Guest can order more food.
+        setTimeout(() => {
 
-          Later we will add the
-          Previous Orders / Track Order
-          section at the top of GuestMenu.
-        */
-        navigate(`/qr/${qrId}`, {
-          replace: true,
-          state: {
-            orderPlaced: true,
-            orderId:
-              createdOrder?._id,
-          },
-        });
-      } else {
-        setError(
-          response.data?.message ||
-            "Unable to place order."
-        );
+          navigate(
+            `/qr/${qrId}`,
+            {
+              replace: true,
+              state: {
+                orderPlaced: true,
+                order:
+                  response.data?.order ||
+                  null,
+              },
+            }
+          );
+
+        }, 1800);
       }
-    } catch (err) {
+
+    } catch (error) {
+
       console.error(
-        "PLACE ORDER ERROR:",
-        err
+        "❌ PLACE ORDER ERROR:",
+        error
       );
 
-      setError(
-        err?.response?.data?.message ||
-          "Failed to place order. Please try again."
-      );
+      const message =
+        error?.response?.data?.message ||
+        error?.message ||
+        "Failed to place order. Please try again.";
+
+      setErrorMessage(message);
+
     } finally {
+
       setPlacingOrder(false);
+
     }
   };
 
-  // ======================================
+  // ==========================================
   // UI
-  // ======================================
+  // ==========================================
 
   return (
     <div className="min-h-screen bg-gray-50 pb-32">
 
-      {/* =================================
+      {/* =====================================
+          SUCCESS MESSAGE
+      ===================================== */}
+
+      {successMessage && (
+        <div className="fixed inset-0 z-[999] bg-black/40 flex items-center justify-center p-5">
+
+          <div className="bg-white rounded-3xl p-7 w-full max-w-sm text-center shadow-2xl">
+
+            <div className="w-16 h-16 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto">
+
+              <FiCheckCircle size={34} />
+
+            </div>
+
+            <h2 className="text-xl font-bold text-gray-900 mt-4">
+              Order Placed!
+            </h2>
+
+            <p className="text-gray-500 text-sm mt-2">
+              {successMessage}
+            </p>
+
+            <p className="text-xs text-gray-400 mt-4">
+              Returning to menu...
+            </p>
+
+          </div>
+
+        </div>
+      )}
+
+      {/* =====================================
+          ERROR MESSAGE
+      ===================================== */}
+
+      {errorMessage && (
+        <div className="fixed top-5 left-1/2 -translate-x-1/2 z-[1000] w-[calc(100%-32px)] max-w-md">
+
+          <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl p-4 shadow-lg flex items-start gap-3">
+
+            <FiAlertCircle
+              size={20}
+              className="shrink-0 mt-0.5"
+            />
+
+            <div className="flex-1">
+
+              <p className="font-bold text-sm">
+                Unable to place order
+              </p>
+
+              <p className="text-xs mt-1">
+                {errorMessage}
+              </p>
+
+            </div>
+
+            <button
+              onClick={() =>
+                setErrorMessage("")
+              }
+              className="text-red-500 font-bold"
+            >
+              ×
+            </button>
+
+          </div>
+
+        </div>
+      )}
+
+      {/* =====================================
           HEADER
-      ================================= */}
+      ===================================== */}
 
       <header className="bg-white border-b sticky top-0 z-40">
 
@@ -345,12 +488,14 @@ export default function CartPage() {
             onClick={() =>
               navigate(`/qr/${qrId}`)
             }
+            disabled={placingOrder}
             className="w-10 h-10 rounded-xl bg-gray-100 flex items-center justify-center"
           >
             <FiArrowLeft />
           </button>
 
           <div>
+
             <h1 className="font-bold text-lg">
               Your Cart
             </h1>
@@ -361,83 +506,51 @@ export default function CartPage() {
                 ? "item"
                 : "items"}
             </p>
+
           </div>
 
         </div>
 
       </header>
 
-      {/* =================================
+      {/* =====================================
           CONTENT
-      ================================= */}
+      ===================================== */}
 
       <main className="max-w-3xl mx-auto px-4 py-5">
 
-        {/* =================================
-            ERROR
-        ================================= */}
-
-        {error && (
-          <div className="mb-5 bg-red-50 border border-red-200 text-red-700 rounded-xl p-4 text-sm">
-            {error}
-          </div>
-        )}
-
-        {/* =================================
-            GUEST NAME
-        ================================= */}
-
-        <section className="bg-white rounded-2xl border p-5">
-
-          <h2 className="font-bold text-lg">
-            Guest Details
-          </h2>
-
-          <p className="text-xs text-gray-500 mt-1">
-            Enter your name for the order.
-          </p>
-
-          <input
-            type="text"
-            placeholder="Your name (optional)"
-            value={guestName}
-            onChange={(e) =>
-              setGuestName(
-                e.target.value
-              )
-            }
-            className="w-full mt-4 border border-gray-200 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-orange-400"
-          />
-
-        </section>
-
-        {/* =================================
+        {/* ===================================
             CART ITEMS
-        ================================= */}
+        =================================== */}
 
-        <section className="space-y-3 mt-5">
+        <section className="space-y-3">
 
           {cartItems.map((item) => (
+
             <div
               key={item._id}
-              className="bg-white rounded-2xl border p-4"
+              className="bg-white rounded-2xl border border-gray-200 p-4"
             >
 
               <div className="flex gap-3">
 
-                {item.image && (
+                {item.image ? (
                   <img
                     src={item.image}
                     alt={item.name}
-                    className="w-20 h-20 rounded-xl object-cover"
+                    className="w-20 h-20 rounded-xl object-cover shrink-0"
                   />
+                ) : (
+                  <div className="w-20 h-20 rounded-xl bg-gray-100 flex items-center justify-center text-xs text-gray-400 shrink-0">
+                    No Image
+                  </div>
                 )}
 
-                <div className="flex-1">
+                <div className="flex-1 min-w-0">
 
                   <div className="flex justify-between gap-2">
 
-                    <h3 className="font-bold">
+                    <h3 className="font-bold text-gray-900 truncate">
                       {item.name}
                     </h3>
 
@@ -447,7 +560,8 @@ export default function CartPage() {
                           item._id
                         )
                       }
-                      className="text-red-500"
+                      disabled={placingOrder}
+                      className="text-red-500 shrink-0"
                     >
                       <FiTrash2 />
                     </button>
@@ -461,7 +575,9 @@ export default function CartPage() {
                     ).toFixed(2)}
                   </p>
 
-                  <div className="flex items-center justify-between mt-3">
+                  <div className="flex items-center justify-between mt-3 gap-3">
+
+                    {/* QUANTITY */}
 
                     <div className="flex items-center gap-3 bg-orange-50 rounded-lg p-1">
 
@@ -471,12 +587,13 @@ export default function CartPage() {
                             item._id
                           )
                         }
+                        disabled={placingOrder}
                         className="w-8 h-8 bg-white rounded-md flex items-center justify-center"
                       >
                         <FiMinus />
                       </button>
 
-                      <span className="font-bold">
+                      <span className="font-bold min-w-4 text-center">
                         {item.quantity}
                       </span>
 
@@ -486,12 +603,15 @@ export default function CartPage() {
                             item._id
                           )
                         }
+                        disabled={placingOrder}
                         className="w-8 h-8 bg-orange-500 text-white rounded-md flex items-center justify-center"
                       >
                         <FiPlus />
                       </button>
 
                     </div>
+
+                    {/* ITEM TOTAL */}
 
                     <strong>
                       ₹
@@ -512,15 +632,45 @@ export default function CartPage() {
               </div>
 
             </div>
+
           ))}
 
         </section>
 
-        {/* =================================
-            ORDER TYPE
-        ================================= */}
+        {/* ===================================
+            GUEST NAME
+        =================================== */}
 
-        <section className="bg-white rounded-2xl border p-5 mt-5">
+        <section className="bg-white rounded-2xl border border-gray-200 p-5 mt-5">
+
+          <h2 className="font-bold text-lg">
+            Guest Information
+          </h2>
+
+          <p className="text-xs text-gray-500 mt-1">
+            Optional
+          </p>
+
+          <input
+            type="text"
+            value={guestName}
+            onChange={(e) =>
+              setGuestName(
+                e.target.value
+              )
+            }
+            placeholder="Enter your name"
+            disabled={placingOrder}
+            className="w-full mt-3 border border-gray-200 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-orange-400"
+          />
+
+        </section>
+
+        {/* ===================================
+            ORDER TYPE
+        =================================== */}
+
+        <section className="bg-white rounded-2xl border border-gray-200 p-5 mt-5">
 
           <h2 className="font-bold text-lg">
             When would you like your order?
@@ -531,10 +681,10 @@ export default function CartPage() {
             {/* ORDER NOW */}
 
             <button
-              type="button"
               onClick={() =>
                 setOrderType("now")
               }
+              disabled={placingOrder}
               className={`p-4 rounded-xl border text-left ${
                 orderType === "now"
                   ? "border-orange-500 bg-orange-50"
@@ -555,10 +705,10 @@ export default function CartPage() {
             {/* SCHEDULE */}
 
             <button
-              type="button"
               onClick={() =>
                 setOrderType("schedule")
               }
+              disabled={placingOrder}
               className={`p-4 rounded-xl border text-left ${
                 orderType === "schedule"
                   ? "border-orange-500 bg-orange-50"
@@ -579,11 +729,10 @@ export default function CartPage() {
 
           </div>
 
-          {/* =================================
-              SCHEDULE INPUT
-          ================================= */}
+          {/* SCHEDULE INPUT */}
 
           {orderType === "schedule" && (
+
             <div className="mt-4">
 
               <label className="text-sm font-semibold">
@@ -599,6 +748,7 @@ export default function CartPage() {
                     e.target.value
                   )
                 }
+                disabled={placingOrder}
                 className="w-full mt-2 border border-gray-200 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-orange-400"
               />
 
@@ -608,18 +758,22 @@ export default function CartPage() {
               </p>
 
             </div>
+
           )}
 
         </section>
 
-        {/* =================================
+        {/* ===================================
             TOTAL
-        ================================= */}
+        =================================== */}
 
-        <section className="bg-white rounded-2xl border p-5 mt-5">
+        <section className="bg-white rounded-2xl border border-gray-200 p-5 mt-5">
 
           <div className="flex justify-between text-gray-500">
-            <span>Subtotal</span>
+
+            <span>
+              Subtotal
+            </span>
 
             <span>
               ₹
@@ -627,6 +781,7 @@ export default function CartPage() {
                 totalPrice || 0
               ).toFixed(2)}
             </span>
+
           </div>
 
           <div className="border-t my-4" />
@@ -650,30 +805,45 @@ export default function CartPage() {
 
       </main>
 
-      {/* =================================
+      {/* =====================================
           PLACE ORDER BAR
-      ================================= */}
+      ===================================== */}
 
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t p-3 z-50">
+      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-3 z-50">
 
         <div className="max-w-3xl mx-auto">
 
           <button
             onClick={handlePlaceOrder}
             disabled={placingOrder}
-            className={`w-full py-3.5 rounded-xl font-bold text-white ${
-              placingOrder
-                ? "bg-gray-400 cursor-not-allowed"
-                : "bg-orange-500 hover:bg-orange-600"
-            }`}
+            className="w-full bg-orange-500 hover:bg-orange-600 disabled:bg-orange-300 text-white py-3.5 rounded-xl font-bold flex items-center justify-center gap-2"
           >
 
-            {placingOrder
-              ? "Placing Order..."
-              : orderType ===
-                "schedule"
-              ? "Schedule Order"
-              : "Place Order"}
+            {placingOrder ? (
+              <>
+                <FiLoader
+                  className="animate-spin"
+                  size={19}
+                />
+
+                Placing Order...
+              </>
+            ) : (
+              <>
+                {orderType === "schedule"
+                  ? "Schedule Order"
+                  : "Place Order"}
+
+                <span>
+                  •
+                </span>
+
+                ₹
+                {Number(
+                  totalPrice || 0
+                ).toFixed(2)}
+              </>
+            )}
 
           </button>
 
