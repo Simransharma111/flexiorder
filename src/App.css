@@ -1,21 +1,44 @@
-:root {
-  --primary: #6366f1;
-  --primary-dark: #4f46e5;
-  --secondary: #8b5cf6;
+/* =========================================================
+   FLEXIORDER GLOBAL THEME
+========================================================= */
 
-  --background: #f8fafc;
+:root {
+  --primary: #008f83;
+  --primary-dark: #006f67;
+  --primary-light: #e8f7f5;
+
+  --background: #f7f9fa;
   --surface: #ffffff;
 
-  --text: #0f172a;
-  --text-light: #64748b;
+  --text: #1f2937;
+  --text-secondary: #6b7280;
+  --text-light: #9ca3af;
 
-  --border: #e2e8f0;
+  --border: #e5e7eb;
 
-  --success: #22c55e;
-  --danger: #ef4444;
+  --success: #22a447;
+  --success-light: #eaf8ee;
 
-  --radius: 14px;
+  --warning: #f2a900;
+  --warning-light: #fff7df;
+
+  --danger: #e5484d;
+  --danger-light: #fff0f1;
+
+  --blue: #2388d9;
+  --blue-light: #eaf4fd;
+
+  --shadow-sm: 0 2px 8px rgba(15, 23, 42, 0.05);
+  --shadow-md: 0 5px 18px rgba(15, 23, 42, 0.08);
+
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
 }
+
+/* =========================================================
+   RESET
+========================================================= */
 
 * {
   box-sizing: border-box;
@@ -32,131 +55,416 @@ body,
 body {
   font-family:
     Inter,
-    system-ui,
     -apple-system,
     BlinkMacSystemFont,
     "Segoe UI",
+    Roboto,
+    Arial,
     sans-serif;
 
   background: var(--background);
   color: var(--text);
+
+  -webkit-font-smoothing: antialiased;
 }
 
 button,
 input,
 textarea,
 select {
-  font-family: inherit;
+  font: inherit;
 }
 
 button {
   cursor: pointer;
 }
 
-a {
-  text-decoration: none;
-  color: inherit;
+img {
+  max-width: 100%;
+  display: block;
 }
 
-/* ================================
-   GLOBAL SCROLLBAR
-================================ */
+/* =========================================================
+   GLOBAL APP
+========================================================= */
 
-::-webkit-scrollbar {
-  width: 7px;
+.app-page {
+  min-height: 100vh;
+  background: var(--background);
 }
-
-::-webkit-scrollbar-track {
-  background: #f1f5f9;
-}
-
-::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
-  border-radius: 10px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
-}
-
-/* ================================
-   GLOBAL CONTAINER
-================================ */
 
 .app-container {
   width: 100%;
   max-width: 1200px;
   margin: 0 auto;
-  padding: 0 20px;
+  padding: 20px;
 }
 
-/* ================================
+/* =========================================================
+   GLOBAL HEADER
+========================================================= */
+
+.app-header {
+  background: var(--primary);
+  color: white;
+  min-height: 64px;
+  display: flex;
+  align-items: center;
+  box-shadow: var(--shadow-sm);
+}
+
+.app-header-inner {
+  width: 100%;
+  max-width: 1200px;
+  margin: auto;
+  padding: 0 20px;
+
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* =========================================================
+   BRAND
+========================================================= */
+
+.app-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+
+  color: white;
+  text-decoration: none;
+}
+
+.app-brand img {
+  width: 42px;
+  height: 42px;
+  object-fit: contain;
+}
+
+.app-brand-name {
+  font-size: 25px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+}
+
+/* =========================================================
    GLOBAL CARD
-================================ */
+========================================================= */
 
 .app-card {
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: var(--radius);
-  box-shadow: 0 4px 20px rgba(15, 23, 42, 0.05);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
 }
 
-/* ================================
-   GLOBAL PRIMARY BUTTON
-================================ */
+/* =========================================================
+   PRIMARY BUTTON
+========================================================= */
 
 .btn-primary {
   border: none;
-  background: linear-gradient(
-    135deg,
-    var(--primary),
-    var(--secondary)
-  );
-
+  background: var(--primary);
   color: white;
-  padding: 12px 18px;
-  border-radius: 10px;
+
+  padding: 11px 18px;
+  border-radius: var(--radius-md);
 
   font-weight: 600;
-  transition: 0.2s ease;
+
+  transition:
+    background 0.2s ease,
+    transform 0.2s ease,
+    box-shadow 0.2s ease;
 }
 
 .btn-primary:hover {
-  transform: translateY(-1px);
-  box-shadow:
-    0 8px 20px rgba(99, 102, 241, 0.25);
+  background: var(--primary-dark);
+  box-shadow: 0 4px 12px rgba(0, 143, 131, 0.25);
 }
 
-/* ================================
-   GLOBAL INPUT
-================================ */
+.btn-primary:active {
+  transform: scale(0.98);
+}
 
-.app-input {
-  width: 100%;
-  padding: 12px 14px;
+/* =========================================================
+   SECONDARY BUTTON
+========================================================= */
 
+.btn-secondary {
   border: 1px solid var(--border);
-  border-radius: 10px;
-
   background: white;
   color: var(--text);
 
+  padding: 10px 16px;
+  border-radius: var(--radius-md);
+
+  font-weight: 600;
+}
+
+.btn-secondary:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+/* =========================================================
+   SUCCESS BUTTON
+========================================================= */
+
+.btn-success {
+  border: none;
+  background: var(--success);
+  color: white;
+
+  padding: 10px 16px;
+  border-radius: var(--radius-md);
+
+  font-weight: 600;
+}
+
+/* =========================================================
+   DANGER BUTTON
+========================================================= */
+
+.btn-danger {
+  border: none;
+  background: var(--danger);
+  color: white;
+
+  padding: 10px 16px;
+  border-radius: var(--radius-md);
+
+  font-weight: 600;
+}
+
+/* =========================================================
+   INPUT
+========================================================= */
+
+.app-input {
+  width: 100%;
+
+  border: 1px solid var(--border);
+  background: white;
+
+  color: var(--text);
+
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+
   outline: none;
-  transition: 0.2s ease;
+
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
 }
 
 .app-input:focus {
   border-color: var(--primary);
 
   box-shadow:
-    0 0 0 3px rgba(99, 102, 241, 0.12);
+    0 0 0 3px rgba(0, 143, 131, 0.12);
 }
 
-/* ================================
-   GLOBAL PAGE
-================================ */
+/* =========================================================
+   SEARCH
+========================================================= */
 
-.app-page {
-  min-height: 100vh;
-  background: var(--background);
+.app-search {
+  position: relative;
+}
+
+.app-search input {
+  width: 100%;
+  border: 1px solid var(--border);
+  background: white;
+
+  padding: 13px 16px 13px 44px;
+
+  border-radius: var(--radius-md);
+
+  outline: none;
+}
+
+.app-search input:focus {
+  border-color: var(--primary);
+  box-shadow:
+    0 0 0 3px rgba(0, 143, 131, 0.1);
+}
+
+/* =========================================================
+   PRIMARY ICON BOX
+========================================================= */
+
+.icon-primary {
+  width: 42px;
+  height: 42px;
+
+  border-radius: 12px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  background: var(--primary-light);
+  color: var(--primary);
+}
+
+/* =========================================================
+   STATUS BADGES
+========================================================= */
+
+.status-active {
+  background: var(--success-light);
+  color: var(--success);
+}
+
+.status-preparing {
+  background: var(--warning-light);
+  color: var(--warning);
+}
+
+.status-ready {
+  background: var(--blue-light);
+  color: var(--blue);
+}
+
+.status-completed {
+  background: #f1f3f5;
+  color: #5f6368;
+}
+
+.status-cancelled {
+  background: var(--danger-light);
+  color: var(--danger);
+}
+
+/* =========================================================
+   CATEGORY BUTTON
+========================================================= */
+
+.category-btn {
+  border: 1px solid var(--border);
+  background: white;
+
+  color: var(--text-secondary);
+
+  padding: 9px 15px;
+
+  border-radius: 999px;
+
+  font-size: 14px;
+  font-weight: 600;
+
+  white-space: nowrap;
+}
+
+.category-btn:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.category-btn.active {
+  background: var(--primary);
+  color: white;
+  border-color: var(--primary);
+}
+
+/* =========================================================
+   ORDER CARD
+========================================================= */
+
+.order-card {
+  background: white;
+  border: 1px solid var(--border);
+
+  border-radius: var(--radius-lg);
+
+  box-shadow: var(--shadow-sm);
+
+  transition:
+    box-shadow 0.2s ease,
+    transform 0.2s ease;
+}
+
+.order-card:hover {
+  box-shadow: var(--shadow-md);
+}
+
+/* =========================================================
+   TABLE
+========================================================= */
+
+.app-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: white;
+}
+
+.app-table th {
+  text-align: left;
+
+  padding: 13px 16px;
+
+  background: #f8fafb;
+
+  color: var(--text-secondary);
+
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.app-table td {
+  padding: 14px 16px;
+
+  border-top: 1px solid var(--border);
+
+  color: var(--text);
+}
+
+/* =========================================================
+   SCROLLBAR
+========================================================= */
+
+::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5d1;
+  border-radius: 20px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3a0;
+}
+
+/* =========================================================
+   MOBILE
+========================================================= */
+
+@media (max-width: 768px) {
+  .app-container {
+    padding: 14px;
+  }
+
+  .app-header-inner {
+    padding: 0 14px;
+  }
+
+  .app-brand-name {
+    font-size: 21px;
+  }
+
+  .app-brand img {
+    width: 36px;
+    height: 36px;
+  }
 }

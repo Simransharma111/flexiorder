@@ -50,8 +50,7 @@ export default function GuestMenuPage() {
   // ACTIVE ORDER
   // =========================================================
 
-  const [activeOrder, setActiveOrder] =
-    useState(null);
+ const [activeOrders, setActiveOrders] = useState([]);
 
   const [orderLoading, setOrderLoading] =
     useState(false);
@@ -113,95 +112,74 @@ export default function GuestMenuPage() {
   // FETCH ACTIVE ORDER AUTOMATICALLY
   // =========================================================
 
-  const fetchActiveOrder = async () => {
-    if (!qrId) return;
+  // =========================================================
+// FETCH ALL ACTIVE ORDERS
+// =========================================================
 
-    try {
-      const savedOrderId =
-        localStorage.getItem(
-          `activeOrder_${qrId}`
-        );
+const fetchActiveOrders = async () => {
+  if (!qrId || !table?._id) return;
 
-      // No order yet
-      if (!savedOrderId) {
-        setActiveOrder(null);
-        return;
-      }
+  try {
+    setOrderLoading(true);
 
-      setOrderLoading(true);
+    const res = await api.get(
+      `/orders/table/${table._id}`
+    );
 
-      const res = await api.get(
-        `/orders/${savedOrderId}`
-      );
+    const orders =
+      res.data?.orders ||
+      res.data ||
+      [];
 
-      const order =
-        res.data?.order ||
-        res.data;
+    console.log("TABLE ORDERS:", orders);
 
-      console.log(
-        "ACTIVE ORDER:",
-        order
-      );
+    // Only show orders which are still active
+    const active = orders.filter(
+      (order) =>
+        order.status !== "delivered" &&
+        order.status !== "cancelled"
+    );
 
-      // =====================================================
-      // COMPLETED / CANCELLED
-      // =====================================================
+    setActiveOrders(active);
 
-      if (
-        order.status === "delivered" ||
-        order.status === "cancelled"
-      ) {
-        localStorage.removeItem(
-          `activeOrder_${qrId}`
-        );
+    // Save all active order IDs
+    localStorage.setItem(
+      `activeOrders_${qrId}`,
+      JSON.stringify(
+        active.map((order) => order._id)
+      )
+    );
 
-        setActiveOrder(null);
+  } catch (err) {
+    console.error(
+      "Failed to fetch active orders:",
+      err
+    );
 
-        return;
-      }
+    setActiveOrders([]);
 
-      setActiveOrder(order);
-
-    } catch (err) {
-      console.error(
-        "Failed to fetch active order:",
-        err
-      );
-
-      if (
-        err?.response?.status === 404
-      ) {
-        localStorage.removeItem(
-          `activeOrder_${qrId}`
-        );
-
-        setActiveOrder(null);
-      }
-
-    } finally {
-      setOrderLoading(false);
-    }
-  };
+  } finally {
+    setOrderLoading(false);
+  }
+};
 
   // =========================================================
   // LOAD ACTIVE ORDER WHEN PAGE OPENS
   // =========================================================
 
-  useEffect(() => {
-    if (!qrId) return;
+ useEffect(() => {
+  if (!qrId || !table?._id) return;
 
-    fetchActiveOrder();
+  fetchActiveOrders();
 
-    const interval =
-      setInterval(() => {
-        fetchActiveOrder();
-      }, 5000);
+  const interval = setInterval(() => {
+    fetchActiveOrders();
+  }, 5000);
 
-    return () => {
-      clearInterval(interval);
-    };
-  }, [qrId]);
-
+  return () => {
+    clearInterval(interval);
+  };
+}, [qrId, table?._id]);
   // =========================================================
   // CART LOAD
   // =========================================================
@@ -629,7 +607,7 @@ export default function GuestMenuPage() {
                   className="w-10 h-10 rounded-xl object-cover"
                 />
               ) : (
-                <div className="w-10 h-10 rounded-xl bg-orange-100 flex items-center justify-center text-orange-600 font-bold">
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center text-orange-600 font-bold">
                   {hotel?.name
                     ?.charAt(0)
                     ?.toUpperCase() ||
@@ -684,224 +662,102 @@ export default function GuestMenuPage() {
           AUTOMATIC ORDER STATUS
       ===================================================== */}
 
-      {activeOrder && (
-        <section className="max-w-6xl mx-auto px-4 pt-4">
+      {/* =====================================================
+    ACTIVE ORDERS
+===================================================== */}
 
-          <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
+{activeOrders.length > 0 && (
+  <section className="max-w-6xl mx-auto px-4 pt-4">
 
-            {/* ORDER HEADER */}
+    <div className="flex items-center justify-between mb-3">
 
-            <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+      <div>
+        <h2 className="text-lg font-bold text-gray-900">
+          Your Orders
+        </h2>
+
+        <p className="text-xs text-gray-500">
+          {activeOrders.length} active{" "}
+          {activeOrders.length === 1
+            ? "order"
+            : "orders"}
+        </p>
+      </div>
+
+      {orderLoading && (
+        <FiLoader
+          className="animate-spin text-orange-500"
+          size={18}
+        />
+      )}
+
+    </div>
+
+    <div className="space-y-4">
+
+      {activeOrders.map((order) => (
+
+        <div
+          key={order._id}
+          className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden"
+        >
+
+          {/* ORDER HEADER */}
+
+          <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+
+            <div>
+
+              <h3 className="font-bold text-gray-900">
+                Order #{order._id?.slice(-6)}
+              </h3>
+
+              <p className="text-xs text-gray-500 mt-1">
+                {order.items?.length || 0}{" "}
+                {order.items?.length === 1
+                  ? "item"
+                  : "items"}
+              </p>
+
+            </div>
+
+            <StatusBadge
+              status={order.status}
+            />
+
+          </div>
+
+          {/* STATUS MESSAGE */}
+
+          <div className="px-4 pt-4">
+
+            <div className="bg-orange-50 rounded-xl p-4 flex items-center gap-3">
+
+              <div className="w-10 h-10  text-orange-600 rounded-full flex items-center justify-center shrink-0">
+
+                {orderLoading ? (
+                  <FiLoader
+                    className="animate-spin"
+                  />
+                ) : (
+                  <FiClock />
+                )}
+
+              </div>
 
               <div>
 
-                <h2 className="font-bold text-gray-900">
-                  Order Status
-                </h2>
-
-                <p className="text-xs text-gray-500">
-                  Order #
-                  {activeOrder._id?.slice(-6)}
+                <p className="font-bold text-gray-900">
+                  {getStatusTitle(
+                    order.status
+                  )}
                 </p>
 
-              </div>
-
-              <StatusBadge
-                status={
-                  activeOrder.status
-                }
-              />
-
-            </div>
-
-            {/* CURRENT STATUS MESSAGE */}
-
-            <div className="px-4 pt-4">
-
-              <div className="bg-orange-50 rounded-xl p-4 flex items-center gap-3">
-
-                <div className="w-10 h-10 bg-orange-100 text-orange-600 rounded-full flex items-center justify-center shrink-0">
-
-                  {orderLoading ? (
-                    <FiLoader
-                      className="animate-spin"
-                    />
-                  ) : (
-                    <FiClock />
+                <p className="text-xs text-gray-500 mt-1">
+                  {getStatusMessage(
+                    order.status
                   )}
-
-                </div>
-
-                <div>
-
-                  <p className="font-bold text-gray-900">
-                    {getStatusTitle(
-                      activeOrder.status
-                    )}
-                  </p>
-
-                  <p className="text-xs text-gray-500 mt-1">
-                    {getStatusMessage(
-                      activeOrder.status
-                    )}
-                  </p>
-
-                </div>
-
-              </div>
-
-            </div>
-
-            {/* STATUS STEPS */}
-
-            <div className="p-4">
-
-              <div className="flex items-center justify-between">
-
-                <OrderStatusStep
-                  label="Placed"
-                  active={[
-                    "pending",
-                    "accepted",
-                    "preparing",
-                    "ready",
-                    "delivered",
-                  ].includes(
-                    activeOrder.status
-                  )}
-                  completed={[
-                    "accepted",
-                    "preparing",
-                    "ready",
-                    "delivered",
-                  ].includes(
-                    activeOrder.status
-                  )}
-                />
-
-                <StatusLine
-                  active={[
-                    "accepted",
-                    "preparing",
-                    "ready",
-                    "delivered",
-                  ].includes(
-                    activeOrder.status
-                  )}
-                />
-
-                <OrderStatusStep
-                  label="Accepted"
-                  active={[
-                    "accepted",
-                    "preparing",
-                    "ready",
-                    "delivered",
-                  ].includes(
-                    activeOrder.status
-                  )}
-                  completed={[
-                    "preparing",
-                    "ready",
-                    "delivered",
-                  ].includes(
-                    activeOrder.status
-                  )}
-                />
-
-                <StatusLine
-                  active={[
-                    "preparing",
-                    "ready",
-                    "delivered",
-                  ].includes(
-                    activeOrder.status
-                  )}
-                />
-
-                <OrderStatusStep
-                  label="Preparing"
-                  active={[
-                    "preparing",
-                    "ready",
-                    "delivered",
-                  ].includes(
-                    activeOrder.status
-                  )}
-                  completed={[
-                    "ready",
-                    "delivered",
-                  ].includes(
-                    activeOrder.status
-                  )}
-                />
-
-                <StatusLine
-                  active={[
-                    "ready",
-                    "delivered",
-                  ].includes(
-                    activeOrder.status
-                  )}
-                />
-
-                <OrderStatusStep
-                  label="Ready"
-                  active={[
-                    "ready",
-                    "delivered",
-                  ].includes(
-                    activeOrder.status
-                  )}
-                  completed={[
-                    "delivered",
-                  ].includes(
-                    activeOrder.status
-                  )}
-                />
-
-              </div>
-
-              {/* ESTIMATED TIME */}
-
-              {activeOrder.estimatedTime && (
-                <div className="mt-4 bg-gray-50 rounded-xl p-3 flex items-center justify-between">
-
-                  <div className="flex items-center gap-2">
-
-                    <FiClock className="text-orange-500" />
-
-                    <span className="text-sm text-gray-600">
-                      Estimated preparation
-                    </span>
-
-                  </div>
-
-                  <strong className="text-sm">
-                    {
-                      activeOrder.estimatedTime
-                    }{" "}
-                    min
-                  </strong>
-
-                </div>
-              )}
-
-              {/* TOTAL */}
-
-              <div className="flex justify-between mt-3 text-sm">
-
-                <span className="text-gray-500">
-                  Order Total
-                </span>
-
-                <strong>
-                  ₹
-                  {Number(
-                    activeOrder.totalAmount ||
-                      0
-                  ).toFixed(2)}
-                </strong>
+                </p>
 
               </div>
 
@@ -909,8 +765,143 @@ export default function GuestMenuPage() {
 
           </div>
 
-        </section>
-      )}
+          {/* STATUS STEPS */}
+
+          <div className="p-4">
+
+            <div className="flex items-center justify-between">
+
+              <OrderStatusStep
+                label="Placed"
+                active={[
+                  "pending",
+                  "accepted",
+                  "preparing",
+                  "ready",
+                  "delivered",
+                ].includes(order.status)}
+                completed={[
+                  "accepted",
+                  "preparing",
+                  "ready",
+                  "delivered",
+                ].includes(order.status)}
+              />
+
+              <StatusLine
+                active={[
+                  "accepted",
+                  "preparing",
+                  "ready",
+                  "delivered",
+                ].includes(order.status)}
+              />
+
+              <OrderStatusStep
+                label="Accepted"
+                active={[
+                  "accepted",
+                  "preparing",
+                  "ready",
+                  "delivered",
+                ].includes(order.status)}
+                completed={[
+                  "preparing",
+                  "ready",
+                  "delivered",
+                ].includes(order.status)}
+              />
+
+              <StatusLine
+                active={[
+                  "preparing",
+                  "ready",
+                  "delivered",
+                ].includes(order.status)}
+              />
+
+              <OrderStatusStep
+                label="Preparing"
+                active={[
+                  "preparing",
+                  "ready",
+                  "delivered",
+                ].includes(order.status)}
+                completed={[
+                  "ready",
+                  "delivered",
+                ].includes(order.status)}
+              />
+
+              <StatusLine
+                active={[
+                  "ready",
+                  "delivered",
+                ].includes(order.status)}
+              />
+
+              <OrderStatusStep
+                label="Ready"
+                active={[
+                  "ready",
+                  "delivered",
+                ].includes(order.status)}
+                completed={[
+                  "delivered",
+                ].includes(order.status)}
+              />
+
+            </div>
+
+            {/* ESTIMATED TIME */}
+
+            {order.estimatedTime && (
+              <div className="mt-4 bg-gray-50 rounded-xl p-3 flex items-center justify-between">
+
+                <div className="flex items-center gap-2">
+
+                  <FiClock className="text-orange-500" />
+
+                  <span className="text-sm text-gray-600">
+                    Estimated preparation
+                  </span>
+
+                </div>
+
+                <strong className="text-sm">
+                  {order.estimatedTime} min
+                </strong>
+
+              </div>
+            )}
+
+            {/* ORDER TOTAL */}
+
+            <div className="flex justify-between mt-3 text-sm">
+
+              <span className="text-gray-500">
+                Order Total
+              </span>
+
+              <strong>
+                ₹
+                {Number(
+                  order.totalAmount || 0
+                ).toFixed(2)}
+              </strong>
+
+            </div>
+
+          </div>
+
+        </div>
+
+      ))}
+
+    </div>
+
+  </section>
+)}
 
       {/* =====================================================
           HOTEL INTRO
@@ -1411,7 +1402,7 @@ function StatusBadge({ status }) {
       "bg-blue-100 text-blue-700",
 
     preparing:
-      "bg-orange-100 text-orange-700",
+      " text-orange-700",
 
     ready:
       "bg-green-100 text-green-700",
