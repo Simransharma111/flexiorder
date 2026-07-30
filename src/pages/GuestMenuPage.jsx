@@ -14,7 +14,13 @@ import {
 } from "react-icons/fi";
 
 export default function GuestMenuPage() {
+
+  // =====================================================
+  // URL PARAMETER
+  // =====================================================
+
   const { qrId } = useParams();
+
   const navigate = useNavigate();
 
   // =====================================================
@@ -30,9 +36,11 @@ export default function GuestMenuPage() {
 
   const [search, setSearch] = useState("");
   const [foodFilter, setFoodFilter] = useState("all");
-  const [activeCategory, setActiveCategory] = useState("All");
+  const [activeCategory, setActiveCategory] =
+    useState("All");
 
-  const [selectedDish, setSelectedDish] = useState(null);
+  const [selectedDish, setSelectedDish] =
+    useState(null);
 
   const [cart, setCart] = useState([]);
 
@@ -41,6 +49,7 @@ export default function GuestMenuPage() {
   // =====================================================
 
   useEffect(() => {
+
     if (!qrId) {
       setError("QR information is missing.");
       setLoading(false);
@@ -48,234 +57,306 @@ export default function GuestMenuPage() {
     }
 
     fetchMenu();
+
   }, [qrId]);
 
+  // =====================================================
+  // FETCH MENU
+  // =====================================================
+
   const fetchMenu = async () => {
+
     try {
+
       setLoading(true);
       setError("");
 
-      console.log("Loading menu for QR:", qrId);
+      console.log(
+        "Loading menu using QR ID:",
+        qrId
+      );
 
-      const res = await api.get(`/qr/menu/${qrId}`);
+      const res = await api.get(
+        `/qr/menu/${encodeURIComponent(qrId)}`
+      );
 
-      console.log("QR MENU RESPONSE:", res.data);
+      console.log(
+        "QR MENU RESPONSE:",
+        res.data
+      );
 
-      setHotel(res.data?.hotel || null);
-      setTable(res.data?.table || null);
-      setDishes(res.data?.dishes || []);
+      setHotel(
+        res.data?.hotel || null
+      );
+
+      setTable(
+        res.data?.table || null
+      );
+
+      setDishes(
+        res.data?.dishes || []
+      );
 
     } catch (err) {
-      console.error("Failed to load menu:", err);
+
+      console.error(
+        "Failed to load menu:",
+        err
+      );
+
+      console.error(
+        "Status:",
+        err?.response?.status
+      );
+
+      console.error(
+        "Response:",
+        err?.response?.data
+      );
 
       setError(
         err?.response?.data?.message ||
-          "Unable to load menu."
+        "Unable to load menu."
       );
+
     } finally {
+
       setLoading(false);
+
     }
+
   };
 
   // =====================================================
-  // TABLE ID
+  // CART STORAGE KEY
   // =====================================================
 
   /*
     IMPORTANT:
 
-    qrId comes from URL.
+    We use QR ID here.
 
-    Example:
-    /qr/abc123
-
-    Backend finds:
-    QR -> Table/Room -> Hotel
-
-    After backend response:
-    table._id = actual MongoDB Table/Room ID
-
-    We use table._id internally for cart/order.
+    This means every QR/table gets its own cart.
   */
 
-  const tableId = table?._id || null;
+  const cartStorageKey =
+    qrId
+      ? `cart_qr_${qrId}`
+      : null;
 
   // =====================================================
   // LOAD CART
   // =====================================================
 
   useEffect(() => {
-    if (!tableId) return;
 
-    const storageKey = `cart_${tableId}`;
+    if (!cartStorageKey) {
+      return;
+    }
 
     try {
+
       const savedCart =
         JSON.parse(
-          localStorage.getItem(storageKey)
+          localStorage.getItem(
+            cartStorageKey
+          )
         ) || [];
 
       setCart(savedCart);
 
     } catch (err) {
+
       console.error(
         "Failed to load cart:",
         err
       );
 
       setCart([]);
+
     }
-  }, [tableId]);
+
+  }, [cartStorageKey]);
 
   // =====================================================
   // SAVE CART
   // =====================================================
 
   useEffect(() => {
-    if (!tableId) return;
+
+    if (!cartStorageKey) {
+      return;
+    }
 
     localStorage.setItem(
-      `cart_${tableId}`,
+      cartStorageKey,
       JSON.stringify(cart)
     );
 
-  }, [cart, tableId]);
+  }, [
+    cart,
+    cartStorageKey,
+  ]);
 
   // =====================================================
   // CATEGORIES
   // =====================================================
 
   const categories = useMemo(() => {
+
     const uniqueCategories = [
       ...new Set(
         dishes
-          .map((dish) => dish.category)
+          .map(
+            (dish) =>
+              typeof dish.category === "object"
+                ? dish.category?.name
+                : dish.category
+          )
           .filter(Boolean)
       ),
     ];
 
-    return ["All", ...uniqueCategories];
+    return [
+      "All",
+      ...uniqueCategories,
+    ];
 
   }, [dishes]);
 
   // =====================================================
-  // FILTERED DISHES
+  // FILTER DISHES
   // =====================================================
 
-  const filteredDishes = useMemo(() => {
+  const filteredDishes =
+    useMemo(() => {
 
-    const searchText =
-      search.toLowerCase().trim();
+      const searchText =
+        search.toLowerCase().trim();
 
-    return dishes.filter((dish) => {
+      return dishes.filter((dish) => {
 
-      const categoryMatch =
-        activeCategory === "All" ||
-        dish.category === activeCategory;
+        const dishCategory =
+          typeof dish.category === "object"
+            ? dish.category?.name
+            : dish.category;
 
-      const foodMatch =
-        foodFilter === "all" ||
-        dish.foodType === foodFilter;
+        const categoryMatch =
+          activeCategory === "All" ||
+          dishCategory === activeCategory;
 
-      const searchMatch =
-        !searchText ||
-        dish.name
-          ?.toLowerCase()
-          .includes(searchText) ||
-        dish.description
-          ?.toLowerCase()
-          .includes(searchText) ||
-        dish.tags?.some((tag) =>
-          tag
-            .toLowerCase()
-            .includes(searchText)
+        const foodMatch =
+          foodFilter === "all" ||
+          dish.foodType === foodFilter;
+
+        const searchMatch =
+          !searchText ||
+          dish.name
+            ?.toLowerCase()
+            .includes(searchText) ||
+          dish.description
+            ?.toLowerCase()
+            .includes(searchText) ||
+          dish.tags?.some((tag) =>
+            tag
+              .toLowerCase()
+              .includes(searchText)
+          );
+
+        return (
+          categoryMatch &&
+          foodMatch &&
+          searchMatch
         );
 
-      return (
-        categoryMatch &&
-        foodMatch &&
-        searchMatch
-      );
-    });
+      });
 
-  }, [
-    dishes,
-    activeCategory,
-    foodFilter,
-    search,
-  ]);
+    }, [
+      dishes,
+      activeCategory,
+      foodFilter,
+      search,
+    ]);
 
   // =====================================================
-  // FEATURED DISHES
+  // FEATURED
   // =====================================================
 
-  const availableDish = (dish) =>
-    dish.isAvailable !== false;
+  const todaySpecial =
+    dishes.filter(
+      (dish) =>
+        dish.isAvailable !== false &&
+        dish.todaySpecial
+    );
 
-  const todaySpecial = dishes.filter(
-    (dish) =>
-      availableDish(dish) &&
-      dish.todaySpecial
-  );
+  const recommended =
+    dishes.filter(
+      (dish) =>
+        dish.isAvailable !== false &&
+        dish.isRecommended
+    );
 
-  const recommended = dishes.filter(
-    (dish) =>
-      availableDish(dish) &&
-      dish.isRecommended
-  );
+  const popular =
+    dishes.filter(
+      (dish) =>
+        dish.isAvailable !== false &&
+        dish.isPopular
+    );
 
-  const popular = dishes.filter(
-    (dish) =>
-      availableDish(dish) &&
-      dish.isPopular
-  );
+  const bestsellers =
+    dishes.filter(
+      (dish) =>
+        dish.isAvailable !== false &&
+        dish.isBestseller
+    );
 
-  const bestsellers = dishes.filter(
-    (dish) =>
-      availableDish(dish) &&
-      dish.isBestseller
-  );
+  const newArrivals =
+    dishes.filter(
+      (dish) =>
+        dish.isAvailable !== false &&
+        dish.isNewArrival
+    );
 
-  const newArrivals = dishes.filter(
-    (dish) =>
-      availableDish(dish) &&
-      dish.isNewArrival
-  );
-
-  const featured = dishes.filter(
-    (dish) =>
-      availableDish(dish) &&
-      dish.featured
-  );
+  const featured =
+    dishes.filter(
+      (dish) =>
+        dish.isAvailable !== false &&
+        dish.featured
+    );
 
   // =====================================================
-  // CART HELPERS
+  // CART
   // =====================================================
 
   const getCartQuantity = (dishId) => {
 
     const item = cart.find(
-      (item) => item._id === dishId
+      (item) =>
+        item._id === dishId
     );
 
     return item?.quantity || 0;
   };
 
   // =====================================================
-  // ADD TO CART
+  // ADD
   // =====================================================
 
   const addToCart = (dish) => {
 
-    if (!availableDish(dish)) {
+    if (
+      dish.isAvailable === false
+    ) {
       return;
     }
 
     setCart((prev) => {
 
-      const existing = prev.find(
-        (item) => item._id === dish._id
-      );
+      const existing =
+        prev.find(
+          (item) =>
+            item._id === dish._id
+        );
 
       if (existing) {
 
@@ -302,77 +383,93 @@ export default function GuestMenuPage() {
           quantity: 1,
         },
       ];
+
     });
+
   };
 
   // =====================================================
-  // DECREASE QUANTITY
+  // DECREASE
   // =====================================================
 
-  const decreaseQuantity = (dishId) => {
+  const decreaseQuantity =
+    (dishId) => {
 
-    setCart((prev) => {
+      setCart((prev) => {
 
-      const existing = prev.find(
-        (item) => item._id === dishId
-      );
+        const existing =
+          prev.find(
+            (item) =>
+              item._id === dishId
+          );
 
-      if (!existing) {
-        return prev;
-      }
+        if (!existing) {
+          return prev;
+        }
 
-      if (existing.quantity <= 1) {
+        if (
+          existing.quantity <= 1
+        ) {
 
-        return prev.filter(
-          (item) => item._id !== dishId
+          return prev.filter(
+            (item) =>
+              item._id !== dishId
+          );
+
+        }
+
+        return prev.map((item) =>
+          item._id === dishId
+            ? {
+                ...item,
+                quantity:
+                  item.quantity - 1,
+              }
+            : item
         );
 
+      });
+
+    };
+
+  // =====================================================
+  // INCREASE
+  // =====================================================
+
+  const increaseQuantity =
+    (dishId) => {
+
+      const dish =
+        dishes.find(
+          (item) =>
+            item._id === dishId
+        );
+
+      if (dish) {
+        addToCart(dish);
       }
 
-      return prev.map((item) =>
-        item._id === dishId
-          ? {
-              ...item,
-              quantity:
-                item.quantity - 1,
-            }
-          : item
-      );
-    });
-  };
-
-  // =====================================================
-  // INCREASE QUANTITY
-  // =====================================================
-
-  const increaseQuantity = (dishId) => {
-
-    const dish = dishes.find(
-      (item) => item._id === dishId
-    );
-
-    if (dish) {
-      addToCart(dish);
-    }
-  };
+    };
 
   // =====================================================
   // CART TOTAL
   // =====================================================
 
-  const cartCount = cart.reduce(
-    (total, item) =>
-      total + Number(item.quantity || 0),
-    0
-  );
+  const cartCount =
+    cart.reduce(
+      (total, item) =>
+        total + item.quantity,
+      0
+    );
 
-  const cartTotal = cart.reduce(
-    (total, item) =>
-      total +
-      Number(item.price || 0) *
-        Number(item.quantity || 0),
-    0
-  );
+  const cartTotal =
+    cart.reduce(
+      (total, item) =>
+        total +
+        Number(item.price || 0) *
+          item.quantity,
+      0
+    );
 
   // =====================================================
   // OPEN CART
@@ -380,15 +477,19 @@ export default function GuestMenuPage() {
 
   const openCart = () => {
 
-    if (!tableId) {
-      console.error(
-        "Table/Room ID is missing"
+    if (!table?._id) {
+
+      alert(
+        "Table information is not available."
       );
 
       return;
     }
 
-    navigate(`/cart/${tableId}`);
+    navigate(
+      `/cart/${table._id}`
+    );
+
   };
 
   // =====================================================
@@ -412,6 +513,7 @@ export default function GuestMenuPage() {
 
       </div>
     );
+
   }
 
   // =====================================================
@@ -425,11 +527,7 @@ export default function GuestMenuPage() {
 
         <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8 text-center max-w-md w-full">
 
-          <div className="w-14 h-14 bg-orange-100 text-orange-600 rounded-full flex items-center justify-center mx-auto text-2xl">
-            !
-          </div>
-
-          <h2 className="text-xl font-bold text-gray-900 mt-4">
+          <h2 className="text-xl font-bold text-gray-900">
             Menu unavailable
           </h2>
 
@@ -437,9 +535,13 @@ export default function GuestMenuPage() {
             {error}
           </p>
 
+          <p className="text-xs text-gray-400 mt-3 break-all">
+            QR: {qrId}
+          </p>
+
           <button
             onClick={fetchMenu}
-            className="mt-5 bg-orange-500 hover:bg-orange-600 text-white px-5 py-2.5 rounded-xl font-semibold"
+            className="mt-5 bg-orange-500 text-white px-5 py-2.5 rounded-xl font-semibold"
           >
             Try Again
           </button>
@@ -448,18 +550,17 @@ export default function GuestMenuPage() {
 
       </div>
     );
+
   }
 
   // =====================================================
-  // MAIN UI
+  // MAIN
   // =====================================================
 
   return (
     <div className="min-h-screen bg-gray-50 pb-28">
 
-      {/* =================================================
-          HEADER
-      ================================================= */}
+      {/* HEADER */}
 
       <header className="bg-white sticky top-0 z-40 border-b border-gray-100">
 
@@ -473,16 +574,14 @@ export default function GuestMenuPage() {
 
                 <img
                   src={hotel.logo}
-                  alt={hotel?.name || "Hotel"}
+                  alt={hotel.name || "Hotel"}
                   className="w-10 h-10 rounded-xl object-cover"
                 />
 
               ) : (
 
                 <div className="w-10 h-10 rounded-xl bg-orange-100 flex items-center justify-center text-orange-600 font-bold">
-                  {hotel?.name
-                    ?.charAt(0)
-                    ?.toUpperCase() || "F"}
+                  {hotel?.name?.charAt(0) || "H"}
                 </div>
 
               )}
@@ -501,7 +600,7 @@ export default function GuestMenuPage() {
                       ? "Room"
                       : "Table"}{" "}
 
-                    {table.tableNumber || ""}
+                    {table.tableNumber}
 
                   </p>
 
@@ -510,8 +609,6 @@ export default function GuestMenuPage() {
               </div>
 
             </div>
-
-            {/* CART */}
 
             <button
               onClick={openCart}
@@ -538,9 +635,7 @@ export default function GuestMenuPage() {
 
       </header>
 
-      {/* =================================================
-          RESTAURANT INTRO
-      ================================================= */}
+      {/* HOTEL INTRO */}
 
       <section className="max-w-6xl mx-auto px-4 pt-5">
 
@@ -577,9 +672,7 @@ export default function GuestMenuPage() {
 
       </section>
 
-      {/* =================================================
-          SEARCH
-      ================================================= */}
+      {/* SEARCH */}
 
       <section className="max-w-6xl mx-auto px-4 mt-5">
 
@@ -604,9 +697,7 @@ export default function GuestMenuPage() {
 
       </section>
 
-      {/* =================================================
-          FOOD FILTER
-      ================================================= */}
+      {/* FOOD FILTER */}
 
       <section className="max-w-6xl mx-auto px-4 mt-4">
 
@@ -655,9 +746,7 @@ export default function GuestMenuPage() {
 
       </section>
 
-      {/* =================================================
-          FEATURED SECTIONS
-      ================================================= */}
+      {/* FEATURED */}
 
       {!search &&
         activeCategory === "All" && (
@@ -669,10 +758,18 @@ export default function GuestMenuPage() {
                 title="Featured"
                 dishes={featured}
                 onAdd={addToCart}
-                onDecrease={decreaseQuantity}
-                onIncrease={increaseQuantity}
-                getQuantity={getCartQuantity}
-                onSelect={setSelectedDish}
+                onDecrease={
+                  decreaseQuantity
+                }
+                onIncrease={
+                  increaseQuantity
+                }
+                getQuantity={
+                  getCartQuantity
+                }
+                onSelect={
+                  setSelectedDish
+                }
               />
 
             )}
@@ -683,10 +780,18 @@ export default function GuestMenuPage() {
                 title="Today's Special"
                 dishes={todaySpecial}
                 onAdd={addToCart}
-                onDecrease={decreaseQuantity}
-                onIncrease={increaseQuantity}
-                getQuantity={getCartQuantity}
-                onSelect={setSelectedDish}
+                onDecrease={
+                  decreaseQuantity
+                }
+                onIncrease={
+                  increaseQuantity
+                }
+                getQuantity={
+                  getCartQuantity
+                }
+                onSelect={
+                  setSelectedDish
+                }
               />
 
             )}
@@ -697,10 +802,18 @@ export default function GuestMenuPage() {
                 title="Recommended"
                 dishes={recommended}
                 onAdd={addToCart}
-                onDecrease={decreaseQuantity}
-                onIncrease={increaseQuantity}
-                getQuantity={getCartQuantity}
-                onSelect={setSelectedDish}
+                onDecrease={
+                  decreaseQuantity
+                }
+                onIncrease={
+                  increaseQuantity
+                }
+                getQuantity={
+                  getCartQuantity
+                }
+                onSelect={
+                  setSelectedDish
+                }
               />
 
             )}
@@ -711,10 +824,18 @@ export default function GuestMenuPage() {
                 title="Most Popular"
                 dishes={popular}
                 onAdd={addToCart}
-                onDecrease={decreaseQuantity}
-                onIncrease={increaseQuantity}
-                getQuantity={getCartQuantity}
-                onSelect={setSelectedDish}
+                onDecrease={
+                  decreaseQuantity
+                }
+                onIncrease={
+                  increaseQuantity
+                }
+                getQuantity={
+                  getCartQuantity
+                }
+                onSelect={
+                  setSelectedDish
+                }
               />
 
             )}
@@ -725,10 +846,18 @@ export default function GuestMenuPage() {
                 title="Best Sellers"
                 dishes={bestsellers}
                 onAdd={addToCart}
-                onDecrease={decreaseQuantity}
-                onIncrease={increaseQuantity}
-                getQuantity={getCartQuantity}
-                onSelect={setSelectedDish}
+                onDecrease={
+                  decreaseQuantity
+                }
+                onIncrease={
+                  increaseQuantity
+                }
+                getQuantity={
+                  getCartQuantity
+                }
+                onSelect={
+                  setSelectedDish
+                }
               />
 
             )}
@@ -739,10 +868,18 @@ export default function GuestMenuPage() {
                 title="New Arrivals"
                 dishes={newArrivals}
                 onAdd={addToCart}
-                onDecrease={decreaseQuantity}
-                onIncrease={increaseQuantity}
-                getQuantity={getCartQuantity}
-                onSelect={setSelectedDish}
+                onDecrease={
+                  decreaseQuantity
+                }
+                onIncrease={
+                  increaseQuantity
+                }
+                getQuantity={
+                  getCartQuantity
+                }
+                onSelect={
+                  setSelectedDish
+                }
               />
 
             )}
@@ -750,47 +887,44 @@ export default function GuestMenuPage() {
           </>
         )}
 
-      {/* =================================================
-          CATEGORY NAVIGATION
-      ================================================= */}
+      {/* CATEGORIES */}
 
       <section className="max-w-6xl mx-auto px-4 mt-8">
 
-        <div className="flex items-center justify-between mb-3">
-
-          <h2 className="text-lg font-bold">
-            Menu
-          </h2>
-
-        </div>
+        <h2 className="text-lg font-bold mb-3">
+          Menu
+        </h2>
 
         <div className="flex gap-2 overflow-x-auto pb-2">
 
-          {categories.map((category) => (
+          {categories.map(
+            (category) => (
 
-            <button
-              key={category}
-              onClick={() =>
-                setActiveCategory(category)
-              }
-              className={`whitespace-nowrap px-4 py-2 rounded-lg text-sm font-semibold ${
-                activeCategory === category
-                  ? "bg-orange-500 text-white"
-                  : "bg-white border border-gray-200 text-gray-600"
-              }`}
-            >
-              {category}
-            </button>
+              <button
+                key={category}
+                onClick={() =>
+                  setActiveCategory(
+                    category
+                  )
+                }
+                className={`whitespace-nowrap px-4 py-2 rounded-lg text-sm font-semibold ${
+                  activeCategory ===
+                  category
+                    ? "bg-orange-500 text-white"
+                    : "bg-white border border-gray-200 text-gray-600"
+                }`}
+              >
+                {category}
+              </button>
 
-          ))}
+            )
+          )}
 
         </div>
 
       </section>
 
-      {/* =================================================
-          ALL DISHES
-      ================================================= */}
+      {/* DISHES */}
 
       <section className="max-w-6xl mx-auto px-4 mt-5">
 
@@ -812,27 +946,31 @@ export default function GuestMenuPage() {
 
           ) : (
 
-            filteredDishes.map((dish) => (
+            filteredDishes.map(
+              (dish) => (
 
-              <DishCard
-                key={dish._id}
-                dish={dish}
-                quantity={getCartQuantity(
-                  dish._id
-                )}
-                onAdd={addToCart}
-                onDecrease={
-                  decreaseQuantity
-                }
-                onIncrease={
-                  increaseQuantity
-                }
-                onSelect={
-                  setSelectedDish
-                }
-              />
+                <DishCard
+                  key={dish._id}
+                  dish={dish}
+                  quantity={
+                    getCartQuantity(
+                      dish._id
+                    )
+                  }
+                  onAdd={addToCart}
+                  onDecrease={
+                    decreaseQuantity
+                  }
+                  onIncrease={
+                    increaseQuantity
+                  }
+                  onSelect={
+                    setSelectedDish
+                  }
+                />
 
-            ))
+              )
+            )
 
           )}
 
@@ -840,9 +978,7 @@ export default function GuestMenuPage() {
 
       </section>
 
-      {/* =================================================
-          BOTTOM CART BAR
-      ================================================= */}
+      {/* BOTTOM CART */}
 
       {cartCount > 0 && (
 
@@ -895,17 +1031,17 @@ export default function GuestMenuPage() {
 
       )}
 
-      {/* =================================================
-          DISH MODAL
-      ================================================= */}
+      {/* MODAL */}
 
       {selectedDish && (
 
         <DishModal
           dish={selectedDish}
-          quantity={getCartQuantity(
-            selectedDish._id
-          )}
+          quantity={
+            getCartQuantity(
+              selectedDish._id
+            )
+          }
           onClose={() =>
             setSelectedDish(null)
           }
@@ -965,12 +1101,18 @@ function FeaturedSection({
 
             <DishCard
               dish={dish}
-              quantity={getQuantity(
-                dish._id
-              )}
+              quantity={
+                getQuantity(
+                  dish._id
+                )
+              }
               onAdd={onAdd}
-              onDecrease={onDecrease}
-              onIncrease={onIncrease}
+              onDecrease={
+                onDecrease
+              }
+              onIncrease={
+                onIncrease
+              }
               onSelect={onSelect}
               compact
             />
@@ -982,6 +1124,7 @@ function FeaturedSection({
       </div>
 
     </section>
+
   );
 }
 
@@ -999,7 +1142,7 @@ function DishCard({
   compact = false,
 }) {
 
-  const isAvailable =
+  const available =
     dish.isAvailable !== false;
 
   return (
@@ -1047,7 +1190,8 @@ function DishCard({
 
           <span className="w-6 h-6 rounded-full bg-white shadow flex items-center justify-center text-xs">
 
-            {dish.foodType === "veg"
+            {dish.foodType ===
+            "veg"
               ? "🟢"
               : "🔴"}
 
@@ -1060,32 +1204,24 @@ function DishCard({
         <div className="absolute top-3 right-3 flex flex-col items-end gap-1">
 
           {dish.isBestseller && (
-            <Badge>Bestseller</Badge>
+            <Badge>
+              Bestseller
+            </Badge>
           )}
 
           {dish.todaySpecial && (
-            <Badge>Today's Special</Badge>
+            <Badge>
+              Today's Special
+            </Badge>
           )}
 
           {dish.isNewArrival && (
-            <Badge>New</Badge>
+            <Badge>
+              New
+            </Badge>
           )}
 
         </div>
-
-        {/* UNAVAILABLE */}
-
-        {!isAvailable && (
-
-          <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
-
-            <span className="bg-white text-gray-800 px-3 py-1.5 rounded-lg text-sm font-bold">
-              Currently Unavailable
-            </span>
-
-          </div>
-
-        )}
 
       </div>
 
@@ -1156,18 +1292,16 @@ function DishCard({
         {dish.spiceLevel && (
 
           <p className="text-[11px] text-gray-500 mt-2">
-
             🌶️{" "}
             {capitalize(
               dish.spiceLevel
             )}{" "}
             spice
-
           </p>
 
         )}
 
-        {/* PRICE + CART */}
+        {/* PRICE */}
 
         <div className="flex items-center justify-between mt-4">
 
@@ -1191,14 +1325,11 @@ function DishCard({
 
           </div>
 
-          {!isAvailable ? (
+          {!available ? (
 
-            <button
-              disabled
-              className="bg-gray-200 text-gray-500 px-4 py-2 rounded-lg text-sm font-bold cursor-not-allowed"
-            >
+            <span className="text-xs text-red-500 font-semibold">
               Unavailable
-            </button>
+            </span>
 
           ) : quantity === 0 ? (
 
@@ -1254,6 +1385,7 @@ function DishCard({
       </div>
 
     </div>
+
   );
 }
 
@@ -1269,9 +1401,6 @@ function DishModal({
   onDecrease,
   onIncrease,
 }) {
-
-  const isAvailable =
-    dish.isAvailable !== false;
 
   return (
 
@@ -1301,7 +1430,7 @@ function DishModal({
 
           ) : (
 
-            <div className="w-full h-64 bg-gray-100 flex items-center justify-center text-gray-400">
+            <div className="w-full h-64 bg-gray-100 flex items-center justify-center">
               No Image
             </div>
 
@@ -1327,7 +1456,8 @@ function DishModal({
               <div className="flex items-center gap-2">
 
                 <span>
-                  {dish.foodType === "veg"
+                  {dish.foodType ===
+                  "veg"
                     ? "🟢"
                     : "🔴"}
                 </span>
@@ -1369,8 +1499,6 @@ function DishModal({
 
           )}
 
-          {/* INFO */}
-
           <div className="flex gap-2 flex-wrap mt-4">
 
             {dish.prepTime && (
@@ -1402,41 +1530,32 @@ function DishModal({
 
           </div>
 
-          {/* TAGS */}
-
           {dish.tags?.length > 0 && (
 
             <div className="flex flex-wrap gap-2 mt-4">
 
-              {dish.tags.map((tag) => (
+              {dish.tags.map(
+                (tag) => (
 
-                <span
-                  key={tag}
-                  className="bg-gray-100 text-gray-600 px-3 py-1.5 rounded-lg text-xs"
-                >
-                  {tag}
-                </span>
+                  <span
+                    key={tag}
+                    className="bg-gray-100 text-gray-600 px-3 py-1.5 rounded-lg text-xs"
+                  >
+                    {tag}
+                  </span>
 
-              ))}
+                )
+              )}
 
             </div>
 
           )}
 
-          {/* ADD */}
+          {/* CART */}
 
           <div className="mt-6">
 
-            {!isAvailable ? (
-
-              <button
-                disabled
-                className="w-full bg-gray-200 text-gray-500 py-3.5 rounded-xl font-bold"
-              >
-                Currently Unavailable
-              </button>
-
-            ) : quantity === 0 ? (
+            {quantity === 0 ? (
 
               <button
                 onClick={() =>
@@ -1496,6 +1615,7 @@ function DishModal({
       </div>
 
     </div>
+
   );
 }
 
@@ -1512,6 +1632,7 @@ function Badge({ children }) {
     </span>
 
   );
+
 }
 
 /* =========================================================
@@ -1520,7 +1641,9 @@ function Badge({ children }) {
 
 function capitalize(value) {
 
-  if (!value) return "";
+  if (!value) {
+    return "";
+  }
 
   return (
     value.charAt(0).toUpperCase() +
