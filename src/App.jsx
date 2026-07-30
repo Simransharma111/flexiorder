@@ -32,7 +32,7 @@ export default function App() {
 
         <Route
           path="/homepage"
-          element={<Homepage />}
+          element={<LoginPage />}
         />
 
         {/* Guest scans QR */}
