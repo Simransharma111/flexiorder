@@ -12,7 +12,6 @@ import {
   FiStar,
   FiX,
   FiCalendar,
-  FiArrowLeft,
 } from "react-icons/fi";
 
 export default function GuestMenuPage() {
@@ -43,8 +42,14 @@ export default function GuestMenuPage() {
   // =========================================================
 
   const [cart, setCart] = useState([]);
-const [activeOrder, setActiveOrder] = useState(null);
-const [orderLoading, setOrderLoading] = useState(false);
+
+  // =========================================================
+  // ACTIVE ORDER
+  // =========================================================
+
+  const [activeOrder, setActiveOrder] = useState(null);
+  const [orderLoading, setOrderLoading] = useState(false);
+
   // =========================================================
   // DISH MODAL
   // =========================================================
@@ -52,13 +57,13 @@ const [orderLoading, setOrderLoading] = useState(false);
   const [selectedDish, setSelectedDish] = useState(null);
 
   // =========================================================
-  // SCHEDULE ORDER
+  // SCHEDULE
   // =========================================================
 
   const [showScheduleInfo, setShowScheduleInfo] = useState(false);
 
   // =========================================================
-  // FETCH MENU USING QR ID
+  // FETCH MENU + ACTIVE ORDER
   // =========================================================
 
   useEffect(() => {
@@ -69,60 +74,19 @@ const [orderLoading, setOrderLoading] = useState(false);
     }
 
     fetchMenu();
+    fetchActiveOrder();
   }, [qrId]);
-  const fetchActiveOrder = async () => {
-  try {
-    const savedOrderId =
-      localStorage.getItem(`activeOrder_${qrId}`);
 
-    if (!savedOrderId) {
-      setActiveOrder(null);
-      return;
-    }
-
-    setOrderLoading(true);
-
-    const res = await api.get(
-      `/orders/${savedOrderId}`
-    );
-
-    const order = res.data;
-
-    // Order is finished
-    if (
-      order.status === "delivered" ||
-      order.status === "cancelled"
-    ) {
-      localStorage.removeItem(
-        `activeOrder_${qrId}`
-      );
-
-      setActiveOrder(null);
-      return;
-    }
-
-    setActiveOrder(order);
-
-  } catch (err) {
-    console.error(
-      "Failed to fetch active order:",
-      err
-    );
-  } finally {
-    setOrderLoading(false);
-  }
-};
+  // =========================================================
+  // FETCH MENU
+  // =========================================================
 
   const fetchMenu = async () => {
     try {
       setLoading(true);
       setError("");
 
-      console.log("Loading menu for QR:", qrId);
-
       const res = await api.get(`/qr/menu/${qrId}`);
-
-      console.log("QR MENU RESPONSE:", res.data);
 
       setHotel(res.data?.hotel || null);
       setTable(res.data?.table || null);
@@ -140,10 +104,97 @@ const [orderLoading, setOrderLoading] = useState(false);
   };
 
   // =========================================================
-  // CART STORAGE
-  //
-  // IMPORTANT:
-  // Cart belongs to QR, NOT tableId.
+  // FETCH ACTIVE ORDER
+  // =========================================================
+
+  const fetchActiveOrder = async () => {
+    try {
+      const savedOrderId = localStorage.getItem(
+        `activeOrder_${qrId}`
+      );
+
+      console.log(
+        "Saved active order ID:",
+        savedOrderId
+      );
+
+      if (!savedOrderId) {
+        setActiveOrder(null);
+        return;
+      }
+
+      setOrderLoading(true);
+
+      const res = await api.get(
+        `/orders/${savedOrderId}`
+      );
+
+      const order = res.data;
+
+      console.log(
+        "ACTIVE ORDER:",
+        order
+      );
+
+      // =====================================================
+      // REMOVE ONLY WHEN COMPLETED / CANCELLED
+      // =====================================================
+
+      if (
+        order.status === "delivered" ||
+        order.status === "cancelled"
+      ) {
+        localStorage.removeItem(
+          `activeOrder_${qrId}`
+        );
+
+        setActiveOrder(null);
+
+        return;
+      }
+
+      setActiveOrder(order);
+
+    } catch (err) {
+      console.error(
+        "Failed to fetch active order:",
+        err
+      );
+
+      // If order doesn't exist anymore,
+      // remove stale localStorage ID
+
+      if (
+        err?.response?.status === 404
+      ) {
+        localStorage.removeItem(
+          `activeOrder_${qrId}`
+        );
+
+        setActiveOrder(null);
+      }
+
+    } finally {
+      setOrderLoading(false);
+    }
+  };
+
+  // =========================================================
+  // REFRESH ORDER EVERY 10 SECONDS
+  // =========================================================
+
+  useEffect(() => {
+    if (!qrId) return;
+
+    const interval = setInterval(() => {
+      fetchActiveOrder();
+    }, 10000);
+
+    return () => clearInterval(interval);
+  }, [qrId]);
+
+  // =========================================================
+  // CART LOAD
   // =========================================================
 
   useEffect(() => {
@@ -152,7 +203,8 @@ const [orderLoading, setOrderLoading] = useState(false);
     try {
       const storageKey = `cart_${qrId}`;
 
-      const savedCart = localStorage.getItem(storageKey);
+      const savedCart =
+        localStorage.getItem(storageKey);
 
       if (savedCart) {
         setCart(JSON.parse(savedCart));
@@ -160,7 +212,11 @@ const [orderLoading, setOrderLoading] = useState(false);
         setCart([]);
       }
     } catch (err) {
-      console.error("Failed to load cart:", err);
+      console.error(
+        "Failed to load cart:",
+        err
+      );
+
       setCart([]);
     }
   }, [qrId]);
@@ -178,7 +234,10 @@ const [orderLoading, setOrderLoading] = useState(false);
         JSON.stringify(cart)
       );
     } catch (err) {
-      console.error("Failed to save cart:", err);
+      console.error(
+        "Failed to save cart:",
+        err
+      );
     }
   }, [cart, qrId]);
 
@@ -191,7 +250,10 @@ const [orderLoading, setOrderLoading] = useState(false);
       ...new Set(
         dishes
           .map((dish) => {
-            if (typeof dish.category === "object") {
+            if (
+              typeof dish.category ===
+              "object"
+            ) {
               return dish.category?.name;
             }
 
@@ -201,7 +263,10 @@ const [orderLoading, setOrderLoading] = useState(false);
       ),
     ];
 
-    return ["All", ...uniqueCategories];
+    return [
+      "All",
+      ...uniqueCategories,
+    ];
   }, [dishes]);
 
   // =========================================================
@@ -209,26 +274,36 @@ const [orderLoading, setOrderLoading] = useState(false);
   // =========================================================
 
   const filteredDishes = useMemo(() => {
-    const searchText = search.trim().toLowerCase();
+    const searchText =
+      search.trim().toLowerCase();
 
     return dishes.filter((dish) => {
-      let dishCategory = dish.category;
+      let dishCategory =
+        dish.category;
 
-      if (typeof dish.category === "object") {
-        dishCategory = dish.category?.name;
+      if (
+        typeof dish.category ===
+        "object"
+      ) {
+        dishCategory =
+          dish.category?.name;
       }
 
       const categoryMatch =
         activeCategory === "All" ||
-        dishCategory === activeCategory;
+        dishCategory ===
+          activeCategory;
 
       const foodMatch =
         foodFilter === "all" ||
-        dish.foodType === foodFilter;
+        dish.foodType ===
+          foodFilter;
 
       const searchMatch =
         !searchText ||
-        dish.name?.toLowerCase().includes(searchText) ||
+        dish.name
+          ?.toLowerCase()
+          .includes(searchText) ||
         dish.description
           ?.toLowerCase()
           .includes(searchText) ||
@@ -252,7 +327,7 @@ const [orderLoading, setOrderLoading] = useState(false);
   ]);
 
   // =========================================================
-  // FEATURED SECTIONS
+  // FEATURED
   // =========================================================
 
   const availableDish = (dish) =>
@@ -298,32 +373,44 @@ const [orderLoading, setOrderLoading] = useState(false);
   // CART HELPERS
   // =========================================================
 
-  const getCartQuantity = (dishId) => {
+  const getCartQuantity = (
+    dishId
+  ) => {
     const item = cart.find(
-      (item) => item._id === dishId
+      (item) =>
+        item._id === dishId
     );
 
     return item?.quantity || 0;
   };
 
   const addToCart = (dish) => {
-    if (dish.isAvailable === false) {
+    if (
+      dish.isAvailable === false
+    ) {
       return;
     }
 
     setCart((prev) => {
-      const existing = prev.find(
-        (item) => item._id === dish._id
-      );
+      const existing =
+        prev.find(
+          (item) =>
+            item._id ===
+            dish._id
+        );
 
       if (existing) {
-        return prev.map((item) =>
-          item._id === dish._id
-            ? {
-                ...item,
-                quantity: item.quantity + 1,
-              }
-            : item
+        return prev.map(
+          (item) =>
+            item._id ===
+            dish._id
+              ? {
+                  ...item,
+                  quantity:
+                    item.quantity +
+                    1,
+                }
+              : item
         );
       }
 
@@ -332,46 +419,63 @@ const [orderLoading, setOrderLoading] = useState(false);
         {
           _id: dish._id,
           name: dish.name,
-          description: dish.description,
-          price: Number(dish.price || 0),
+          description:
+            dish.description,
+          price: Number(
+            dish.price || 0
+          ),
           image: dish.image,
-          foodType: dish.foodType,
+          foodType:
+            dish.foodType,
           quantity: 1,
         },
       ];
     });
   };
 
-  const decreaseQuantity = (dishId) => {
+  const decreaseQuantity = (
+    dishId
+  ) => {
     setCart((prev) => {
-      const existing = prev.find(
-        (item) => item._id === dishId
-      );
+      const existing =
+        prev.find(
+          (item) =>
+            item._id === dishId
+        );
 
       if (!existing) {
         return prev;
       }
 
-      if (existing.quantity <= 1) {
+      if (
+        existing.quantity <= 1
+      ) {
         return prev.filter(
-          (item) => item._id !== dishId
+          (item) =>
+            item._id !== dishId
         );
       }
 
-      return prev.map((item) =>
-        item._id === dishId
-          ? {
-              ...item,
-              quantity: item.quantity - 1,
-            }
-          : item
+      return prev.map(
+        (item) =>
+          item._id === dishId
+            ? {
+                ...item,
+                quantity:
+                  item.quantity -
+                  1,
+              }
+            : item
       );
     });
   };
 
-  const increaseQuantity = (dishId) => {
+  const increaseQuantity = (
+    dishId
+  ) => {
     const dish = dishes.find(
-      (item) => item._id === dishId
+      (item) =>
+        item._id === dishId
     );
 
     if (dish) {
@@ -385,29 +489,35 @@ const [orderLoading, setOrderLoading] = useState(false);
 
   const cartCount = cart.reduce(
     (total, item) =>
-      total + Number(item.quantity || 0),
+      total +
+      Number(
+        item.quantity || 0
+      ),
     0
   );
 
   const cartTotal = cart.reduce(
     (total, item) =>
       total +
-      Number(item.price || 0) *
-        Number(item.quantity || 0),
+      Number(
+        item.price || 0
+      ) *
+        Number(
+          item.quantity || 0
+        ),
     0
   );
 
   // =========================================================
   // OPEN CART
-  //
-  // IMPORTANT:
-  // Send QR ID, NOT tableId.
   // =========================================================
 
   const openCart = () => {
     if (!qrId) return;
 
-    navigate(`/cart/${qrId}`);
+    navigate(
+      `/cart/${qrId}`
+    );
   };
 
   // =========================================================
@@ -415,12 +525,15 @@ const [orderLoading, setOrderLoading] = useState(false);
   // =========================================================
 
   const openTrackOrder = () => {
-    const lastOrderId = localStorage.getItem(
-      `lastOrder_${qrId}`
-    );
+    const orderId =
+      localStorage.getItem(
+        `activeOrder_${qrId}`
+      );
 
-    if (lastOrderId) {
-      navigate(`/track-order/${lastOrderId}`);
+    if (orderId) {
+      navigate(
+        `/track-order/${orderId}`
+      );
     } else {
       alert(
         "You do not have an active order yet."
@@ -434,7 +547,10 @@ const [orderLoading, setOrderLoading] = useState(false);
 
   const openSchedule = () => {
     if (cartCount === 0) {
-      alert("Please add items to cart first.");
+      alert(
+        "Please add items to cart first."
+      );
+
       return;
     }
 
@@ -449,11 +565,13 @@ const [orderLoading, setOrderLoading] = useState(false);
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
+
           <div className="w-10 h-10 border-4 border-gray-200 border-t-orange-500 rounded-full animate-spin mx-auto" />
 
           <p className="text-gray-500 mt-4 text-sm">
             Loading menu...
           </p>
+
         </div>
       </div>
     );
@@ -466,7 +584,9 @@ const [orderLoading, setOrderLoading] = useState(false);
   if (error) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6">
+
         <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8 text-center max-w-md w-full">
+
           <h2 className="text-xl font-bold text-gray-900">
             Menu unavailable
           </h2>
@@ -481,7 +601,9 @@ const [orderLoading, setOrderLoading] = useState(false);
           >
             Try Again
           </button>
+
         </div>
+
       </div>
     );
   }
@@ -498,6 +620,7 @@ const [orderLoading, setOrderLoading] = useState(false);
       ===================================================== */}
 
       <header className="bg-white sticky top-0 z-40 border-b border-gray-100">
+
         <div className="max-w-6xl mx-auto px-4">
 
           <div className="flex items-center justify-between h-16">
@@ -509,33 +632,41 @@ const [orderLoading, setOrderLoading] = useState(false);
               {hotel?.logo ? (
                 <img
                   src={hotel.logo}
-                  alt={hotel?.name || "Hotel"}
+                  alt={
+                    hotel?.name ||
+                    "Hotel"
+                  }
                   className="w-10 h-10 rounded-xl object-cover"
                 />
               ) : (
                 <div className="w-10 h-10 rounded-xl bg-orange-100 flex items-center justify-center text-orange-600 font-bold">
                   {hotel?.name
                     ?.charAt(0)
-                    ?.toUpperCase() || "H"}
+                    ?.toUpperCase() ||
+                    "H"}
                 </div>
               )}
 
               <div className="min-w-0">
 
                 <h1 className="font-bold text-gray-900 leading-tight truncate">
-                  {hotel?.name || "Welcome"}
+                  {hotel?.name ||
+                    "Welcome"}
                 </h1>
 
                 {table && (
                   <p className="text-xs text-gray-500">
-                    {table.type === "room"
+                    {table.type ===
+                    "room"
                       ? "Room"
                       : "Table"}{" "}
-                    {table.tableNumber || ""}
+                    {table.tableNumber ||
+                      ""}
                   </p>
                 )}
 
               </div>
+
             </div>
 
             {/* CART */}
@@ -544,182 +675,223 @@ const [orderLoading, setOrderLoading] = useState(false);
               onClick={openCart}
               className="relative w-11 h-11 rounded-xl bg-orange-500 text-white flex items-center justify-center shrink-0"
             >
-              <FiShoppingBag size={19} />
+
+              <FiShoppingBag
+                size={19}
+              />
 
               {cartCount > 0 && (
                 <span className="absolute -top-1 -right-1 min-w-5 h-5 px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center">
                   {cartCount}
                 </span>
               )}
+
             </button>
 
           </div>
 
         </div>
+
       </header>
-      {/* =================================================
-    ACTIVE ORDER TRACKING
-================================================= */}
 
-{activeOrder && (
-  <section className="max-w-6xl mx-auto px-4 pt-4">
+      {/* =====================================================
+          ACTIVE ORDER TRACKING
+      ===================================================== */}
 
-    <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
+      {activeOrder && (
+        <section className="max-w-6xl mx-auto px-4 pt-4">
 
-      {/* HEADER */}
+          <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
 
-      <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+            {/* ORDER HEADER */}
 
-        <div>
-          <h2 className="font-bold text-gray-900">
-            Your Order
-          </h2>
+            <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
 
-          <p className="text-xs text-gray-500">
-            Order #{activeOrder._id?.slice(-6)}
-          </p>
-        </div>
+              <div>
 
-        <span
-          className={`px-3 py-1 rounded-full text-xs font-bold ${
-            activeOrder.status === "pending"
-              ? "bg-yellow-100 text-yellow-700"
-              : activeOrder.status === "accepted"
-              ? "bg-blue-100 text-blue-700"
-              : activeOrder.status === "preparing"
-              ? "bg-orange-100 text-orange-700"
-              : activeOrder.status === "ready"
-              ? "bg-green-100 text-green-700"
-              : "bg-gray-100 text-gray-700"
-          }`}
-        >
-          {capitalize(activeOrder.status)}
-        </span>
+                <h2 className="font-bold text-gray-900">
+                  Your Order
+                </h2>
 
-      </div>
+                <p className="text-xs text-gray-500">
+                  Order #
+                  {activeOrder._id?.slice(
+                    -6
+                  )}
+                </p>
 
-      {/* STATUS */}
+              </div>
 
-      <div className="p-4">
-
-        <div className="flex items-center justify-between">
-
-          {/* PENDING */}
-
-          <OrderStatusStep
-            label="Placed"
-            active={[
-              "pending",
-              "accepted",
-              "preparing",
-              "ready",
-              "delivered",
-            ].includes(activeOrder.status)}
-            completed={[
-              "accepted",
-              "preparing",
-              "ready",
-              "delivered",
-            ].includes(activeOrder.status)}
-          />
-
-          <div className="flex-1 h-1 bg-gray-200 mx-1" />
-
-          {/* ACCEPTED */}
-
-          <OrderStatusStep
-            label="Accepted"
-            active={[
-              "accepted",
-              "preparing",
-              "ready",
-              "delivered",
-            ].includes(activeOrder.status)}
-            completed={[
-              "preparing",
-              "ready",
-              "delivered",
-            ].includes(activeOrder.status)}
-          />
-
-          <div className="flex-1 h-1 bg-gray-200 mx-1" />
-
-          {/* PREPARING */}
-
-          <OrderStatusStep
-            label="Preparing"
-            active={[
-              "preparing",
-              "ready",
-              "delivered",
-            ].includes(activeOrder.status)}
-            completed={[
-              "ready",
-              "delivered",
-            ].includes(activeOrder.status)}
-          />
-
-          <div className="flex-1 h-1 bg-gray-200 mx-1" />
-
-          {/* READY */}
-
-          <OrderStatusStep
-            label="Ready"
-            active={[
-              "ready",
-              "delivered",
-            ].includes(activeOrder.status)}
-            completed={[
-              "delivered",
-            ].includes(activeOrder.status)}
-          />
-
-        </div>
-
-        {/* ESTIMATED TIME */}
-
-        {activeOrder.estimatedTime && (
-          <div className="mt-4 bg-gray-50 rounded-xl p-3 flex items-center justify-between">
-
-            <div className="flex items-center gap-2">
-
-              <FiClock className="text-orange-500" />
-
-              <span className="text-sm text-gray-600">
-                Estimated preparation
+              <span
+                className={`px-3 py-1 rounded-full text-xs font-bold ${
+                  activeOrder.status ===
+                  "pending"
+                    ? "bg-yellow-100 text-yellow-700"
+                    : activeOrder.status ===
+                      "accepted"
+                    ? "bg-blue-100 text-blue-700"
+                    : activeOrder.status ===
+                      "preparing"
+                    ? "bg-orange-100 text-orange-700"
+                    : activeOrder.status ===
+                      "ready"
+                    ? "bg-green-100 text-green-700"
+                    : "bg-gray-100 text-gray-700"
+                }`}
+              >
+                {capitalize(
+                  activeOrder.status
+                )}
               </span>
 
             </div>
 
-            <strong className="text-sm">
-              {activeOrder.estimatedTime} min
-            </strong>
+            {/* STATUS */}
+
+            <div className="p-4">
+
+              <div className="flex items-center justify-between">
+
+                <OrderStatusStep
+                  label="Placed"
+                  active={[
+                    "pending",
+                    "accepted",
+                    "preparing",
+                    "ready",
+                    "delivered",
+                  ].includes(
+                    activeOrder.status
+                  )}
+                  completed={[
+                    "accepted",
+                    "preparing",
+                    "ready",
+                    "delivered",
+                  ].includes(
+                    activeOrder.status
+                  )}
+                />
+
+                <div className="flex-1 h-1 bg-gray-200 mx-1" />
+
+                <OrderStatusStep
+                  label="Accepted"
+                  active={[
+                    "accepted",
+                    "preparing",
+                    "ready",
+                    "delivered",
+                  ].includes(
+                    activeOrder.status
+                  )}
+                  completed={[
+                    "preparing",
+                    "ready",
+                    "delivered",
+                  ].includes(
+                    activeOrder.status
+                  )}
+                />
+
+                <div className="flex-1 h-1 bg-gray-200 mx-1" />
+
+                <OrderStatusStep
+                  label="Preparing"
+                  active={[
+                    "preparing",
+                    "ready",
+                    "delivered",
+                  ].includes(
+                    activeOrder.status
+                  )}
+                  completed={[
+                    "ready",
+                    "delivered",
+                  ].includes(
+                    activeOrder.status
+                  )}
+                />
+
+                <div className="flex-1 h-1 bg-gray-200 mx-1" />
+
+                <OrderStatusStep
+                  label="Ready"
+                  active={[
+                    "ready",
+                    "delivered",
+                  ].includes(
+                    activeOrder.status
+                  )}
+                  completed={[
+                    "delivered",
+                  ].includes(
+                    activeOrder.status
+                  )}
+                />
+
+              </div>
+
+              {/* ESTIMATED TIME */}
+
+              {activeOrder.estimatedTime && (
+                <div className="mt-4 bg-gray-50 rounded-xl p-3 flex items-center justify-between">
+
+                  <div className="flex items-center gap-2">
+
+                    <FiClock className="text-orange-500" />
+
+                    <span className="text-sm text-gray-600">
+                      Estimated preparation
+                    </span>
+
+                  </div>
+
+                  <strong className="text-sm">
+                    {
+                      activeOrder.estimatedTime
+                    }{" "}
+                    min
+                  </strong>
+
+                </div>
+              )}
+
+              {/* TOTAL */}
+
+              <div className="flex justify-between mt-3 text-sm">
+
+                <span className="text-gray-500">
+                  Order Total
+                </span>
+
+                <strong>
+                  ₹
+                  {Number(
+                    activeOrder.totalAmount ||
+                      0
+                  ).toFixed(2)}
+                </strong>
+
+              </div>
+
+              {/* TRACK BUTTON */}
+
+              <button
+                onClick={
+                  openTrackOrder
+                }
+                className="w-full mt-4 border border-orange-500 text-orange-600 py-2.5 rounded-xl font-bold text-sm"
+              >
+                Track Full Order
+              </button>
+
+            </div>
 
           </div>
-        )}
 
-        {/* TOTAL */}
-
-        <div className="flex justify-between mt-3 text-sm">
-
-          <span className="text-gray-500">
-            Order Total
-          </span>
-
-          <strong>
-            ₹{Number(
-              activeOrder.totalAmount || 0
-            ).toFixed(2)}
-          </strong>
-
-        </div>
-
-      </div>
-
-    </div>
-
-  </section>
-)}
+        </section>
+      )}
 
       {/* =====================================================
           HOTEL INTRO
@@ -752,7 +924,8 @@ const [orderLoading, setOrderLoading] = useState(false);
 
             {table && (
               <div className="mt-4 inline-flex items-center gap-2 bg-orange-50 text-orange-700 px-3 py-2 rounded-lg text-sm font-semibold">
-                {table.type === "room"
+                {table.type ===
+                "room"
                   ? "Room"
                   : "Table"}{" "}
                 {table.tableNumber}
@@ -760,7 +933,9 @@ const [orderLoading, setOrderLoading] = useState(false);
             )}
 
           </div>
+
         </div>
+
       </section>
 
       {/* =====================================================
@@ -772,14 +947,18 @@ const [orderLoading, setOrderLoading] = useState(false);
         <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
 
           <button
-            onClick={openSchedule}
+            onClick={
+              openSchedule
+            }
             className="bg-white border border-gray-200 rounded-xl p-4 flex items-center gap-3 text-left hover:border-orange-300"
           >
+
             <div className="w-10 h-10 rounded-lg bg-orange-50 text-orange-600 flex items-center justify-center">
               <FiCalendar />
             </div>
 
             <div>
+
               <p className="font-bold text-gray-900 text-sm">
                 Schedule Order
               </p>
@@ -787,18 +966,22 @@ const [orderLoading, setOrderLoading] = useState(false);
               <p className="text-xs text-gray-500">
                 Order for later
               </p>
+
             </div>
+
           </button>
 
           <button
             onClick={openCart}
             className="bg-white border border-gray-200 rounded-xl p-4 flex items-center gap-3 text-left hover:border-orange-300"
           >
+
             <div className="w-10 h-10 rounded-lg bg-orange-50 text-orange-600 flex items-center justify-center">
               <FiShoppingBag />
             </div>
 
             <div>
+
               <p className="font-bold text-gray-900 text-sm">
                 My Cart
               </p>
@@ -806,18 +989,24 @@ const [orderLoading, setOrderLoading] = useState(false);
               <p className="text-xs text-gray-500">
                 {cartCount} items
               </p>
+
             </div>
+
           </button>
 
           <button
-            onClick={openTrackOrder}
+            onClick={
+              openTrackOrder
+            }
             className="bg-white border border-gray-200 rounded-xl p-4 flex items-center gap-3 text-left hover:border-orange-300 col-span-2 md:col-span-1"
           >
+
             <div className="w-10 h-10 rounded-lg bg-orange-50 text-orange-600 flex items-center justify-center">
               <FiClock />
             </div>
 
             <div>
+
               <p className="font-bold text-gray-900 text-sm">
                 Track Order
               </p>
@@ -825,7 +1014,9 @@ const [orderLoading, setOrderLoading] = useState(false);
               <p className="text-xs text-gray-500">
                 Check order status
               </p>
+
             </div>
+
           </button>
 
         </div>
@@ -850,12 +1041,15 @@ const [orderLoading, setOrderLoading] = useState(false);
             placeholder="Search dishes..."
             value={search}
             onChange={(e) =>
-              setSearch(e.target.value)
+              setSearch(
+                e.target.value
+              )
             }
             className="w-full bg-white border border-gray-200 rounded-xl py-3.5 pl-11 pr-4 outline-none focus:ring-2 focus:ring-orange-400"
           />
 
         </div>
+
       </section>
 
       {/* =====================================================
@@ -868,7 +1062,9 @@ const [orderLoading, setOrderLoading] = useState(false);
 
           <button
             onClick={() =>
-              setFoodFilter("all")
+              setFoodFilter(
+                "all"
+              )
             }
             className={`px-4 py-2 rounded-full text-sm font-semibold whitespace-nowrap ${
               foodFilter === "all"
@@ -881,7 +1077,9 @@ const [orderLoading, setOrderLoading] = useState(false);
 
           <button
             onClick={() =>
-              setFoodFilter("veg")
+              setFoodFilter(
+                "veg"
+              )
             }
             className={`px-4 py-2 rounded-full text-sm font-semibold whitespace-nowrap ${
               foodFilter === "veg"
@@ -894,7 +1092,9 @@ const [orderLoading, setOrderLoading] = useState(false);
 
           <button
             onClick={() =>
-              setFoodFilter("nonveg")
+              setFoodFilter(
+                "nonveg"
+              )
             }
             className={`px-4 py-2 rounded-full text-sm font-semibold whitespace-nowrap ${
               foodFilter === "nonveg"
@@ -906,90 +1106,171 @@ const [orderLoading, setOrderLoading] = useState(false);
           </button>
 
         </div>
+
       </section>
 
       {/* =====================================================
-          FEATURED SECTIONS
+          FEATURED
       ===================================================== */}
 
-      {!search && activeCategory === "All" && (
-        <>
-          {featured.length > 0 && (
-            <FeaturedSection
-              title="Featured"
-              dishes={featured}
-              onAdd={addToCart}
-              onDecrease={decreaseQuantity}
-              onIncrease={increaseQuantity}
-              getQuantity={getCartQuantity}
-              onSelect={setSelectedDish}
-            />
-          )}
+      {!search &&
+        activeCategory ===
+          "All" && (
+          <>
 
-          {todaySpecial.length > 0 && (
-            <FeaturedSection
-              title="Today's Special"
-              dishes={todaySpecial}
-              onAdd={addToCart}
-              onDecrease={decreaseQuantity}
-              onIncrease={increaseQuantity}
-              getQuantity={getCartQuantity}
-              onSelect={setSelectedDish}
-            />
-          )}
+            {featured.length >
+              0 && (
+              <FeaturedSection
+                title="Featured"
+                dishes={
+                  featured
+                }
+                onAdd={
+                  addToCart
+                }
+                onDecrease={
+                  decreaseQuantity
+                }
+                onIncrease={
+                  increaseQuantity
+                }
+                getQuantity={
+                  getCartQuantity
+                }
+                onSelect={
+                  setSelectedDish
+                }
+              />
+            )}
 
-          {recommended.length > 0 && (
-            <FeaturedSection
-              title="Recommended"
-              dishes={recommended}
-              onAdd={addToCart}
-              onDecrease={decreaseQuantity}
-              onIncrease={increaseQuantity}
-              getQuantity={getCartQuantity}
-              onSelect={setSelectedDish}
-            />
-          )}
+            {todaySpecial.length >
+              0 && (
+              <FeaturedSection
+                title="Today's Special"
+                dishes={
+                  todaySpecial
+                }
+                onAdd={
+                  addToCart
+                }
+                onDecrease={
+                  decreaseQuantity
+                }
+                onIncrease={
+                  increaseQuantity
+                }
+                getQuantity={
+                  getCartQuantity
+                }
+                onSelect={
+                  setSelectedDish
+                }
+              />
+            )}
 
-          {popular.length > 0 && (
-            <FeaturedSection
-              title="Most Popular"
-              dishes={popular}
-              onAdd={addToCart}
-              onDecrease={decreaseQuantity}
-              onIncrease={increaseQuantity}
-              getQuantity={getCartQuantity}
-              onSelect={setSelectedDish}
-            />
-          )}
+            {recommended.length >
+              0 && (
+              <FeaturedSection
+                title="Recommended"
+                dishes={
+                  recommended
+                }
+                onAdd={
+                  addToCart
+                }
+                onDecrease={
+                  decreaseQuantity
+                }
+                onIncrease={
+                  increaseQuantity
+                }
+                getQuantity={
+                  getCartQuantity
+                }
+                onSelect={
+                  setSelectedDish
+                }
+              />
+            )}
 
-          {bestsellers.length > 0 && (
-            <FeaturedSection
-              title="Best Sellers"
-              dishes={bestsellers}
-              onAdd={addToCart}
-              onDecrease={decreaseQuantity}
-              onIncrease={increaseQuantity}
-              getQuantity={getCartQuantity}
-              onSelect={setSelectedDish}
-            />
-          )}
+            {popular.length >
+              0 && (
+              <FeaturedSection
+                title="Most Popular"
+                dishes={popular}
+                onAdd={
+                  addToCart
+                }
+                onDecrease={
+                  decreaseQuantity
+                }
+                onIncrease={
+                  increaseQuantity
+                }
+                getQuantity={
+                  getCartQuantity
+                }
+                onSelect={
+                  setSelectedDish
+                }
+              />
+            )}
 
-          {newArrivals.length > 0 && (
-            <FeaturedSection
-              title="New Arrivals"
-              dishes={newArrivals}
-              onAdd={addToCart}
-              onDecrease={decreaseQuantity}
-              onIncrease={increaseQuantity}
-              getQuantity={getCartQuantity}
-              onSelect={setSelectedDish}
-            />
-          )}
-        </>
-      )}
+            {bestsellers.length >
+              0 && (
+              <FeaturedSection
+                title="Best Sellers"
+                dishes={
+                  bestsellers
+                }
+                onAdd={
+                  addToCart
+                }
+                onDecrease={
+                  decreaseQuantity
+                }
+                onIncrease={
+                  increaseQuantity
+                }
+                getQuantity={
+                  getCartQuantity
+                }
+                onSelect={
+                  setSelectedDish
+                }
+              />
+            )}
+
+            {newArrivals.length >
+              0 && (
+              <FeaturedSection
+                title="New Arrivals"
+                dishes={
+                  newArrivals
+                }
+                onAdd={
+                  addToCart
+                }
+                onDecrease={
+                  decreaseQuantity
+                }
+                onIncrease={
+                  increaseQuantity
+                }
+                getQuantity={
+                  getCartQuantity
+                }
+                onSelect={
+                  setSelectedDish
+                }
+              />
+            )}
+
+          </>
+        )}
 
       {/* =====================================================
-          CATEGORY NAVIGATION
+          CATEGORIES
       ===================================================== */}
 
       <section className="max-w-6xl mx-auto px-4 mt-8">
@@ -1000,75 +1281,99 @@ const [orderLoading, setOrderLoading] = useState(false);
 
         <div className="flex gap-2 overflow-x-auto pb-2">
 
-          {categories.map((category) => (
-            <button
-              key={category}
-              onClick={() =>
-                setActiveCategory(category)
-              }
-              className={`whitespace-nowrap px-4 py-2 rounded-lg text-sm font-semibold ${
-                activeCategory === category
-                  ? "bg-orange-500 text-white"
-                  : "bg-white border border-gray-200 text-gray-600"
-              }`}
-            >
-              {category}
-            </button>
-          ))}
+          {categories.map(
+            (category) => (
+              <button
+                key={category}
+                onClick={() =>
+                  setActiveCategory(
+                    category
+                  )
+                }
+                className={`whitespace-nowrap px-4 py-2 rounded-lg text-sm font-semibold ${
+                  activeCategory ===
+                  category
+                    ? "bg-orange-500 text-white"
+                    : "bg-white border border-gray-200 text-gray-600"
+                }`}
+              >
+                {category}
+              </button>
+            )
+          )}
 
         </div>
+
       </section>
 
       {/* =====================================================
-          ALL DISHES
+          DISHES
       ===================================================== */}
 
       <section className="max-w-6xl mx-auto px-4 mt-5">
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
-          {filteredDishes.length === 0 ? (
+          {filteredDishes.length ===
+          0 ? (
             <div className="md:col-span-2 bg-white border border-gray-200 rounded-2xl p-10 text-center">
+
               <p className="font-semibold text-gray-700">
                 No dishes found
               </p>
 
               <p className="text-sm text-gray-500 mt-1">
-                Try another category or search.
+                Try another category
+                or search.
               </p>
+
             </div>
           ) : (
-            filteredDishes.map((dish) => (
-              <DishCard
-                key={dish._id}
-                dish={dish}
-                quantity={getCartQuantity(
-                  dish._id
-                )}
-                onAdd={addToCart}
-                onDecrease={decreaseQuantity}
-                onIncrease={increaseQuantity}
-                onSelect={setSelectedDish}
-              />
-            ))
+            filteredDishes.map(
+              (dish) => (
+                <DishCard
+                  key={dish._id}
+                  dish={dish}
+                  quantity={getCartQuantity(
+                    dish._id
+                  )}
+                  onAdd={
+                    addToCart
+                  }
+                  onDecrease={
+                    decreaseQuantity
+                  }
+                  onIncrease={
+                    increaseQuantity
+                  }
+                  onSelect={
+                    setSelectedDish
+                  }
+                />
+              )
+            )
           )}
 
         </div>
+
       </section>
 
       {/* =====================================================
-          BOTTOM CART BAR
+          BOTTOM CART
       ===================================================== */}
 
       {cartCount > 0 && (
         <div className="fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-gray-200 p-3">
 
-          <div className="max-w-6xl mx-auto space-y-2">
+          <div className="max-w-6xl mx-auto">
 
             <button
-              onClick={openCart}
+              onClick={
+                openCart
+              }
               className="w-full bg-orange-500 hover:bg-orange-600 text-white rounded-xl px-5 py-3 flex items-center justify-between font-bold"
             >
+
               <div className="flex items-center gap-3">
 
                 <div className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center">
@@ -1079,25 +1384,32 @@ const [orderLoading, setOrderLoading] = useState(false);
 
                   <p className="text-xs opacity-90">
                     {cartCount}{" "}
-                    {cartCount === 1
+                    {cartCount ===
+                    1
                       ? "item"
                       : "items"}
                   </p>
 
                   <p>
-                    ₹{cartTotal.toFixed(2)}
+                    ₹
+                    {cartTotal.toFixed(
+                      2
+                    )}
                   </p>
 
                 </div>
+
               </div>
 
               <div className="flex items-center gap-2">
                 View Cart
                 <FiChevronRight />
               </div>
+
             </button>
 
           </div>
+
         </div>
       )}
 
@@ -1107,30 +1419,43 @@ const [orderLoading, setOrderLoading] = useState(false);
 
       {selectedDish && (
         <DishModal
-          dish={selectedDish}
+          dish={
+            selectedDish
+          }
           quantity={getCartQuantity(
             selectedDish._id
           )}
           onClose={() =>
-            setSelectedDish(null)
+            setSelectedDish(
+              null
+            )
           }
-          onAdd={addToCart}
-          onDecrease={decreaseQuantity}
-          onIncrease={increaseQuantity}
+          onAdd={
+            addToCart
+          }
+          onDecrease={
+            decreaseQuantity
+          }
+          onIncrease={
+            increaseQuantity
+          }
         />
       )}
 
       {/* =====================================================
-          SCHEDULE INFORMATION MODAL
+          SCHEDULE MODAL
       ===================================================== */}
 
       {showScheduleInfo && (
         <div
           className="fixed inset-0 z-[110] bg-black/50 flex items-end md:items-center justify-center p-4"
           onClick={() =>
-            setShowScheduleInfo(false)
+            setShowScheduleInfo(
+              false
+            )
           }
         >
+
           <div
             className="bg-white w-full max-w-md rounded-2xl p-6"
             onClick={(e) =>
@@ -1154,7 +1479,9 @@ const [orderLoading, setOrderLoading] = useState(false);
 
               <button
                 onClick={() =>
-                  setShowScheduleInfo(false)
+                  setShowScheduleInfo(
+                    false
+                  )
                 }
                 className="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center"
               >
@@ -1164,14 +1491,20 @@ const [orderLoading, setOrderLoading] = useState(false);
             </div>
 
             <p className="text-sm text-gray-500 mt-4 leading-6">
-              Your cart is ready. Continue to the
-              cart page to select the date and time
-              for your scheduled order.
+              Your cart is ready.
+              Continue to the
+              cart page to select
+              the date and time
+              for your scheduled
+              order.
             </p>
 
             <button
               onClick={() => {
-                setShowScheduleInfo(false);
+                setShowScheduleInfo(
+                  false
+                );
+
                 openCart();
               }}
               className="w-full mt-5 bg-orange-500 hover:bg-orange-600 text-white py-3 rounded-xl font-bold"
@@ -1180,8 +1513,49 @@ const [orderLoading, setOrderLoading] = useState(false);
             </button>
 
           </div>
+
         </div>
       )}
+
+    </div>
+  );
+}
+
+/* =========================================================
+   ORDER STATUS STEP
+========================================================= */
+
+function OrderStatusStep({
+  label,
+  active,
+  completed,
+}) {
+  return (
+    <div className="flex flex-col items-center min-w-[55px]">
+
+      <div
+        className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${
+          completed
+            ? "bg-green-500 text-white"
+            : active
+            ? "bg-orange-500 text-white"
+            : "bg-gray-200 text-gray-400"
+        }`}
+      >
+        {completed
+          ? "✓"
+          : "•"}
+      </div>
+
+      <span
+        className={`text-[10px] mt-1 text-center ${
+          active
+            ? "text-gray-900 font-semibold"
+            : "text-gray-400"
+        }`}
+      >
+        {label}
+      </span>
 
     </div>
   );
@@ -1217,26 +1591,37 @@ function FeaturedSection({
 
       <div className="flex gap-4 overflow-x-auto pb-2">
 
-        {dishes.map((dish) => (
-          <div
-            key={dish._id}
-            className="min-w-[245px] max-w-[245px]"
-          >
-            <DishCard
-              dish={dish}
-              quantity={getQuantity(
-                dish._id
-              )}
-              onAdd={onAdd}
-              onDecrease={onDecrease}
-              onIncrease={onIncrease}
-              onSelect={onSelect}
-              compact
-            />
-          </div>
-        ))}
+        {dishes.map(
+          (dish) => (
+            <div
+              key={dish._id}
+              className="min-w-[245px] max-w-[245px]"
+            >
+
+              <DishCard
+                dish={dish}
+                quantity={getQuantity(
+                  dish._id
+                )}
+                onAdd={onAdd}
+                onDecrease={
+                  onDecrease
+                }
+                onIncrease={
+                  onIncrease
+                }
+                onSelect={
+                  onSelect
+                }
+                compact
+              />
+
+            </div>
+          )
+        )}
 
       </div>
+
     </section>
   );
 }
@@ -1260,8 +1645,6 @@ function DishCard({
   return (
     <div className="bg-white border border-gray-100 rounded-2xl overflow-hidden shadow-sm">
 
-      {/* IMAGE */}
-
       <div
         className="relative cursor-pointer"
         onClick={() =>
@@ -1274,60 +1657,68 @@ function DishCard({
             src={dish.image}
             alt={dish.name}
             className={`w-full object-cover ${
-              compact ? "h-40" : "h-52"
+              compact
+                ? "h-40"
+                : "h-52"
             }`}
           />
         ) : (
           <div
             className={`w-full bg-gray-100 flex items-center justify-center text-gray-400 ${
-              compact ? "h-40" : "h-52"
+              compact
+                ? "h-40"
+                : "h-52"
             }`}
           >
             No Image
           </div>
         )}
 
-        {/* FOOD TYPE */}
-
         <div className="absolute top-3 left-3">
 
           <span className="w-6 h-6 rounded-full bg-white shadow flex items-center justify-center text-xs">
-            {dish.foodType === "veg"
+            {dish.foodType ===
+            "veg"
               ? "🟢"
               : "🔴"}
           </span>
 
         </div>
 
-        {/* BADGES */}
-
         <div className="absolute top-3 right-3 flex flex-col items-end gap-1">
 
           {dish.isBestseller && (
-            <Badge>Bestseller</Badge>
+            <Badge>
+              Bestseller
+            </Badge>
           )}
 
           {dish.todaySpecial && (
-            <Badge>Today's Special</Badge>
+            <Badge>
+              Today's Special
+            </Badge>
           )}
 
           {dish.isNewArrival && (
-            <Badge>New</Badge>
+            <Badge>
+              New
+            </Badge>
           )}
 
         </div>
 
         {!isAvailable && (
           <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+
             <span className="bg-white px-3 py-2 rounded-lg font-bold text-sm">
-              Currently Unavailable
+              Currently
+              Unavailable
             </span>
+
           </div>
         )}
 
       </div>
-
-      {/* CONTENT */}
 
       <div className="p-4">
 
@@ -1347,59 +1738,73 @@ function DishCard({
 
           </div>
 
-          {Number(dish.rating || 0) > 0 && (
+          {Number(
+            dish.rating || 0
+          ) > 0 && (
             <span className="flex items-center gap-1 text-xs font-semibold text-gray-700 shrink-0">
+
               <FiStar
                 className="text-yellow-500 fill-yellow-500"
                 size={12}
               />
+
               {dish.rating}
+
             </span>
           )}
 
         </div>
 
-        {/* TAGS */}
-
-        {dish.tags?.length > 0 && (
+        {dish.tags?.length >
+          0 && (
           <div className="flex gap-1 flex-wrap mt-2">
 
             {dish.tags
               .slice(0, 3)
-              .map((tag) => (
-                <span
-                  key={tag}
-                  className="bg-gray-100 text-gray-600 px-2 py-1 rounded-md text-[10px] font-medium"
-                >
-                  {tag}
-                </span>
-              ))}
+              .map(
+                (tag) => (
+                  <span
+                    key={tag}
+                    className="bg-gray-100 text-gray-600 px-2 py-1 rounded-md text-[10px] font-medium"
+                  >
+                    {tag}
+                  </span>
+                )
+              )}
 
           </div>
         )}
 
-        {/* SPICE */}
-
         {dish.spiceLevel && (
           <p className="text-[11px] text-gray-500 mt-2">
-            🌶️ {capitalize(dish.spiceLevel)} spice
+            🌶️{" "}
+            {capitalize(
+              dish.spiceLevel
+            )}{" "}
+            spice
           </p>
         )}
-
-        {/* PRICE + CART */}
 
         <div className="flex items-center justify-between mt-4">
 
           <div>
 
             <span className="text-lg font-bold text-gray-900">
-              ₹{Number(dish.price || 0).toFixed(2)}
+              ₹
+              {Number(
+                dish.price || 0
+              ).toFixed(2)}
             </span>
 
             {dish.prepTime && (
               <span className="flex items-center gap-1 text-[10px] text-gray-400 mt-1">
-                <FiClock size={10} />
-                {dish.prepTime} min
+                <FiClock
+                  size={10}
+                />
+                {
+                  dish.prepTime
+                }{" "}
+                min
               </span>
             )}
 
@@ -1409,29 +1814,33 @@ function DishCard({
             <span className="text-xs text-gray-400 font-semibold">
               Unavailable
             </span>
-          ) : quantity === 0 ? (
-
+          ) : quantity ===
+            0 ? (
             <button
               onClick={() =>
                 onAdd(dish)
               }
               className="flex items-center gap-1 bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg text-sm font-bold"
             >
-              <FiPlus size={15} />
+              <FiPlus
+                size={15}
+              />
               Add
             </button>
-
           ) : (
-
             <div className="flex items-center gap-3 bg-orange-50 border border-orange-200 rounded-lg px-2 py-1.5">
 
               <button
                 onClick={() =>
-                  onDecrease(dish._id)
+                  onDecrease(
+                    dish._id
+                  )
                 }
                 className="w-7 h-7 rounded-md bg-white flex items-center justify-center text-orange-600"
               >
-                <FiMinus size={14} />
+                <FiMinus
+                  size={14}
+                />
               </button>
 
               <span className="font-bold text-sm">
@@ -1440,54 +1849,28 @@ function DishCard({
 
               <button
                 onClick={() =>
-                  onIncrease(dish._id)
+                  onIncrease(
+                    dish._id
+                  )
                 }
                 className="w-7 h-7 rounded-md bg-orange-500 text-white flex items-center justify-center"
               >
-                <FiPlus size={14} />
+                <FiPlus
+                  size={14}
+                />
               </button>
 
             </div>
           )}
 
         </div>
-      </div>
-    </div>
-  );
-}
-function OrderStatusStep({
-  label,
-  active,
-  completed,
-}) {
-  return (
-    <div className="flex flex-col items-center min-w-[55px]">
 
-      <div
-        className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${
-          completed
-            ? "bg-green-500 text-white"
-            : active
-            ? "bg-orange-500 text-white"
-            : "bg-gray-200 text-gray-400"
-        }`}
-      >
-        {completed ? "✓" : "•"}
       </div>
-
-      <span
-        className={`text-[10px] mt-1 text-center ${
-          active
-            ? "text-gray-900 font-semibold"
-            : "text-gray-400"
-        }`}
-      >
-        {label}
-      </span>
 
     </div>
   );
 }
+
 /* =========================================================
    DISH MODAL
 ========================================================= */
@@ -1516,8 +1899,6 @@ function DishModal({
         }
       >
 
-        {/* IMAGE */}
-
         <div className="relative">
 
           {dish.image ? (
@@ -1541,8 +1922,6 @@ function DishModal({
 
         </div>
 
-        {/* DETAILS */}
-
         <div className="p-5">
 
           <div className="flex items-start justify-between gap-3">
@@ -1552,7 +1931,8 @@ function DishModal({
               <div className="flex items-center gap-2">
 
                 <span>
-                  {dish.foodType === "veg"
+                  {dish.foodType ===
+                  "veg"
                     ? "🟢"
                     : "🔴"}
                 </span>
@@ -1564,18 +1944,26 @@ function DishModal({
               </div>
 
               <p className="text-orange-600 text-lg font-bold mt-2">
-                ₹{Number(dish.price || 0).toFixed(2)}
+                ₹
+                {Number(
+                  dish.price || 0
+                ).toFixed(2)}
               </p>
 
             </div>
 
-            {Number(dish.rating || 0) > 0 && (
+            {Number(
+              dish.rating || 0
+            ) > 0 && (
               <div className="flex items-center gap-1 bg-green-50 text-green-700 px-2 py-1 rounded-lg text-sm font-bold">
+
                 <FiStar
                   size={13}
                   className="fill-green-600"
                 />
+
                 {dish.rating}
+
               </div>
             )}
 
@@ -1583,23 +1971,30 @@ function DishModal({
 
           {dish.description && (
             <p className="text-sm text-gray-500 mt-4 leading-6">
-              {dish.description}
+              {
+                dish.description
+              }
             </p>
           )}
-
-          {/* INFO */}
 
           <div className="flex gap-2 flex-wrap mt-4">
 
             {dish.prepTime && (
               <span className="bg-gray-100 text-gray-600 px-3 py-1.5 rounded-lg text-xs">
-                ⏱ {dish.prepTime} min
+                ⏱{" "}
+                {
+                  dish.prepTime
+                }{" "}
+                min
               </span>
             )}
 
             {dish.spiceLevel && (
               <span className="bg-gray-100 text-gray-600 px-3 py-1.5 rounded-lg text-xs">
-                🌶️ {capitalize(dish.spiceLevel)}
+                🌶️{" "}
+                {capitalize(
+                  dish.spiceLevel
+                )}
               </span>
             )}
 
@@ -1611,35 +2006,33 @@ function DishModal({
 
           </div>
 
-          {/* TAGS */}
-
-          {dish.tags?.length > 0 && (
+          {dish.tags?.length >
+            0 && (
             <div className="flex flex-wrap gap-2 mt-4">
 
-              {dish.tags.map((tag) => (
-                <span
-                  key={tag}
-                  className="bg-gray-100 text-gray-600 px-3 py-1.5 rounded-lg text-xs"
-                >
-                  {tag}
-                </span>
-              ))}
+              {dish.tags.map(
+                (tag) => (
+                  <span
+                    key={tag}
+                    className="bg-gray-100 text-gray-600 px-3 py-1.5 rounded-lg text-xs"
+                  >
+                    {tag}
+                  </span>
+                )
+              )}
 
             </div>
           )}
 
-          {/* CART */}
-
           <div className="mt-6">
 
             {!isAvailable ? (
-
               <div className="bg-gray-100 text-gray-500 text-center py-3.5 rounded-xl font-semibold">
-                Currently unavailable
+                Currently
+                unavailable
               </div>
-
-            ) : quantity === 0 ? (
-
+            ) : quantity ===
+              0 ? (
               <button
                 onClick={() =>
                   onAdd(dish)
@@ -1648,9 +2041,7 @@ function DishModal({
               >
                 Add to Cart
               </button>
-
             ) : (
-
               <div className="flex items-center justify-between bg-orange-50 border border-orange-200 rounded-xl p-2">
 
                 <span className="font-bold text-sm pl-2">
@@ -1661,7 +2052,9 @@ function DishModal({
 
                   <button
                     onClick={() =>
-                      onDecrease(dish._id)
+                      onDecrease(
+                        dish._id
+                      )
                     }
                     className="w-9 h-9 rounded-lg bg-white flex items-center justify-center text-orange-600"
                   >
@@ -1674,7 +2067,9 @@ function DishModal({
 
                   <button
                     onClick={() =>
-                      onIncrease(dish._id)
+                      onIncrease(
+                        dish._id
+                      )
                     }
                     className="w-9 h-9 rounded-lg bg-orange-500 text-white flex items-center justify-center"
                   >
@@ -1682,12 +2077,16 @@ function DishModal({
                   </button>
 
                 </div>
+
               </div>
             )}
 
           </div>
+
         </div>
+
       </div>
+
     </div>
   );
 }
@@ -1696,7 +2095,9 @@ function DishModal({
    BADGE
 ========================================================= */
 
-function Badge({ children }) {
+function Badge({
+  children,
+}) {
   return (
     <span className="bg-white/95 backdrop-blur text-gray-800 px-2 py-1 rounded-md text-[10px] font-bold shadow-sm">
       {children}
