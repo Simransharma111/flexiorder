@@ -702,31 +702,32 @@ const fetchActiveOrders = async () => {
           className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden"
         >
 
-          {/* ORDER HEADER */}
+         {/* ORDER HEADER */}
 
-          <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+<div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
 
-            <div>
+  <div>
 
-              <h3 className="font-bold text-gray-900">
-                Order #{order._id?.slice(-6)}
-              </h3>
+    <h3 className="font-bold text-gray-900">
+      Your Order
+    </h3>
 
-              <p className="text-xs text-gray-500 mt-1">
-                {order.items?.length || 0}{" "}
-                {order.items?.length === 1
-                  ? "item"
-                  : "items"}
-              </p>
+    <p className="font-bold text-green-700 mt-1">
+      {order.items?.map((item, index) => (
+        <span key={item._id || index}>
+          {item.name} * {item.quantity || 1}
+          {index < order.items.length - 1 && ", "}
+        </span>
+      ))}
+    </p>
 
-            </div>
+  </div>
 
-            <StatusBadge
-              status={order.status}
-            />
+  <StatusBadge
+    status={order.status}
+  />
 
-          </div>
-
+</div>
           {/* STATUS MESSAGE */}
 
           <div className="px-4 pt-4">

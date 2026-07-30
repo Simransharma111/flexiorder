@@ -13,30 +13,31 @@ export default function QRInventoryPage() {
     useState(false);
 
   // GENERATE QR
-  const generateQRs = async () => {
+const generateQRs = async () => {
+  try {
+    setLoading(true);
 
-    try {
+    const res = await api.post(
+      "/qr/generate",
+      { count: Number(count) }
+    );
 
-      setLoading(true);
+    console.log("QR RESPONSE:", res.data);
 
-      const res = await api.post(
-        "/qr/generate",
-        { count }
-      );
+    setQrs(res.data.qrCodes || []);
 
-      setQrs(res.data);
+  } catch (err) {
+    console.error("QR GENERATION ERROR:", err);
 
-    } catch (err) {
+    alert(
+      err.response?.data?.message ||
+      "Failed to generate QR codes"
+    );
 
-      console.log(err);
-
-    } finally {
-
-      setLoading(false);
-
-    }
-  };
-
+  } finally {
+    setLoading(false);
+  }
+};
   // DOWNLOAD ALL PDF
   const downloadPDF = async () => {
 
