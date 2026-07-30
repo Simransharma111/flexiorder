@@ -2,66 +2,139 @@ import {
   createContext,
   useContext,
   useEffect,
+  useMemo,
   useState,
 } from "react";
 
-const CartContext = createContext();
+const CartContext = createContext(null);
 
-export const useCart = () =>
-  useContext(CartContext);
+export const useCart = () => {
+  const context = useContext(CartContext);
 
-export default function CartProvider({
-  children,
-}) {
-
-  const [cartKey, setCartKey] =
-    useState("cart_default");
-
-  const [cartItems, setCartItems] =
-    useState([]);
-
-  // LOAD CART WHEN KEY CHANGES
-  useEffect(() => {
-
-    const savedCart =
-      localStorage.getItem(cartKey);
-
-    setCartItems(
-      savedCart
-        ? JSON.parse(savedCart)
-        : []
+  if (!context) {
+    throw new Error(
+      "useCart must be used inside CartProvider"
     );
+  }
 
-  }, [cartKey]);
+  return context;
+};
 
-  // SAVE CART
-  useEffect(() => {
+export default function CartProvider({ children }) {
+  // =====================================================
+  // SESSION
+  // =====================================================
 
-    localStorage.setItem(
-      cartKey,
-      JSON.stringify(cartItems)
-    );
+  const [qrId, setQrId] = useState(null);
+  const [tableId, setTableId] = useState(null);
 
-  }, [cartItems, cartKey]);
+  const [cartItems, setCartItems] = useState([]);
 
-  // CHANGE ACTIVE CART
-  const setCartSession = (qrId) => {
+  const [cartLoaded, setCartLoaded] = useState(false);
 
-    setCartKey(`cart_${qrId}`);
+  // =====================================================
+  // CART STORAGE KEY
+  // =====================================================
 
+  const cartKey = qrId
+    ? `cart_${qrId}`
+    : null;
+
+  // =====================================================
+  // SET GUEST SESSION
+  // =====================================================
+
+  const setCartSession = ({
+    qrId: newQrId,
+    tableId: newTableId,
+  }) => {
+    if (!newQrId) {
+      console.warn("QR ID missing");
+      return;
+    }
+
+    setQrId(newQrId);
+    setTableId(newTableId || null);
   };
 
-  // ADD
+  // =====================================================
+  // LOAD CART
+  // =====================================================
+
+  useEffect(() => {
+    if (!cartKey) {
+      setCartItems([]);
+      setCartLoaded(false);
+      return;
+    }
+
+    try {
+      const savedCart =
+        localStorage.getItem(cartKey);
+
+      if (savedCart) {
+        const parsed = JSON.parse(savedCart);
+
+        setCartItems(
+          Array.isArray(parsed)
+            ? parsed
+            : []
+        );
+      } else {
+        setCartItems([]);
+      }
+    } catch (error) {
+      console.error(
+        "Failed to load cart:",
+        error
+      );
+
+      setCartItems([]);
+    }
+
+    setCartLoaded(true);
+  }, [cartKey]);
+
+  // =====================================================
+  // SAVE CART
+  // =====================================================
+
+  useEffect(() => {
+    if (!cartKey || !cartLoaded) {
+      return;
+    }
+
+    try {
+      localStorage.setItem(
+        cartKey,
+        JSON.stringify(cartItems)
+      );
+    } catch (error) {
+      console.error(
+        "Failed to save cart:",
+        error
+      );
+    }
+  }, [
+    cartItems,
+    cartKey,
+    cartLoaded,
+  ]);
+
+  // =====================================================
+  // ADD TO CART
+  // =====================================================
+
   const addToCart = (dish) => {
+    if (!dish?._id) return;
 
     setCartItems((prev) => {
-
       const existing = prev.find(
-        (item) => item._id === dish._id
+        (item) =>
+          item._id === dish._id
       );
 
       if (existing) {
-
         return prev.map((item) =>
           item._id === dish._id
             ? {
@@ -71,24 +144,28 @@ export default function CartProvider({
               }
             : item
         );
-
       }
 
       return [
         ...prev,
         {
-          ...dish,
+          _id: dish._id,
+          name: dish.name,
+          description: dish.description,
+          price: Number(dish.price || 0),
+          image: dish.image,
+          foodType: dish.foodType,
           quantity: 1,
         },
       ];
-
     });
-
   };
 
+  // =====================================================
   // INCREASE
-  const increaseQty = (id) => {
+  // =====================================================
 
+  const increaseQty = (id) => {
     setCartItems((prev) =>
       prev.map((item) =>
         item._id === id
@@ -100,12 +177,13 @@ export default function CartProvider({
           : item
       )
     );
-
   };
 
+  // =====================================================
   // DECREASE
-  const decreaseQty = (id) => {
+  // =====================================================
 
+  const decreaseQty = (id) => {
     setCartItems((prev) =>
       prev
         .map((item) =>
@@ -122,39 +200,81 @@ export default function CartProvider({
             item.quantity > 0
         )
     );
-
   };
 
-  // CLEAR
-  const clearCart = () => {
+  // =====================================================
+  // REMOVE ITEM
+  // =====================================================
 
+  const removeFromCart = (id) => {
+    setCartItems((prev) =>
+      prev.filter(
+        (item) => item._id !== id
+      )
+    );
+  };
+
+  // =====================================================
+  // CLEAR CART
+  // =====================================================
+
+  const clearCart = () => {
     setCartItems([]);
 
-    localStorage.removeItem(cartKey);
-
+    if (cartKey) {
+      localStorage.removeItem(cartKey);
+    }
   };
 
-  // TOTAL
-  const totalPrice =
-    cartItems.reduce(
-      (acc, item) =>
-        acc +
-        item.price * item.quantity,
+  // =====================================================
+  // CART COUNT
+  // =====================================================
+
+  const cartCount = useMemo(() => {
+    return cartItems.reduce(
+      (total, item) =>
+        total + Number(item.quantity || 0),
       0
     );
+  }, [cartItems]);
+
+  // =====================================================
+  // TOTAL
+  // =====================================================
+
+  const totalPrice = useMemo(() => {
+    return cartItems.reduce(
+      (total, item) =>
+        total +
+        Number(item.price || 0) *
+          Number(item.quantity || 0),
+      0
+    );
+  }, [cartItems]);
+
+  // =====================================================
+  // VALUE
+  // =====================================================
+
+  const value = {
+    qrId,
+    tableId,
+
+    cartItems,
+    cartCount,
+    totalPrice,
+
+    addToCart,
+    increaseQty,
+    decreaseQty,
+    removeFromCart,
+    clearCart,
+
+    setCartSession,
+  };
 
   return (
-    <CartContext.Provider
-      value={{
-        cartItems,
-        addToCart,
-        increaseQty,
-        decreaseQty,
-        clearCart,
-        totalPrice,
-        setCartSession,
-      }}
-    >
+    <CartContext.Provider value={value}>
       {children}
     </CartContext.Provider>
   );
