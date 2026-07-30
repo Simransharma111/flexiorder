@@ -39,7 +39,7 @@ import api from "../api/axios";
 
 const THEME_MAP = {
   stormy_morning: {
-    primary: "#e1e7f0",
+    primary: "#375d91",
     secondary: "#0F172A",
     accent: "#94A3B8",
   },
