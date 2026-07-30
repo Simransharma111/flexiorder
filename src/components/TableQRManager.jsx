@@ -21,7 +21,7 @@ export default function TableQRManager() {
           Authorization: `Bearer ${localStorage.getItem("token")}`,
         },
       });
-      setTables(res.data);
+      setTables(res.data.tables || []);
     } catch (err) {
       console.log(err);
     }
