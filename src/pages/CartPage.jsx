@@ -14,9 +14,10 @@ import {
 import { useCart } from "../context/CartContext";
 import { useEffect, useState } from "react";
 
+import api from "../api/axios";
+
 export default function CartPage() {
   const navigate = useNavigate();
-
   const { qrId } = useParams();
 
   const {
@@ -27,12 +28,22 @@ export default function CartPage() {
     decreaseQty,
     removeFromCart,
     setCartSession,
+    clearCart,
   } = useCart();
 
   const [orderType, setOrderType] =
     useState("now");
 
   const [scheduledFor, setScheduledFor] =
+    useState("");
+
+  const [guestName, setGuestName] =
+    useState("");
+
+  const [placingOrder, setPlacingOrder] =
+    useState(false);
+
+  const [error, setError] =
     useState("");
 
   // ======================================
@@ -81,10 +92,9 @@ export default function CartPage() {
   // EMPTY CART
   // ======================================
 
-  if (cartItems.length === 0) {
+  if (!cartItems || cartItems.length === 0) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6">
-
         <div className="bg-white rounded-2xl p-8 text-center shadow-sm w-full max-w-md">
 
           <div className="text-5xl mb-4">
@@ -109,39 +119,211 @@ export default function CartPage() {
           </button>
 
         </div>
-
       </div>
     );
   }
 
   // ======================================
-  // CHECKOUT
+  // PLACE ORDER
   // ======================================
 
-  const handleCheckout = () => {
-    if (
-      orderType === "schedule" &&
-      !scheduledFor
-    ) {
-      alert(
-        "Please select a schedule time."
+  const handlePlaceOrder = async () => {
+    try {
+      setError("");
+
+      // -------------------------------
+      // VALIDATION
+      // -------------------------------
+
+      if (!qrId) {
+        setError(
+          "QR information is missing."
+        );
+        return;
+      }
+
+      if (!cartItems.length) {
+        setError(
+          "Your cart is empty."
+        );
+        return;
+      }
+
+      if (
+        orderType === "schedule" &&
+        !scheduledFor
+      ) {
+        setError(
+          "Please select a schedule time."
+        );
+        return;
+      }
+
+      // -------------------------------
+      // GET TABLE INFORMATION
+      // -------------------------------
+
+      /*
+        IMPORTANT:
+
+        Your backend createOrder expects:
+
+        {
+          tableId,
+          guestName,
+          items
+        }
+
+        But this CartPage only knows qrId.
+
+        Therefore we first get the QR information.
+      */
+
+      const qrResponse =
+        await api.get(
+          `/qr/menu/${qrId}`
+        );
+
+      const table =
+        qrResponse.data?.table;
+
+      if (!table?._id) {
+        setError(
+          "Unable to find table information."
+        );
+        return;
+      }
+
+      // -------------------------------
+      // PREPARE ITEMS
+      // -------------------------------
+
+      const items = cartItems.map(
+        (item) => ({
+          menuId: item._id,
+          quantity: Number(
+            item.quantity
+          ),
+        })
       );
 
-      return;
-    }
+      // -------------------------------
+      // START LOADING
+      // -------------------------------
 
-    navigate(
-      `/checkout/${qrId}`,
-      {
-        state: {
-          orderType,
-          scheduledFor:
-            orderType === "schedule"
-              ? scheduledFor
-              : null,
-        },
+      setPlacingOrder(true);
+
+      // -------------------------------
+      // PLACE ORDER
+      // -------------------------------
+
+      const response =
+        await api.post(
+          "/orders",
+          {
+            tableId: table._id,
+
+            guestName:
+              guestName.trim() ||
+              "Guest",
+
+            items,
+
+            orderType,
+
+            scheduledFor:
+              orderType === "schedule"
+                ? scheduledFor
+                : null,
+          }
+        );
+
+      // -------------------------------
+      // SUCCESS
+      // -------------------------------
+
+      if (
+        response.data?.success
+      ) {
+        const createdOrder =
+          response.data.order;
+
+        // Save latest order ID
+        // for tracking later.
+        if (createdOrder?._id) {
+          localStorage.setItem(
+            `lastOrder_${qrId}`,
+            createdOrder._id
+          );
+        }
+
+        // Keep order history
+        if (createdOrder?._id) {
+          const historyKey =
+            `orders_${qrId}`;
+
+          const oldOrders =
+            JSON.parse(
+              localStorage.getItem(
+                historyKey
+              )
+            ) || [];
+
+          const updatedOrders = [
+            createdOrder._id,
+            ...oldOrders.filter(
+              (id) =>
+                id !== createdOrder._id
+            ),
+          ];
+
+          localStorage.setItem(
+            historyKey,
+            JSON.stringify(
+              updatedOrders
+            )
+          );
+        }
+
+        // Clear cart after successful order
+        clearCart();
+
+        /*
+          Go back to GuestMenu.
+
+          Guest can order more food.
+
+          Later we will add the
+          Previous Orders / Track Order
+          section at the top of GuestMenu.
+        */
+        navigate(`/qr/${qrId}`, {
+          replace: true,
+          state: {
+            orderPlaced: true,
+            orderId:
+              createdOrder?._id,
+          },
+        });
+      } else {
+        setError(
+          response.data?.message ||
+            "Unable to place order."
+        );
       }
-    );
+    } catch (err) {
+      console.error(
+        "PLACE ORDER ERROR:",
+        err
+      );
+
+      setError(
+        err?.response?.data?.message ||
+          "Failed to place order. Please try again."
+      );
+    } finally {
+      setPlacingOrder(false);
+    }
   };
 
   // ======================================
@@ -149,9 +331,11 @@ export default function CartPage() {
   // ======================================
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-28">
+    <div className="min-h-screen bg-gray-50 pb-32">
 
-      {/* HEADER */}
+      {/* =================================
+          HEADER
+      ================================= */}
 
       <header className="bg-white border-b sticky top-0 z-40">
 
@@ -183,13 +367,55 @@ export default function CartPage() {
 
       </header>
 
-      {/* CONTENT */}
+      {/* =================================
+          CONTENT
+      ================================= */}
 
       <main className="max-w-3xl mx-auto px-4 py-5">
 
-        {/* ITEMS */}
+        {/* =================================
+            ERROR
+        ================================= */}
 
-        <section className="space-y-3">
+        {error && (
+          <div className="mb-5 bg-red-50 border border-red-200 text-red-700 rounded-xl p-4 text-sm">
+            {error}
+          </div>
+        )}
+
+        {/* =================================
+            GUEST NAME
+        ================================= */}
+
+        <section className="bg-white rounded-2xl border p-5">
+
+          <h2 className="font-bold text-lg">
+            Guest Details
+          </h2>
+
+          <p className="text-xs text-gray-500 mt-1">
+            Enter your name for the order.
+          </p>
+
+          <input
+            type="text"
+            placeholder="Your name (optional)"
+            value={guestName}
+            onChange={(e) =>
+              setGuestName(
+                e.target.value
+              )
+            }
+            className="w-full mt-4 border border-gray-200 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-orange-400"
+          />
+
+        </section>
+
+        {/* =================================
+            CART ITEMS
+        ================================= */}
+
+        <section className="space-y-3 mt-5">
 
           {cartItems.map((item) => (
             <div
@@ -231,7 +457,7 @@ export default function CartPage() {
                   <p className="text-orange-600 font-bold mt-1">
                     ₹
                     {Number(
-                      item.price
+                      item.price || 0
                     ).toFixed(2)}
                   </p>
 
@@ -271,9 +497,11 @@ export default function CartPage() {
                       ₹
                       {(
                         Number(
-                          item.price
+                          item.price || 0
                         ) *
-                        item.quantity
+                        Number(
+                          item.quantity || 0
+                        )
                       ).toFixed(2)}
                     </strong>
 
@@ -288,7 +516,9 @@ export default function CartPage() {
 
         </section>
 
-        {/* ORDER TYPE */}
+        {/* =================================
+            ORDER TYPE
+        ================================= */}
 
         <section className="bg-white rounded-2xl border p-5 mt-5">
 
@@ -298,16 +528,20 @@ export default function CartPage() {
 
           <div className="grid grid-cols-2 gap-3 mt-4">
 
+            {/* ORDER NOW */}
+
             <button
+              type="button"
               onClick={() =>
                 setOrderType("now")
               }
               className={`p-4 rounded-xl border text-left ${
                 orderType === "now"
                   ? "border-orange-500 bg-orange-50"
-                  : "border-gray-200"
+                  : "border-gray-200 bg-white"
               }`}
             >
+
               <div className="font-bold">
                 Order Now
               </div>
@@ -315,18 +549,23 @@ export default function CartPage() {
               <div className="text-xs text-gray-500 mt-1">
                 Prepare as soon as possible
               </div>
+
             </button>
 
+            {/* SCHEDULE */}
+
             <button
+              type="button"
               onClick={() =>
                 setOrderType("schedule")
               }
               className={`p-4 rounded-xl border text-left ${
                 orderType === "schedule"
                   ? "border-orange-500 bg-orange-50"
-                  : "border-gray-200"
+                  : "border-gray-200 bg-white"
               }`}
             >
+
               <div className="font-bold flex items-center gap-2">
                 <FiClock />
                 Schedule
@@ -335,11 +574,14 @@ export default function CartPage() {
               <div className="text-xs text-gray-500 mt-1">
                 Choose a future time
               </div>
+
             </button>
 
           </div>
 
-          {/* SCHEDULE INPUT */}
+          {/* =================================
+              SCHEDULE INPUT
+          ================================= */}
 
           {orderType === "schedule" && (
             <div className="mt-4">
@@ -357,7 +599,7 @@ export default function CartPage() {
                     e.target.value
                   )
                 }
-                className="w-full mt-2 border rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-orange-400"
+                className="w-full mt-2 border border-gray-200 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-orange-400"
               />
 
               <p className="text-xs text-gray-500 mt-2">
@@ -370,42 +612,69 @@ export default function CartPage() {
 
         </section>
 
-        {/* TOTAL */}
+        {/* =================================
+            TOTAL
+        ================================= */}
 
         <section className="bg-white rounded-2xl border p-5 mt-5">
 
           <div className="flex justify-between text-gray-500">
             <span>Subtotal</span>
+
             <span>
-              ₹{totalPrice.toFixed(2)}
+              ₹
+              {Number(
+                totalPrice || 0
+              ).toFixed(2)}
             </span>
           </div>
 
           <div className="border-t my-4" />
 
           <div className="flex justify-between text-lg font-bold">
-            <span>Total</span>
 
             <span>
-              ₹{totalPrice.toFixed(2)}
+              Total
             </span>
+
+            <span>
+              ₹
+              {Number(
+                totalPrice || 0
+              ).toFixed(2)}
+            </span>
+
           </div>
 
         </section>
 
       </main>
 
-      {/* CHECKOUT BAR */}
+      {/* =================================
+          PLACE ORDER BAR
+      ================================= */}
 
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t p-3">
+      <div className="fixed bottom-0 left-0 right-0 bg-white border-t p-3 z-50">
 
         <div className="max-w-3xl mx-auto">
 
           <button
-            onClick={handleCheckout}
-            className="w-full bg-orange-500 text-white py-3.5 rounded-xl font-bold"
+            onClick={handlePlaceOrder}
+            disabled={placingOrder}
+            className={`w-full py-3.5 rounded-xl font-bold text-white ${
+              placingOrder
+                ? "bg-gray-400 cursor-not-allowed"
+                : "bg-orange-500 hover:bg-orange-600"
+            }`}
           >
-            Continue to Order
+
+            {placingOrder
+              ? "Placing Order..."
+              : orderType ===
+                "schedule"
+              ? "Schedule Order"
+              : "Place Order"}
+
           </button>
 
         </div>
