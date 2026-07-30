@@ -10,10 +10,8 @@ import LoginPage from "./pages/LoginPage";
 import OwnerDashboard from "./pages/OwnerDashboard";
 import TrackOrderPage from "./pages/TrackOrderPage";
 import SuperAdminDashboard from "./pages/SuperAdminDashboard";
-import Homepage from "./pages/Homepage";
 import QRInventoryPage from "./pages/QRInventoryPage";
 import HotelSetupPage from "./pages/HotelSetupPage";
-import HomeRedirect from "./components/HomeRedirect";
 import CartPage from "./pages/CartPage";
 
 export default function App() {
@@ -25,30 +23,30 @@ export default function App() {
 
         {/* ================= PUBLIC ================= */}
 
+        {/* Directly open Login Page */}
         <Route
           path="/"
-          element={<HomeRedirect />}
-        />
-
-        <Route
-          path="/homepage"
           element={<LoginPage />}
         />
 
-        {/* Guest scans QR */}
-        <Route
-          path="/qr/:qrId"
-          element={<GuestMenuPage />}
-        />
-        <Route
-  path="/cart/:qrId"
-  element={<CartPage />}
-/>
         <Route
           path="/login"
           element={<LoginPage />}
         />
 
+        {/* Guest QR Menu */}
+        <Route
+          path="/qr/:qrId"
+          element={<GuestMenuPage />}
+        />
+
+        {/* Guest Cart */}
+        <Route
+          path="/cart/:qrId"
+          element={<CartPage />}
+        />
+
+        {/* QR Inventory */}
         <Route
           path="/qr"
           element={<QRInventoryPage />}
@@ -59,9 +57,7 @@ export default function App() {
         <Route
           path="/superadmin"
           element={
-            <ProtectedRoute
-              allowedRoles={["superadmin"]}
-            >
+            <ProtectedRoute allowedRoles={["superadmin"]}>
               <SuperAdminDashboard />
             </ProtectedRoute>
           }
