@@ -43,7 +43,8 @@ export default function GuestMenuPage() {
   // =========================================================
 
   const [cart, setCart] = useState([]);
-
+const [activeOrder, setActiveOrder] = useState(null);
+const [orderLoading, setOrderLoading] = useState(false);
   // =========================================================
   // DISH MODAL
   // =========================================================
@@ -69,6 +70,48 @@ export default function GuestMenuPage() {
 
     fetchMenu();
   }, [qrId]);
+  const fetchActiveOrder = async () => {
+  try {
+    const savedOrderId =
+      localStorage.getItem(`activeOrder_${qrId}`);
+
+    if (!savedOrderId) {
+      setActiveOrder(null);
+      return;
+    }
+
+    setOrderLoading(true);
+
+    const res = await api.get(
+      `/orders/${savedOrderId}`
+    );
+
+    const order = res.data;
+
+    // Order is finished
+    if (
+      order.status === "delivered" ||
+      order.status === "cancelled"
+    ) {
+      localStorage.removeItem(
+        `activeOrder_${qrId}`
+      );
+
+      setActiveOrder(null);
+      return;
+    }
+
+    setActiveOrder(order);
+
+  } catch (err) {
+    console.error(
+      "Failed to fetch active order:",
+      err
+    );
+  } finally {
+    setOrderLoading(false);
+  }
+};
 
   const fetchMenu = async () => {
     try {
@@ -514,6 +557,169 @@ export default function GuestMenuPage() {
 
         </div>
       </header>
+      {/* =================================================
+    ACTIVE ORDER TRACKING
+================================================= */}
+
+{activeOrder && (
+  <section className="max-w-6xl mx-auto px-4 pt-4">
+
+    <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
+
+      {/* HEADER */}
+
+      <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+
+        <div>
+          <h2 className="font-bold text-gray-900">
+            Your Order
+          </h2>
+
+          <p className="text-xs text-gray-500">
+            Order #{activeOrder._id?.slice(-6)}
+          </p>
+        </div>
+
+        <span
+          className={`px-3 py-1 rounded-full text-xs font-bold ${
+            activeOrder.status === "pending"
+              ? "bg-yellow-100 text-yellow-700"
+              : activeOrder.status === "accepted"
+              ? "bg-blue-100 text-blue-700"
+              : activeOrder.status === "preparing"
+              ? "bg-orange-100 text-orange-700"
+              : activeOrder.status === "ready"
+              ? "bg-green-100 text-green-700"
+              : "bg-gray-100 text-gray-700"
+          }`}
+        >
+          {capitalize(activeOrder.status)}
+        </span>
+
+      </div>
+
+      {/* STATUS */}
+
+      <div className="p-4">
+
+        <div className="flex items-center justify-between">
+
+          {/* PENDING */}
+
+          <OrderStatusStep
+            label="Placed"
+            active={[
+              "pending",
+              "accepted",
+              "preparing",
+              "ready",
+              "delivered",
+            ].includes(activeOrder.status)}
+            completed={[
+              "accepted",
+              "preparing",
+              "ready",
+              "delivered",
+            ].includes(activeOrder.status)}
+          />
+
+          <div className="flex-1 h-1 bg-gray-200 mx-1" />
+
+          {/* ACCEPTED */}
+
+          <OrderStatusStep
+            label="Accepted"
+            active={[
+              "accepted",
+              "preparing",
+              "ready",
+              "delivered",
+            ].includes(activeOrder.status)}
+            completed={[
+              "preparing",
+              "ready",
+              "delivered",
+            ].includes(activeOrder.status)}
+          />
+
+          <div className="flex-1 h-1 bg-gray-200 mx-1" />
+
+          {/* PREPARING */}
+
+          <OrderStatusStep
+            label="Preparing"
+            active={[
+              "preparing",
+              "ready",
+              "delivered",
+            ].includes(activeOrder.status)}
+            completed={[
+              "ready",
+              "delivered",
+            ].includes(activeOrder.status)}
+          />
+
+          <div className="flex-1 h-1 bg-gray-200 mx-1" />
+
+          {/* READY */}
+
+          <OrderStatusStep
+            label="Ready"
+            active={[
+              "ready",
+              "delivered",
+            ].includes(activeOrder.status)}
+            completed={[
+              "delivered",
+            ].includes(activeOrder.status)}
+          />
+
+        </div>
+
+        {/* ESTIMATED TIME */}
+
+        {activeOrder.estimatedTime && (
+          <div className="mt-4 bg-gray-50 rounded-xl p-3 flex items-center justify-between">
+
+            <div className="flex items-center gap-2">
+
+              <FiClock className="text-orange-500" />
+
+              <span className="text-sm text-gray-600">
+                Estimated preparation
+              </span>
+
+            </div>
+
+            <strong className="text-sm">
+              {activeOrder.estimatedTime} min
+            </strong>
+
+          </div>
+        )}
+
+        {/* TOTAL */}
+
+        <div className="flex justify-between mt-3 text-sm">
+
+          <span className="text-gray-500">
+            Order Total
+          </span>
+
+          <strong>
+            ₹{Number(
+              activeOrder.totalAmount || 0
+            ).toFixed(2)}
+          </strong>
+
+        </div>
+
+      </div>
+
+    </div>
+
+  </section>
+)}
 
       {/* =====================================================
           HOTEL INTRO
@@ -1249,7 +1455,39 @@ function DishCard({
     </div>
   );
 }
+function OrderStatusStep({
+  label,
+  active,
+  completed,
+}) {
+  return (
+    <div className="flex flex-col items-center min-w-[55px]">
 
+      <div
+        className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${
+          completed
+            ? "bg-green-500 text-white"
+            : active
+            ? "bg-orange-500 text-white"
+            : "bg-gray-200 text-gray-400"
+        }`}
+      >
+        {completed ? "✓" : "•"}
+      </div>
+
+      <span
+        className={`text-[10px] mt-1 text-center ${
+          active
+            ? "text-gray-900 font-semibold"
+            : "text-gray-400"
+        }`}
+      >
+        {label}
+      </span>
+
+    </div>
+  );
+}
 /* =========================================================
    DISH MODAL
 ========================================================= */
