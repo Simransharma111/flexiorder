@@ -12,6 +12,8 @@ import {
   FiStar,
   FiX,
   FiCalendar,
+  FiCheckCircle,
+  FiLoader,
 } from "react-icons/fi";
 
 export default function GuestMenuPage() {
@@ -30,12 +32,13 @@ export default function GuestMenuPage() {
   const [error, setError] = useState("");
 
   // =========================================================
-  // MENU FILTERS
+  // FILTERS
   // =========================================================
 
   const [search, setSearch] = useState("");
   const [foodFilter, setFoodFilter] = useState("all");
-  const [activeCategory, setActiveCategory] = useState("All");
+  const [activeCategory, setActiveCategory] =
+    useState("All");
 
   // =========================================================
   // CART
@@ -47,23 +50,24 @@ export default function GuestMenuPage() {
   // ACTIVE ORDER
   // =========================================================
 
-  const [activeOrder, setActiveOrder] = useState(null);
-  const [orderLoading, setOrderLoading] = useState(false);
+  const [activeOrder, setActiveOrder] =
+    useState(null);
+
+  const [orderLoading, setOrderLoading] =
+    useState(false);
 
   // =========================================================
-  // DISH MODAL
+  // MODALS
   // =========================================================
 
-  const [selectedDish, setSelectedDish] = useState(null);
+  const [selectedDish, setSelectedDish] =
+    useState(null);
+
+  const [showScheduleInfo, setShowScheduleInfo] =
+    useState(false);
 
   // =========================================================
-  // SCHEDULE
-  // =========================================================
-
-  const [showScheduleInfo, setShowScheduleInfo] = useState(false);
-
-  // =========================================================
-  // FETCH MENU + ACTIVE ORDER
+  // FETCH MENU
   // =========================================================
 
   useEffect(() => {
@@ -74,50 +78,51 @@ export default function GuestMenuPage() {
     }
 
     fetchMenu();
-    fetchActiveOrder();
   }, [qrId]);
-
-  // =========================================================
-  // FETCH MENU
-  // =========================================================
 
   const fetchMenu = async () => {
     try {
       setLoading(true);
       setError("");
 
-      const res = await api.get(`/qr/menu/${qrId}`);
+      const res = await api.get(
+        `/qr/menu/${qrId}`
+      );
 
       setHotel(res.data?.hotel || null);
       setTable(res.data?.table || null);
       setDishes(res.data?.dishes || []);
+
     } catch (err) {
-      console.error("Failed to load menu:", err);
+      console.error(
+        "Failed to load menu:",
+        err
+      );
 
       setError(
         err?.response?.data?.message ||
           "Unable to load menu. Please scan the QR code again."
       );
+
     } finally {
       setLoading(false);
     }
   };
 
   // =========================================================
-  // FETCH ACTIVE ORDER
+  // FETCH ACTIVE ORDER AUTOMATICALLY
   // =========================================================
 
   const fetchActiveOrder = async () => {
+    if (!qrId) return;
+
     try {
-      const savedOrderId = localStorage.getItem(
-        `activeOrder_${qrId}`
-      );
+      const savedOrderId =
+        localStorage.getItem(
+          `activeOrder_${qrId}`
+        );
 
-      console.log(
-        "Saved active order ID:",
-        savedOrderId
-      );
-
+      // No order yet
       if (!savedOrderId) {
         setActiveOrder(null);
         return;
@@ -129,7 +134,9 @@ export default function GuestMenuPage() {
         `/orders/${savedOrderId}`
       );
 
-      const order = res.data;
+      const order =
+        res.data?.order ||
+        res.data;
 
       console.log(
         "ACTIVE ORDER:",
@@ -137,7 +144,7 @@ export default function GuestMenuPage() {
       );
 
       // =====================================================
-      // REMOVE ONLY WHEN COMPLETED / CANCELLED
+      // COMPLETED / CANCELLED
       // =====================================================
 
       if (
@@ -161,9 +168,6 @@ export default function GuestMenuPage() {
         err
       );
 
-      // If order doesn't exist anymore,
-      // remove stale localStorage ID
-
       if (
         err?.response?.status === 404
       ) {
@@ -180,17 +184,22 @@ export default function GuestMenuPage() {
   };
 
   // =========================================================
-  // REFRESH ORDER EVERY 10 SECONDS
+  // LOAD ACTIVE ORDER WHEN PAGE OPENS
   // =========================================================
 
   useEffect(() => {
     if (!qrId) return;
 
-    const interval = setInterval(() => {
-      fetchActiveOrder();
-    }, 10000);
+    fetchActiveOrder();
 
-    return () => clearInterval(interval);
+    const interval =
+      setInterval(() => {
+        fetchActiveOrder();
+      }, 5000);
+
+    return () => {
+      clearInterval(interval);
+    };
   }, [qrId]);
 
   // =========================================================
@@ -201,16 +210,22 @@ export default function GuestMenuPage() {
     if (!qrId) return;
 
     try {
-      const storageKey = `cart_${qrId}`;
+      const storageKey =
+        `cart_${qrId}`;
 
       const savedCart =
-        localStorage.getItem(storageKey);
+        localStorage.getItem(
+          storageKey
+        );
 
       if (savedCart) {
-        setCart(JSON.parse(savedCart));
+        setCart(
+          JSON.parse(savedCart)
+        );
       } else {
         setCart([]);
       }
+
     } catch (err) {
       console.error(
         "Failed to load cart:",
@@ -373,9 +388,7 @@ export default function GuestMenuPage() {
   // CART HELPERS
   // =========================================================
 
-  const getCartQuantity = (
-    dishId
-  ) => {
+  const getCartQuantity = (dishId) => {
     const item = cart.find(
       (item) =>
         item._id === dishId
@@ -407,8 +420,7 @@ export default function GuestMenuPage() {
               ? {
                   ...item,
                   quantity:
-                    item.quantity +
-                    1,
+                    item.quantity + 1,
                 }
               : item
         );
@@ -462,8 +474,7 @@ export default function GuestMenuPage() {
             ? {
                 ...item,
                 quantity:
-                  item.quantity -
-                  1,
+                  item.quantity - 1,
               }
             : item
       );
@@ -521,27 +532,6 @@ export default function GuestMenuPage() {
   };
 
   // =========================================================
-  // TRACK ORDER
-  // =========================================================
-
-  const openTrackOrder = () => {
-    const orderId =
-      localStorage.getItem(
-        `activeOrder_${qrId}`
-      );
-
-    if (orderId) {
-      navigate(
-        `/track-order/${orderId}`
-      );
-    } else {
-      alert(
-        "You do not have an active order yet."
-      );
-    }
-  };
-
-  // =========================================================
   // SCHEDULE
   // =========================================================
 
@@ -564,6 +554,7 @@ export default function GuestMenuPage() {
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+
         <div className="text-center">
 
           <div className="w-10 h-10 border-4 border-gray-200 border-t-orange-500 rounded-full animate-spin mx-auto" />
@@ -573,6 +564,7 @@ export default function GuestMenuPage() {
           </p>
 
         </div>
+
       </div>
     );
   }
@@ -625,8 +617,6 @@ export default function GuestMenuPage() {
 
           <div className="flex items-center justify-between h-16">
 
-            {/* HOTEL INFO */}
-
             <div className="flex items-center gap-3 min-w-0">
 
               {hotel?.logo ? (
@@ -669,16 +659,12 @@ export default function GuestMenuPage() {
 
             </div>
 
-            {/* CART */}
-
             <button
               onClick={openCart}
               className="relative w-11 h-11 rounded-xl bg-orange-500 text-white flex items-center justify-center shrink-0"
             >
 
-              <FiShoppingBag
-                size={19}
-              />
+              <FiShoppingBag size={19} />
 
               {cartCount > 0 && (
                 <span className="absolute -top-1 -right-1 min-w-5 h-5 px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center">
@@ -695,7 +681,7 @@ export default function GuestMenuPage() {
       </header>
 
       {/* =====================================================
-          ACTIVE ORDER TRACKING
+          AUTOMATIC ORDER STATUS
       ===================================================== */}
 
       {activeOrder && (
@@ -710,43 +696,63 @@ export default function GuestMenuPage() {
               <div>
 
                 <h2 className="font-bold text-gray-900">
-                  Your Order
+                  Order Status
                 </h2>
 
                 <p className="text-xs text-gray-500">
                   Order #
-                  {activeOrder._id?.slice(
-                    -6
-                  )}
+                  {activeOrder._id?.slice(-6)}
                 </p>
 
               </div>
 
-              <span
-                className={`px-3 py-1 rounded-full text-xs font-bold ${
-                  activeOrder.status ===
-                  "pending"
-                    ? "bg-yellow-100 text-yellow-700"
-                    : activeOrder.status ===
-                      "accepted"
-                    ? "bg-blue-100 text-blue-700"
-                    : activeOrder.status ===
-                      "preparing"
-                    ? "bg-orange-100 text-orange-700"
-                    : activeOrder.status ===
-                      "ready"
-                    ? "bg-green-100 text-green-700"
-                    : "bg-gray-100 text-gray-700"
-                }`}
-              >
-                {capitalize(
+              <StatusBadge
+                status={
                   activeOrder.status
-                )}
-              </span>
+                }
+              />
 
             </div>
 
-            {/* STATUS */}
+            {/* CURRENT STATUS MESSAGE */}
+
+            <div className="px-4 pt-4">
+
+              <div className="bg-orange-50 rounded-xl p-4 flex items-center gap-3">
+
+                <div className="w-10 h-10 bg-orange-100 text-orange-600 rounded-full flex items-center justify-center shrink-0">
+
+                  {orderLoading ? (
+                    <FiLoader
+                      className="animate-spin"
+                    />
+                  ) : (
+                    <FiClock />
+                  )}
+
+                </div>
+
+                <div>
+
+                  <p className="font-bold text-gray-900">
+                    {getStatusTitle(
+                      activeOrder.status
+                    )}
+                  </p>
+
+                  <p className="text-xs text-gray-500 mt-1">
+                    {getStatusMessage(
+                      activeOrder.status
+                    )}
+                  </p>
+
+                </div>
+
+              </div>
+
+            </div>
+
+            {/* STATUS STEPS */}
 
             <div className="p-4">
 
@@ -773,7 +779,16 @@ export default function GuestMenuPage() {
                   )}
                 />
 
-                <div className="flex-1 h-1 bg-gray-200 mx-1" />
+                <StatusLine
+                  active={[
+                    "accepted",
+                    "preparing",
+                    "ready",
+                    "delivered",
+                  ].includes(
+                    activeOrder.status
+                  )}
+                />
 
                 <OrderStatusStep
                   label="Accepted"
@@ -794,7 +809,15 @@ export default function GuestMenuPage() {
                   )}
                 />
 
-                <div className="flex-1 h-1 bg-gray-200 mx-1" />
+                <StatusLine
+                  active={[
+                    "preparing",
+                    "ready",
+                    "delivered",
+                  ].includes(
+                    activeOrder.status
+                  )}
+                />
 
                 <OrderStatusStep
                   label="Preparing"
@@ -813,7 +836,14 @@ export default function GuestMenuPage() {
                   )}
                 />
 
-                <div className="flex-1 h-1 bg-gray-200 mx-1" />
+                <StatusLine
+                  active={[
+                    "ready",
+                    "delivered",
+                  ].includes(
+                    activeOrder.status
+                  )}
+                />
 
                 <OrderStatusStep
                   label="Ready"
@@ -875,17 +905,6 @@ export default function GuestMenuPage() {
 
               </div>
 
-              {/* TRACK BUTTON */}
-
-              <button
-                onClick={
-                  openTrackOrder
-                }
-                className="w-full mt-4 border border-orange-500 text-orange-600 py-2.5 rounded-xl font-bold text-sm"
-              >
-                Track Full Order
-              </button>
-
             </div>
 
           </div>
@@ -944,12 +963,10 @@ export default function GuestMenuPage() {
 
       <section className="max-w-6xl mx-auto px-4 mt-5">
 
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-2 gap-3">
 
           <button
-            onClick={
-              openSchedule
-            }
+            onClick={openSchedule}
             className="bg-white border border-gray-200 rounded-xl p-4 flex items-center gap-3 text-left hover:border-orange-300"
           >
 
@@ -994,31 +1011,6 @@ export default function GuestMenuPage() {
 
           </button>
 
-          <button
-            onClick={
-              openTrackOrder
-            }
-            className="bg-white border border-gray-200 rounded-xl p-4 flex items-center gap-3 text-left hover:border-orange-300 col-span-2 md:col-span-1"
-          >
-
-            <div className="w-10 h-10 rounded-lg bg-orange-50 text-orange-600 flex items-center justify-center">
-              <FiClock />
-            </div>
-
-            <div>
-
-              <p className="font-bold text-gray-900 text-sm">
-                Track Order
-              </p>
-
-              <p className="text-xs text-gray-500">
-                Check order status
-              </p>
-
-            </div>
-
-          </button>
-
         </div>
 
       </section>
@@ -1041,9 +1033,7 @@ export default function GuestMenuPage() {
             placeholder="Search dishes..."
             value={search}
             onChange={(e) =>
-              setSearch(
-                e.target.value
-              )
+              setSearch(e.target.value)
             }
             className="w-full bg-white border border-gray-200 rounded-xl py-3.5 pl-11 pr-4 outline-none focus:ring-2 focus:ring-orange-400"
           />
@@ -1062,9 +1052,7 @@ export default function GuestMenuPage() {
 
           <button
             onClick={() =>
-              setFoodFilter(
-                "all"
-              )
+              setFoodFilter("all")
             }
             className={`px-4 py-2 rounded-full text-sm font-semibold whitespace-nowrap ${
               foodFilter === "all"
@@ -1077,9 +1065,7 @@ export default function GuestMenuPage() {
 
           <button
             onClick={() =>
-              setFoodFilter(
-                "veg"
-              )
+              setFoodFilter("veg")
             }
             className={`px-4 py-2 rounded-full text-sm font-semibold whitespace-nowrap ${
               foodFilter === "veg"
@@ -1092,9 +1078,7 @@ export default function GuestMenuPage() {
 
           <button
             onClick={() =>
-              setFoodFilter(
-                "nonveg"
-              )
+              setFoodFilter("nonveg")
             }
             className={`px-4 py-2 rounded-full text-sm font-semibold whitespace-nowrap ${
               foodFilter === "nonveg"
@@ -1114,158 +1098,79 @@ export default function GuestMenuPage() {
       ===================================================== */}
 
       {!search &&
-        activeCategory ===
-          "All" && (
+        activeCategory === "All" && (
           <>
-
-            {featured.length >
-              0 && (
+            {featured.length > 0 && (
               <FeaturedSection
                 title="Featured"
-                dishes={
-                  featured
-                }
-                onAdd={
-                  addToCart
-                }
-                onDecrease={
-                  decreaseQuantity
-                }
-                onIncrease={
-                  increaseQuantity
-                }
-                getQuantity={
-                  getCartQuantity
-                }
-                onSelect={
-                  setSelectedDish
-                }
+                dishes={featured}
+                onAdd={addToCart}
+                onDecrease={decreaseQuantity}
+                onIncrease={increaseQuantity}
+                getQuantity={getCartQuantity}
+                onSelect={setSelectedDish}
               />
             )}
 
-            {todaySpecial.length >
-              0 && (
+            {todaySpecial.length > 0 && (
               <FeaturedSection
                 title="Today's Special"
-                dishes={
-                  todaySpecial
-                }
-                onAdd={
-                  addToCart
-                }
-                onDecrease={
-                  decreaseQuantity
-                }
-                onIncrease={
-                  increaseQuantity
-                }
-                getQuantity={
-                  getCartQuantity
-                }
-                onSelect={
-                  setSelectedDish
-                }
+                dishes={todaySpecial}
+                onAdd={addToCart}
+                onDecrease={decreaseQuantity}
+                onIncrease={increaseQuantity}
+                getQuantity={getCartQuantity}
+                onSelect={setSelectedDish}
               />
             )}
 
-            {recommended.length >
-              0 && (
+            {recommended.length > 0 && (
               <FeaturedSection
                 title="Recommended"
-                dishes={
-                  recommended
-                }
-                onAdd={
-                  addToCart
-                }
-                onDecrease={
-                  decreaseQuantity
-                }
-                onIncrease={
-                  increaseQuantity
-                }
-                getQuantity={
-                  getCartQuantity
-                }
-                onSelect={
-                  setSelectedDish
-                }
+                dishes={recommended}
+                onAdd={addToCart}
+                onDecrease={decreaseQuantity}
+                onIncrease={increaseQuantity}
+                getQuantity={getCartQuantity}
+                onSelect={setSelectedDish}
               />
             )}
 
-            {popular.length >
-              0 && (
+            {popular.length > 0 && (
               <FeaturedSection
                 title="Most Popular"
                 dishes={popular}
-                onAdd={
-                  addToCart
-                }
-                onDecrease={
-                  decreaseQuantity
-                }
-                onIncrease={
-                  increaseQuantity
-                }
-                getQuantity={
-                  getCartQuantity
-                }
-                onSelect={
-                  setSelectedDish
-                }
+                onAdd={addToCart}
+                onDecrease={decreaseQuantity}
+                onIncrease={increaseQuantity}
+                getQuantity={getCartQuantity}
+                onSelect={setSelectedDish}
               />
             )}
 
-            {bestsellers.length >
-              0 && (
+            {bestsellers.length > 0 && (
               <FeaturedSection
                 title="Best Sellers"
-                dishes={
-                  bestsellers
-                }
-                onAdd={
-                  addToCart
-                }
-                onDecrease={
-                  decreaseQuantity
-                }
-                onIncrease={
-                  increaseQuantity
-                }
-                getQuantity={
-                  getCartQuantity
-                }
-                onSelect={
-                  setSelectedDish
-                }
+                dishes={bestsellers}
+                onAdd={addToCart}
+                onDecrease={decreaseQuantity}
+                onIncrease={increaseQuantity}
+                getQuantity={getCartQuantity}
+                onSelect={setSelectedDish}
               />
             )}
 
-            {newArrivals.length >
-              0 && (
+            {newArrivals.length > 0 && (
               <FeaturedSection
                 title="New Arrivals"
-                dishes={
-                  newArrivals
-                }
-                onAdd={
-                  addToCart
-                }
-                onDecrease={
-                  decreaseQuantity
-                }
-                onIncrease={
-                  increaseQuantity
-                }
-                getQuantity={
-                  getCartQuantity
-                }
-                onSelect={
-                  setSelectedDish
-                }
+                dishes={newArrivals}
+                onAdd={addToCart}
+                onDecrease={decreaseQuantity}
+                onIncrease={increaseQuantity}
+                getQuantity={getCartQuantity}
+                onSelect={setSelectedDish}
               />
             )}
-
           </>
         )}
 
@@ -1323,8 +1228,7 @@ export default function GuestMenuPage() {
               </p>
 
               <p className="text-sm text-gray-500 mt-1">
-                Try another category
-                or search.
+                Try another category or search.
               </p>
 
             </div>
@@ -1337,9 +1241,7 @@ export default function GuestMenuPage() {
                   quantity={getCartQuantity(
                     dish._id
                   )}
-                  onAdd={
-                    addToCart
-                  }
+                  onAdd={addToCart}
                   onDecrease={
                     decreaseQuantity
                   }
@@ -1368,9 +1270,7 @@ export default function GuestMenuPage() {
           <div className="max-w-6xl mx-auto">
 
             <button
-              onClick={
-                openCart
-              }
+              onClick={openCart}
               className="w-full bg-orange-500 hover:bg-orange-600 text-white rounded-xl px-5 py-3 flex items-center justify-between font-bold"
             >
 
@@ -1384,17 +1284,14 @@ export default function GuestMenuPage() {
 
                   <p className="text-xs opacity-90">
                     {cartCount}{" "}
-                    {cartCount ===
-                    1
+                    {cartCount === 1
                       ? "item"
                       : "items"}
                   </p>
 
                   <p>
                     ₹
-                    {cartTotal.toFixed(
-                      2
-                    )}
+                    {cartTotal.toFixed(2)}
                   </p>
 
                 </div>
@@ -1419,26 +1316,16 @@ export default function GuestMenuPage() {
 
       {selectedDish && (
         <DishModal
-          dish={
-            selectedDish
-          }
+          dish={selectedDish}
           quantity={getCartQuantity(
             selectedDish._id
           )}
           onClose={() =>
-            setSelectedDish(
-              null
-            )
+            setSelectedDish(null)
           }
-          onAdd={
-            addToCart
-          }
-          onDecrease={
-            decreaseQuantity
-          }
-          onIncrease={
-            increaseQuantity
-          }
+          onAdd={addToCart}
+          onDecrease={decreaseQuantity}
+          onIncrease={increaseQuantity}
         />
       )}
 
@@ -1450,9 +1337,7 @@ export default function GuestMenuPage() {
         <div
           className="fixed inset-0 z-[110] bg-black/50 flex items-end md:items-center justify-center p-4"
           onClick={() =>
-            setShowScheduleInfo(
-              false
-            )
+            setShowScheduleInfo(false)
           }
         >
 
@@ -1479,9 +1364,7 @@ export default function GuestMenuPage() {
 
               <button
                 onClick={() =>
-                  setShowScheduleInfo(
-                    false
-                  )
+                  setShowScheduleInfo(false)
                 }
                 className="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center"
               >
@@ -1491,20 +1374,14 @@ export default function GuestMenuPage() {
             </div>
 
             <p className="text-sm text-gray-500 mt-4 leading-6">
-              Your cart is ready.
-              Continue to the
-              cart page to select
-              the date and time
-              for your scheduled
-              order.
+              Your cart is ready. Continue to
+              the cart page to select the date
+              and time for your scheduled order.
             </p>
 
             <button
               onClick={() => {
-                setShowScheduleInfo(
-                  false
-                );
-
+                setShowScheduleInfo(false);
                 openCart();
               }}
               className="w-full mt-5 bg-orange-500 hover:bg-orange-600 text-white py-3 rounded-xl font-bold"
@@ -1519,6 +1396,97 @@ export default function GuestMenuPage() {
 
     </div>
   );
+}
+
+/* =========================================================
+   STATUS BADGE
+========================================================= */
+
+function StatusBadge({ status }) {
+  const styles = {
+    pending:
+      "bg-yellow-100 text-yellow-700",
+
+    accepted:
+      "bg-blue-100 text-blue-700",
+
+    preparing:
+      "bg-orange-100 text-orange-700",
+
+    ready:
+      "bg-green-100 text-green-700",
+
+    delivered:
+      "bg-green-100 text-green-700",
+
+    cancelled:
+      "bg-red-100 text-red-700",
+  };
+
+  return (
+    <span
+      className={`px-3 py-1 rounded-full text-xs font-bold ${
+        styles[status] ||
+        "bg-gray-100 text-gray-700"
+      }`}
+    >
+      {capitalize(status)}
+    </span>
+  );
+}
+
+/* =========================================================
+   STATUS MESSAGE
+========================================================= */
+
+function getStatusTitle(status) {
+  switch (status) {
+    case "pending":
+      return "Order received";
+
+    case "accepted":
+      return "Order accepted";
+
+    case "preparing":
+      return "Your food is being prepared";
+
+    case "ready":
+      return "Your order is ready";
+
+    case "delivered":
+      return "Order delivered";
+
+    case "cancelled":
+      return "Order cancelled";
+
+    default:
+      return "Order status updated";
+  }
+}
+
+function getStatusMessage(status) {
+  switch (status) {
+    case "pending":
+      return "Waiting for the kitchen to accept your order.";
+
+    case "accepted":
+      return "The kitchen has accepted your order.";
+
+    case "preparing":
+      return "Your food is currently being prepared.";
+
+    case "ready":
+      return "Your order is ready. Please collect it.";
+
+    case "delivered":
+      return "Your order has been delivered.";
+
+    case "cancelled":
+      return "This order has been cancelled.";
+
+    default:
+      return "We are updating your order status.";
+  }
 }
 
 /* =========================================================
@@ -1542,9 +1510,7 @@ function OrderStatusStep({
             : "bg-gray-200 text-gray-400"
         }`}
       >
-        {completed
-          ? "✓"
-          : "•"}
+        {completed ? "✓" : "•"}
       </div>
 
       <span
@@ -1558,6 +1524,22 @@ function OrderStatusStep({
       </span>
 
     </div>
+  );
+}
+
+/* =========================================================
+   STATUS LINE
+========================================================= */
+
+function StatusLine({ active }) {
+  return (
+    <div
+      className={`flex-1 h-1 mx-1 rounded ${
+        active
+          ? "bg-green-400"
+          : "bg-gray-200"
+      }`}
+    />
   );
 }
 
@@ -1711,8 +1693,7 @@ function DishCard({
           <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
 
             <span className="bg-white px-3 py-2 rounded-lg font-bold text-sm">
-              Currently
-              Unavailable
+              Currently Unavailable
             </span>
 
           </div>
@@ -1738,9 +1719,7 @@ function DishCard({
 
           </div>
 
-          {Number(
-            dish.rating || 0
-          ) > 0 && (
+          {Number(dish.rating || 0) > 0 && (
             <span className="flex items-center gap-1 text-xs font-semibold text-gray-700 shrink-0">
 
               <FiStar
@@ -1755,22 +1734,19 @@ function DishCard({
 
         </div>
 
-        {dish.tags?.length >
-          0 && (
+        {dish.tags?.length > 0 && (
           <div className="flex gap-1 flex-wrap mt-2">
 
             {dish.tags
               .slice(0, 3)
-              .map(
-                (tag) => (
-                  <span
-                    key={tag}
-                    className="bg-gray-100 text-gray-600 px-2 py-1 rounded-md text-[10px] font-medium"
-                  >
-                    {tag}
-                  </span>
-                )
-              )}
+              .map((tag) => (
+                <span
+                  key={tag}
+                  className="bg-gray-100 text-gray-600 px-2 py-1 rounded-md text-[10px] font-medium"
+                >
+                  {tag}
+                </span>
+              ))}
 
           </div>
         )}
@@ -1798,13 +1774,8 @@ function DishCard({
 
             {dish.prepTime && (
               <span className="flex items-center gap-1 text-[10px] text-gray-400 mt-1">
-                <FiClock
-                  size={10}
-                />
-                {
-                  dish.prepTime
-                }{" "}
-                min
+                <FiClock size={10} />
+                {dish.prepTime} min
               </span>
             )}
 
@@ -1814,17 +1785,14 @@ function DishCard({
             <span className="text-xs text-gray-400 font-semibold">
               Unavailable
             </span>
-          ) : quantity ===
-            0 ? (
+          ) : quantity === 0 ? (
             <button
               onClick={() =>
                 onAdd(dish)
               }
               className="flex items-center gap-1 bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg text-sm font-bold"
             >
-              <FiPlus
-                size={15}
-              />
+              <FiPlus size={15} />
               Add
             </button>
           ) : (
@@ -1838,9 +1806,7 @@ function DishCard({
                 }
                 className="w-7 h-7 rounded-md bg-white flex items-center justify-center text-orange-600"
               >
-                <FiMinus
-                  size={14}
-                />
+                <FiMinus size={14} />
               </button>
 
               <span className="font-bold text-sm">
@@ -1855,9 +1821,7 @@ function DishCard({
                 }
                 className="w-7 h-7 rounded-md bg-orange-500 text-white flex items-center justify-center"
               >
-                <FiPlus
-                  size={14}
-                />
+                <FiPlus size={14} />
               </button>
 
             </div>
@@ -1971,9 +1935,7 @@ function DishModal({
 
           {dish.description && (
             <p className="text-sm text-gray-500 mt-4 leading-6">
-              {
-                dish.description
-              }
+              {dish.description}
             </p>
           )}
 
@@ -1981,11 +1943,7 @@ function DishModal({
 
             {dish.prepTime && (
               <span className="bg-gray-100 text-gray-600 px-3 py-1.5 rounded-lg text-xs">
-                ⏱{" "}
-                {
-                  dish.prepTime
-                }{" "}
-                min
+                ⏱ {dish.prepTime} min
               </span>
             )}
 
@@ -2006,8 +1964,7 @@ function DishModal({
 
           </div>
 
-          {dish.tags?.length >
-            0 && (
+          {dish.tags?.length > 0 && (
             <div className="flex flex-wrap gap-2 mt-4">
 
               {dish.tags.map(
@@ -2028,11 +1985,9 @@ function DishModal({
 
             {!isAvailable ? (
               <div className="bg-gray-100 text-gray-500 text-center py-3.5 rounded-xl font-semibold">
-                Currently
-                unavailable
+                Currently unavailable
               </div>
-            ) : quantity ===
-              0 ? (
+            ) : quantity === 0 ? (
               <button
                 onClick={() =>
                   onAdd(dish)
@@ -2095,9 +2050,7 @@ function DishModal({
    BADGE
 ========================================================= */
 
-function Badge({
-  children,
-}) {
+function Badge({ children }) {
   return (
     <span className="bg-white/95 backdrop-blur text-gray-800 px-2 py-1 rounded-md text-[10px] font-bold shadow-sm">
       {children}

@@ -9,14 +9,9 @@ import {
   FiLoader,
 } from "react-icons/fi";
 
-import {
-  useNavigate,
-  useParams,
-} from "react-router-dom";
-
+import { useNavigate, useParams } from "react-router-dom";
 import { useCart } from "../context/CartContext";
 import { useEffect, useState } from "react";
-
 import api from "../api/axios";
 
 export default function CartPage() {
@@ -34,27 +29,16 @@ export default function CartPage() {
     setCartSession,
   } = useCart();
 
-  const [orderType, setOrderType] =
-    useState("now");
+  const [orderType, setOrderType] = useState("now");
+  const [scheduledFor, setScheduledFor] = useState("");
+  const [guestName, setGuestName] = useState("");
+  const [placingOrder, setPlacingOrder] = useState(false);
+  const [successMessage, setSuccessMessage] = useState("");
+  const [errorMessage, setErrorMessage] = useState("");
 
-  const [scheduledFor, setScheduledFor] =
-    useState("");
-
-  const [guestName, setGuestName] =
-    useState("");
-
-  const [placingOrder, setPlacingOrder] =
-    useState(false);
-
-  const [successMessage, setSuccessMessage] =
-    useState("");
-
-  const [errorMessage, setErrorMessage] =
-    useState("");
-
-  // ==========================================
+  // =========================================================
   // SET CART SESSION
-  // ==========================================
+  // =========================================================
 
   useEffect(() => {
     if (qrId) {
@@ -62,54 +46,34 @@ export default function CartPage() {
     }
   }, [qrId, setCartSession]);
 
-  // ==========================================
+  // =========================================================
   // MINIMUM SCHEDULE TIME
-  // ==========================================
+  // =========================================================
 
   const getMinDateTime = () => {
     const date = new Date();
 
-    date.setHours(
-      date.getHours() + 1
-    );
+    date.setHours(date.getHours() + 1);
 
     const year = date.getFullYear();
-
-    const month = String(
-      date.getMonth() + 1
-    ).padStart(2, "0");
-
-    const day = String(
-      date.getDate()
-    ).padStart(2, "0");
-
-    const hours = String(
-      date.getHours()
-    ).padStart(2, "0");
-
-    const minutes = String(
-      date.getMinutes()
-    ).padStart(2, "0");
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    const hours = String(date.getHours()).padStart(2, "0");
+    const minutes = String(date.getMinutes()).padStart(2, "0");
 
     return `${year}-${month}-${day}T${hours}:${minutes}`;
   };
 
-  // ==========================================
+  // =========================================================
   // EMPTY CART
-  // ==========================================
+  // =========================================================
 
-  if (
-    cartItems.length === 0 &&
-    !successMessage
-  ) {
+  if (cartItems.length === 0 && !successMessage) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6">
-
         <div className="bg-white rounded-2xl p-8 text-center shadow-sm w-full max-w-md">
 
-          <div className="text-5xl mb-4">
-            🛒
-          </div>
+          <div className="text-5xl mb-4">🛒</div>
 
           <h2 className="text-xl font-bold text-gray-900">
             Your cart is empty
@@ -120,81 +84,45 @@ export default function CartPage() {
           </p>
 
           <button
-            onClick={() =>
-              navigate(`/qr/${qrId}`)
-            }
+            onClick={() => navigate(`/qr/${qrId}`)}
             className="mt-6 w-full bg-orange-500 hover:bg-orange-600 text-white py-3 rounded-xl font-bold"
           >
             Browse Menu
           </button>
 
         </div>
-
       </div>
     );
   }
 
-  // ==========================================
+  // =========================================================
   // PLACE ORDER
-  // ==========================================
+  // =========================================================
 
   const handlePlaceOrder = async () => {
-
-    // Clear previous messages
     setErrorMessage("");
     setSuccessMessage("");
 
-    // ------------------------------------------
-    // CHECK CART
-    // ------------------------------------------
-
     if (!cartItems.length) {
-      setErrorMessage(
-        "Your cart is empty."
-      );
+      setErrorMessage("Your cart is empty.");
       return;
     }
-
-    // ------------------------------------------
-    // CHECK QR ID
-    // ------------------------------------------
 
     if (!qrId) {
-      setErrorMessage(
-        "QR information is missing."
-      );
+      setErrorMessage("QR information is missing.");
       return;
     }
 
-    // ------------------------------------------
-    // CHECK SCHEDULE
-    // ------------------------------------------
-
-    if (
-      orderType === "schedule" &&
-      !scheduledFor
-    ) {
-      setErrorMessage(
-        "Please select a schedule time."
-      );
+    if (orderType === "schedule" && !scheduledFor) {
+      setErrorMessage("Please select a schedule time.");
       return;
     }
 
-    // ------------------------------------------
-    // CHECK SCHEDULE IS AT LEAST 1 HOUR
-    // ------------------------------------------
-
-    if (
-      orderType === "schedule" &&
-      scheduledFor
-    ) {
-
-      const selectedTime =
-        new Date(scheduledFor).getTime();
+    if (orderType === "schedule" && scheduledFor) {
+      const selectedTime = new Date(scheduledFor).getTime();
 
       const minimumTime =
-        Date.now() +
-        60 * 60 * 1000;
+        Date.now() + 60 * 60 * 1000;
 
       if (selectedTime < minimumTime) {
         setErrorMessage(
@@ -205,72 +133,59 @@ export default function CartPage() {
     }
 
     try {
-
       setPlacingOrder(true);
 
-      // ----------------------------------------
-      // GET TABLE INFORMATION FROM QR MENU
-      // ----------------------------------------
+      // =====================================================
+      // GET TABLE INFORMATION
+      // =====================================================
 
       let tableId = null;
 
       try {
-
-        const menuResponse =
-          await api.get(
-            `/qr/menu/${qrId}`
-          );
+        const menuResponse = await api.get(
+          `/qr/menu/${qrId}`
+        );
 
         tableId =
           menuResponse.data?.table?._id ||
           menuResponse.data?.table?.id ||
           menuResponse.data?.tableId;
-
       } catch (menuError) {
-
         console.error(
           "Failed to get table:",
           menuError
         );
-
       }
 
-      // ----------------------------------------
-      // FALLBACK: QR ID MAY BE TABLE ID
-      // ----------------------------------------
+      // =====================================================
+      // FALLBACK
+      // =====================================================
 
       if (!tableId) {
         tableId = qrId;
       }
 
-      // ----------------------------------------
-      // PREPARE ORDER ITEMS
-      // ----------------------------------------
+      // =====================================================
+      // ITEMS
+      // =====================================================
 
-      const items = cartItems.map(
-        (item) => ({
-          menuId: item._id,
-          quantity: Number(
-            item.quantity
-          ),
-        })
-      );
+      const items = cartItems.map((item) => ({
+        menuId: item._id,
+        quantity: Number(item.quantity),
+      }));
 
-      // ----------------------------------------
+      // =====================================================
       // ORDER DATA
-      // ----------------------------------------
+      // =====================================================
 
       const orderData = {
         tableId,
 
         guestName:
-          guestName.trim() ||
-          "Guest",
+          guestName.trim() || "Guest",
 
         items,
 
-        // These fields are harmless if your
-        // backend currently doesn't use them.
         orderType,
 
         scheduledFor:
@@ -279,34 +194,32 @@ export default function CartPage() {
             : null,
       };
 
-      console.log(
-        "📦 ORDER DATA:",
+      console.log("📦 ORDER DATA:", orderData);
+
+      // =====================================================
+      // CREATE ORDER
+      // =====================================================
+
+      const response = await api.post(
+        "/orders",
         orderData
       );
-
-      // ----------------------------------------
-      // CREATE ORDER
-      // ----------------------------------------
-
-      const response =
-        await api.post(
-          "/orders",
-          orderData
-        );
 
       console.log(
         "✅ ORDER RESPONSE:",
         response.data
       );
 
-      // ----------------------------------------
+      // =====================================================
       // SUCCESS
-      // ----------------------------------------
+      // =====================================================
 
       if (
         response.data?.success ||
         response.status === 201
       ) {
+        const createdOrder =
+          response.data?.order;
 
         setSuccessMessage(
           orderType === "schedule"
@@ -314,17 +227,26 @@ export default function CartPage() {
             : "Order placed successfully!"
         );
 
-        // Save latest order for tracking
-        if (response.data?.order) {
+        // ===================================================
+        // SAVE ACTIVE ORDER
+        // ===================================================
 
+        if (createdOrder?._id) {
           localStorage.setItem(
-            `latestOrder_${qrId}`,
-            JSON.stringify(
-              response.data.order
-            )
+            `activeOrder_${qrId}`,
+            createdOrder._id
           );
 
-          // Keep previous orders
+          // Latest order
+          localStorage.setItem(
+            `latestOrder_${qrId}`,
+            JSON.stringify(createdOrder)
+          );
+
+          // =================================================
+          // PREVIOUS ORDERS
+          // =================================================
+
           const previousOrdersKey =
             `previousOrders_${qrId}`;
 
@@ -336,7 +258,7 @@ export default function CartPage() {
             ) || [];
 
           const updatedOrders = [
-            response.data.order,
+            createdOrder,
             ...oldOrders,
           ];
 
@@ -348,36 +270,24 @@ export default function CartPage() {
           );
         }
 
-        // --------------------------------------
+        // ===================================================
         // CLEAR CART
-        // --------------------------------------
+        // ===================================================
 
         clearCart();
 
-        // --------------------------------------
-        // GO BACK TO MENU
-        // --------------------------------------
+        // ===================================================
+        // RETURN TO MENU
+        // ===================================================
 
         setTimeout(() => {
-
-          navigate(
-            `/qr/${qrId}`,
-            {
-              replace: true,
-              state: {
-                orderPlaced: true,
-                order:
-                  response.data?.order ||
-                  null,
-              },
-            }
-          );
-
+          navigate(`/qr/${qrId}`, {
+            replace: true,
+          });
         }, 1800);
       }
 
     } catch (error) {
-
       console.error(
         "❌ PLACE ORDER ERROR:",
         error
@@ -391,32 +301,25 @@ export default function CartPage() {
       setErrorMessage(message);
 
     } finally {
-
       setPlacingOrder(false);
-
     }
   };
 
-  // ==========================================
+  // =========================================================
   // UI
-  // ==========================================
+  // =========================================================
 
   return (
     <div className="min-h-screen bg-gray-50 pb-32">
 
-      {/* =====================================
-          SUCCESS MESSAGE
-      ===================================== */}
-
+      {/* SUCCESS */}
       {successMessage && (
         <div className="fixed inset-0 z-[999] bg-black/40 flex items-center justify-center p-5">
 
           <div className="bg-white rounded-3xl p-7 w-full max-w-sm text-center shadow-2xl">
 
             <div className="w-16 h-16 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto">
-
               <FiCheckCircle size={34} />
-
             </div>
 
             <h2 className="text-xl font-bold text-gray-900 mt-4">
@@ -432,14 +335,10 @@ export default function CartPage() {
             </p>
 
           </div>
-
         </div>
       )}
 
-      {/* =====================================
-          ERROR MESSAGE
-      ===================================== */}
-
+      {/* ERROR */}
       {errorMessage && (
         <div className="fixed top-5 left-1/2 -translate-x-1/2 z-[1000] w-[calc(100%-32px)] max-w-md">
 
@@ -472,14 +371,10 @@ export default function CartPage() {
             </button>
 
           </div>
-
         </div>
       )}
 
-      {/* =====================================
-          HEADER
-      ===================================== */}
-
+      {/* HEADER */}
       <header className="bg-white border-b sticky top-0 z-40">
 
         <div className="max-w-3xl mx-auto px-4 h-16 flex items-center gap-3">
@@ -513,20 +408,13 @@ export default function CartPage() {
 
       </header>
 
-      {/* =====================================
-          CONTENT
-      ===================================== */}
-
+      {/* CONTENT */}
       <main className="max-w-3xl mx-auto px-4 py-5">
 
-        {/* ===================================
-            CART ITEMS
-        =================================== */}
-
+        {/* CART ITEMS */}
         <section className="space-y-3">
 
           {cartItems.map((item) => (
-
             <div
               key={item._id}
               className="bg-white rounded-2xl border border-gray-200 p-4"
@@ -556,9 +444,7 @@ export default function CartPage() {
 
                     <button
                       onClick={() =>
-                        removeFromCart(
-                          item._id
-                        )
+                        removeFromCart(item._id)
                       }
                       disabled={placingOrder}
                       className="text-red-500 shrink-0"
@@ -576,8 +462,6 @@ export default function CartPage() {
                   </p>
 
                   <div className="flex items-center justify-between mt-3 gap-3">
-
-                    {/* QUANTITY */}
 
                     <div className="flex items-center gap-3 bg-orange-50 rounded-lg p-1">
 
@@ -611,8 +495,6 @@ export default function CartPage() {
 
                     </div>
 
-                    {/* ITEM TOTAL */}
-
                     <strong>
                       ₹
                       {(
@@ -632,15 +514,11 @@ export default function CartPage() {
               </div>
 
             </div>
-
           ))}
 
         </section>
 
-        {/* ===================================
-            GUEST NAME
-        =================================== */}
-
+        {/* GUEST */}
         <section className="bg-white rounded-2xl border border-gray-200 p-5 mt-5">
 
           <h2 className="font-bold text-lg">
@@ -655,9 +533,7 @@ export default function CartPage() {
             type="text"
             value={guestName}
             onChange={(e) =>
-              setGuestName(
-                e.target.value
-              )
+              setGuestName(e.target.value)
             }
             placeholder="Enter your name"
             disabled={placingOrder}
@@ -666,10 +542,7 @@ export default function CartPage() {
 
         </section>
 
-        {/* ===================================
-            ORDER TYPE
-        =================================== */}
-
+        {/* ORDER TYPE */}
         <section className="bg-white rounded-2xl border border-gray-200 p-5 mt-5">
 
           <h2 className="font-bold text-lg">
@@ -677,8 +550,6 @@ export default function CartPage() {
           </h2>
 
           <div className="grid grid-cols-2 gap-3 mt-4">
-
-            {/* ORDER NOW */}
 
             <button
               onClick={() =>
@@ -691,7 +562,6 @@ export default function CartPage() {
                   : "border-gray-200 bg-white"
               }`}
             >
-
               <div className="font-bold">
                 Order Now
               </div>
@@ -699,10 +569,7 @@ export default function CartPage() {
               <div className="text-xs text-gray-500 mt-1">
                 Prepare as soon as possible
               </div>
-
             </button>
-
-            {/* SCHEDULE */}
 
             <button
               onClick={() =>
@@ -715,7 +582,6 @@ export default function CartPage() {
                   : "border-gray-200 bg-white"
               }`}
             >
-
               <div className="font-bold flex items-center gap-2">
                 <FiClock />
                 Schedule
@@ -724,15 +590,11 @@ export default function CartPage() {
               <div className="text-xs text-gray-500 mt-1">
                 Choose a future time
               </div>
-
             </button>
 
           </div>
 
-          {/* SCHEDULE INPUT */}
-
           {orderType === "schedule" && (
-
             <div className="mt-4">
 
               <label className="text-sm font-semibold">
@@ -753,27 +615,19 @@ export default function CartPage() {
               />
 
               <p className="text-xs text-gray-500 mt-2">
-                Scheduled orders must be at least
-                1 hour in advance.
+                Scheduled orders must be at least 1 hour in advance.
               </p>
 
             </div>
-
           )}
 
         </section>
 
-        {/* ===================================
-            TOTAL
-        =================================== */}
-
+        {/* TOTAL */}
         <section className="bg-white rounded-2xl border border-gray-200 p-5 mt-5">
 
           <div className="flex justify-between text-gray-500">
-
-            <span>
-              Subtotal
-            </span>
+            <span>Subtotal</span>
 
             <span>
               ₹
@@ -781,16 +635,12 @@ export default function CartPage() {
                 totalPrice || 0
               ).toFixed(2)}
             </span>
-
           </div>
 
           <div className="border-t my-4" />
 
           <div className="flex justify-between text-lg font-bold">
-
-            <span>
-              Total
-            </span>
+            <span>Total</span>
 
             <span>
               ₹
@@ -798,17 +648,13 @@ export default function CartPage() {
                 totalPrice || 0
               ).toFixed(2)}
             </span>
-
           </div>
 
         </section>
 
       </main>
 
-      {/* =====================================
-          PLACE ORDER BAR
-      ===================================== */}
-
+      {/* PLACE ORDER */}
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-3 z-50">
 
         <div className="max-w-3xl mx-auto">
@@ -825,7 +671,6 @@ export default function CartPage() {
                   className="animate-spin"
                   size={19}
                 />
-
                 Placing Order...
               </>
             ) : (
@@ -834,9 +679,7 @@ export default function CartPage() {
                   ? "Schedule Order"
                   : "Place Order"}
 
-                <span>
-                  •
-                </span>
+                <span>•</span>
 
                 ₹
                 {Number(
