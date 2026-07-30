@@ -15,7 +15,7 @@ import {
 } from "react-icons/fi";
 
 export default function GuestMenuPage() {
-  const { tableId } = useParams();
+  const { qrId } = useParams();
   const navigate = useNavigate();
 
   // =====================================================
@@ -56,10 +56,7 @@ export default function GuestMenuPage() {
       setLoading(true);
       setError("");
 
-      const res = await api.get(
-        `/menu/table/${tableId}`
-      );
-
+     const res = await api.get(`/qr/menu/${qrId}`);
       setTable(res.data?.table || null);
       setDishes(res.data?.dishes || []);
 
