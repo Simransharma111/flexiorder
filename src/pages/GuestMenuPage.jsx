@@ -11,15 +11,17 @@ import {
   FiClock,
   FiStar,
   FiX,
+  FiCalendar,
+  FiArrowLeft,
 } from "react-icons/fi";
 
 export default function GuestMenuPage() {
   const { qrId } = useParams();
   const navigate = useNavigate();
 
-  // =====================================================
-  // STATE
-  // =====================================================
+  // =========================================================
+  // HOTEL / TABLE / MENU
+  // =========================================================
 
   const [hotel, setHotel] = useState(null);
   const [table, setTable] = useState(null);
@@ -28,29 +30,35 @@ export default function GuestMenuPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
+  // =========================================================
+  // MENU FILTERS
+  // =========================================================
+
   const [search, setSearch] = useState("");
   const [foodFilter, setFoodFilter] = useState("all");
   const [activeCategory, setActiveCategory] = useState("All");
 
-  const [selectedDish, setSelectedDish] = useState(null);
+  // =========================================================
+  // CART
+  // =========================================================
 
   const [cart, setCart] = useState([]);
 
-  // =====================================================
-  // CART STORAGE KEY
-  // =====================================================
+  // =========================================================
+  // DISH MODAL
+  // =========================================================
 
-  // IMPORTANT:
-  // Cart belongs to this QR/table session.
-  // We use qrId because that is what the guest URL contains.
+  const [selectedDish, setSelectedDish] = useState(null);
 
-  const cartStorageKey = qrId
-    ? `cart_${qrId}`
-    : null;
+  // =========================================================
+  // SCHEDULE ORDER
+  // =========================================================
 
-  // =====================================================
-  // FETCH MENU
-  // =====================================================
+  const [showScheduleInfo, setShowScheduleInfo] = useState(false);
+
+  // =========================================================
+  // FETCH MENU USING QR ID
+  // =========================================================
 
   useEffect(() => {
     if (!qrId) {
@@ -73,76 +81,79 @@ export default function GuestMenuPage() {
 
       console.log("QR MENU RESPONSE:", res.data);
 
-      if (!res.data) {
-        throw new Error("Empty server response");
-      }
-
-      setHotel(res.data.hotel || null);
-      setTable(res.data.table || null);
-      setDishes(res.data.dishes || []);
-
+      setHotel(res.data?.hotel || null);
+      setTable(res.data?.table || null);
+      setDishes(res.data?.dishes || []);
     } catch (err) {
       console.error("Failed to load menu:", err);
 
       setError(
         err?.response?.data?.message ||
-        err?.message ||
-        "Unable to load menu."
+          "Unable to load menu. Please scan the QR code again."
       );
     } finally {
       setLoading(false);
     }
   };
 
-  // =====================================================
-  // LOAD CART
-  // =====================================================
+  // =========================================================
+  // CART STORAGE
+  //
+  // IMPORTANT:
+  // Cart belongs to QR, NOT tableId.
+  // =========================================================
 
   useEffect(() => {
-    if (!cartStorageKey) {
-      setCart([]);
-      return;
-    }
+    if (!qrId) return;
 
     try {
-      const savedCart = JSON.parse(
-        localStorage.getItem(cartStorageKey)
-      );
+      const storageKey = `cart_${qrId}`;
 
-      if (Array.isArray(savedCart)) {
-        setCart(savedCart);
+      const savedCart = localStorage.getItem(storageKey);
+
+      if (savedCart) {
+        setCart(JSON.parse(savedCart));
       } else {
         setCart([]);
       }
-
     } catch (err) {
       console.error("Failed to load cart:", err);
       setCart([]);
     }
-  }, [cartStorageKey]);
+  }, [qrId]);
 
-  // =====================================================
+  // =========================================================
   // SAVE CART
-  // =====================================================
+  // =========================================================
 
   useEffect(() => {
-    if (!cartStorageKey) return;
+    if (!qrId) return;
 
-    localStorage.setItem(
-      cartStorageKey,
-      JSON.stringify(cart)
-    );
-  }, [cart, cartStorageKey]);
+    try {
+      localStorage.setItem(
+        `cart_${qrId}`,
+        JSON.stringify(cart)
+      );
+    } catch (err) {
+      console.error("Failed to save cart:", err);
+    }
+  }, [cart, qrId]);
 
-  // =====================================================
+  // =========================================================
   // CATEGORIES
-  // =====================================================
+  // =========================================================
 
   const categories = useMemo(() => {
     const uniqueCategories = [
       ...new Set(
         dishes
-          .map((dish) => dish.category)
+          .map((dish) => {
+            if (typeof dish.category === "object") {
+              return dish.category?.name;
+            }
+
+            return dish.category;
+          })
           .filter(Boolean)
       ),
     ];
@@ -150,17 +161,23 @@ export default function GuestMenuPage() {
     return ["All", ...uniqueCategories];
   }, [dishes]);
 
-  // =====================================================
-  // FILTERED DISHES
-  // =====================================================
+  // =========================================================
+  // FILTER DISHES
+  // =========================================================
 
   const filteredDishes = useMemo(() => {
-    const searchText = search.toLowerCase().trim();
+    const searchText = search.trim().toLowerCase();
 
     return dishes.filter((dish) => {
+      let dishCategory = dish.category;
+
+      if (typeof dish.category === "object") {
+        dishCategory = dish.category?.name;
+      }
+
       const categoryMatch =
         activeCategory === "All" ||
-        dish.category === activeCategory;
+        dishCategory === activeCategory;
 
       const foodMatch =
         foodFilter === "all" ||
@@ -168,15 +185,13 @@ export default function GuestMenuPage() {
 
       const searchMatch =
         !searchText ||
-        dish.name
-          ?.toLowerCase()
-          .includes(searchText) ||
+        dish.name?.toLowerCase().includes(searchText) ||
         dish.description
           ?.toLowerCase()
           .includes(searchText) ||
         dish.tags?.some((tag) =>
-          tag
-            ?.toLowerCase()
+          String(tag)
+            .toLowerCase()
             .includes(searchText)
         );
 
@@ -193,52 +208,52 @@ export default function GuestMenuPage() {
     search,
   ]);
 
-  // =====================================================
-  // FEATURED DISHES
-  // =====================================================
+  // =========================================================
+  // FEATURED SECTIONS
+  // =========================================================
 
-  const available = (dish) =>
+  const availableDish = (dish) =>
     dish.isAvailable !== false;
 
   const todaySpecial = dishes.filter(
     (dish) =>
-      available(dish) &&
+      availableDish(dish) &&
       dish.todaySpecial
   );
 
   const recommended = dishes.filter(
     (dish) =>
-      available(dish) &&
+      availableDish(dish) &&
       dish.isRecommended
   );
 
   const popular = dishes.filter(
     (dish) =>
-      available(dish) &&
+      availableDish(dish) &&
       dish.isPopular
   );
 
   const bestsellers = dishes.filter(
     (dish) =>
-      available(dish) &&
+      availableDish(dish) &&
       dish.isBestseller
   );
 
   const newArrivals = dishes.filter(
     (dish) =>
-      available(dish) &&
+      availableDish(dish) &&
       dish.isNewArrival
   );
 
   const featured = dishes.filter(
     (dish) =>
-      available(dish) &&
+      availableDish(dish) &&
       dish.featured
   );
 
-  // =====================================================
+  // =========================================================
   // CART HELPERS
-  // =====================================================
+  // =========================================================
 
   const getCartQuantity = (dishId) => {
     const item = cart.find(
@@ -248,12 +263,10 @@ export default function GuestMenuPage() {
     return item?.quantity || 0;
   };
 
-  // =====================================================
-  // ADD TO CART
-  // =====================================================
-
   const addToCart = (dish) => {
-    if (!available(dish)) return;
+    if (dish.isAvailable === false) {
+      return;
+    }
 
     setCart((prev) => {
       const existing = prev.find(
@@ -276,18 +289,15 @@ export default function GuestMenuPage() {
         {
           _id: dish._id,
           name: dish.name,
+          description: dish.description,
           price: Number(dish.price || 0),
-          image: dish.image || "",
-          foodType: dish.foodType || "",
+          image: dish.image,
+          foodType: dish.foodType,
           quantity: 1,
         },
       ];
     });
   };
-
-  // =====================================================
-  // DECREASE
-  // =====================================================
 
   const decreaseQuantity = (dishId) => {
     setCart((prev) => {
@@ -316,23 +326,19 @@ export default function GuestMenuPage() {
     });
   };
 
-  // =====================================================
-  // INCREASE
-  // =====================================================
-
   const increaseQuantity = (dishId) => {
     const dish = dishes.find(
       (item) => item._id === dishId
     );
 
-    if (!dish) return;
-
-    addToCart(dish);
+    if (dish) {
+      addToCart(dish);
+    }
   };
 
-  // =====================================================
+  // =========================================================
   // CART TOTAL
-  // =====================================================
+  // =========================================================
 
   const cartCount = cart.reduce(
     (total, item) =>
@@ -348,68 +354,76 @@ export default function GuestMenuPage() {
     0
   );
 
-  // =====================================================
+  // =========================================================
   // OPEN CART
-  // =====================================================
+  //
+  // IMPORTANT:
+  // Send QR ID, NOT tableId.
+  // =========================================================
 
   const openCart = () => {
-    if (!table?._id) {
-      alert("Table information is not available.");
+    if (!qrId) return;
+
+    navigate(`/cart/${qrId}`);
+  };
+
+  // =========================================================
+  // TRACK ORDER
+  // =========================================================
+
+  const openTrackOrder = () => {
+    const lastOrderId = localStorage.getItem(
+      `lastOrder_${qrId}`
+    );
+
+    if (lastOrderId) {
+      navigate(`/track-order/${lastOrderId}`);
+    } else {
+      alert(
+        "You do not have an active order yet."
+      );
+    }
+  };
+
+  // =========================================================
+  // SCHEDULE
+  // =========================================================
+
+  const openSchedule = () => {
+    if (cartCount === 0) {
+      alert("Please add items to cart first.");
       return;
     }
 
-    // IMPORTANT:
-    // Cart page needs tableId because orders belong
-    // to a real Table document.
-
-    navigate(`/cart/${table._id}`, {
-      state: {
-        qrId,
-        table,
-        hotel,
-      },
-    });
+    setShowScheduleInfo(true);
   };
 
-  // =====================================================
-  // TABLE / ROOM LABEL
-  // =====================================================
-
-  const locationLabel =
-    table?.type === "room"
-      ? "Room"
-      : "Table";
-
-  // =====================================================
+  // =========================================================
   // LOADING
-  // =====================================================
+  // =========================================================
 
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
-
           <div className="w-10 h-10 border-4 border-gray-200 border-t-orange-500 rounded-full animate-spin mx-auto" />
 
           <p className="text-gray-500 mt-4 text-sm">
             Loading menu...
           </p>
-
         </div>
       </div>
     );
   }
 
-  // =====================================================
+  // =========================================================
   // ERROR
-  // =====================================================
+  // =========================================================
 
   if (error) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6">
-
         <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8 text-center max-w-md w-full">
-
           <h2 className="text-xl font-bold text-gray-900">
             Menu unavailable
           </h2>
@@ -424,86 +438,86 @@ export default function GuestMenuPage() {
           >
             Try Again
           </button>
-
         </div>
-
       </div>
     );
   }
 
-  // =====================================================
-  // MAIN
-  // =====================================================
+  // =========================================================
+  // MAIN UI
+  // =========================================================
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-28">
+    <div className="min-h-screen bg-gray-50 pb-32">
 
-      {/* =================================================
+      {/* =====================================================
           HEADER
-      ================================================= */}
+      ===================================================== */}
 
       <header className="bg-white sticky top-0 z-40 border-b border-gray-100">
-
         <div className="max-w-6xl mx-auto px-4">
 
           <div className="flex items-center justify-between h-16">
 
-            <div className="flex items-center gap-3">
+            {/* HOTEL INFO */}
+
+            <div className="flex items-center gap-3 min-w-0">
 
               {hotel?.logo ? (
                 <img
                   src={hotel.logo}
-                  alt={hotel.name || "Hotel"}
+                  alt={hotel?.name || "Hotel"}
                   className="w-10 h-10 rounded-xl object-cover"
                 />
               ) : (
                 <div className="w-10 h-10 rounded-xl bg-orange-100 flex items-center justify-center text-orange-600 font-bold">
-                  {hotel?.name?.charAt(0) || "H"}
+                  {hotel?.name
+                    ?.charAt(0)
+                    ?.toUpperCase() || "H"}
                 </div>
               )}
 
-              <div>
+              <div className="min-w-0">
 
-                <h1 className="font-bold text-gray-900 leading-tight">
+                <h1 className="font-bold text-gray-900 leading-tight truncate">
                   {hotel?.name || "Welcome"}
                 </h1>
 
                 {table && (
                   <p className="text-xs text-gray-500">
-                    {locationLabel}{" "}
+                    {table.type === "room"
+                      ? "Room"
+                      : "Table"}{" "}
                     {table.tableNumber || ""}
                   </p>
                 )}
 
               </div>
-
             </div>
 
             {/* CART */}
 
             <button
               onClick={openCart}
-              className="relative w-11 h-11 rounded-xl bg-gray-900 text-white flex items-center justify-center"
+              className="relative w-11 h-11 rounded-xl bg-orange-500 text-white flex items-center justify-center shrink-0"
             >
               <FiShoppingBag size={19} />
 
               {cartCount > 0 && (
-                <span className="absolute -top-1 -right-1 min-w-5 h-5 px-1 rounded-full bg-orange-500 text-white text-[10px] font-bold flex items-center justify-center">
+                <span className="absolute -top-1 -right-1 min-w-5 h-5 px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center">
                   {cartCount}
                 </span>
               )}
-
             </button>
 
           </div>
 
         </div>
-
       </header>
 
-      {/* =================================================
+      {/* =====================================================
           HOTEL INTRO
-      ================================================= */}
+      ===================================================== */}
 
       <section className="max-w-6xl mx-auto px-4 pt-5">
 
@@ -519,7 +533,7 @@ export default function GuestMenuPage() {
 
           <div className="p-5">
 
-            <h2 className="text-xl md:text-2xl font-bold">
+            <h2 className="text-xl md:text-2xl font-bold text-gray-900">
               {hotel?.tagline ||
                 "Order your favourites"}
             </h2>
@@ -531,20 +545,90 @@ export default function GuestMenuPage() {
             )}
 
             {table && (
-              <div className="mt-3 inline-flex items-center gap-2 bg-orange-50 text-orange-700 px-3 py-2 rounded-lg text-sm font-semibold">
-                {locationLabel} {table.tableNumber}
+              <div className="mt-4 inline-flex items-center gap-2 bg-orange-50 text-orange-700 px-3 py-2 rounded-lg text-sm font-semibold">
+                {table.type === "room"
+                  ? "Room"
+                  : "Table"}{" "}
+                {table.tableNumber}
               </div>
             )}
 
           </div>
+        </div>
+      </section>
+
+      {/* =====================================================
+          QUICK ACTIONS
+      ===================================================== */}
+
+      <section className="max-w-6xl mx-auto px-4 mt-5">
+
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+
+          <button
+            onClick={openSchedule}
+            className="bg-white border border-gray-200 rounded-xl p-4 flex items-center gap-3 text-left hover:border-orange-300"
+          >
+            <div className="w-10 h-10 rounded-lg bg-orange-50 text-orange-600 flex items-center justify-center">
+              <FiCalendar />
+            </div>
+
+            <div>
+              <p className="font-bold text-gray-900 text-sm">
+                Schedule Order
+              </p>
+
+              <p className="text-xs text-gray-500">
+                Order for later
+              </p>
+            </div>
+          </button>
+
+          <button
+            onClick={openCart}
+            className="bg-white border border-gray-200 rounded-xl p-4 flex items-center gap-3 text-left hover:border-orange-300"
+          >
+            <div className="w-10 h-10 rounded-lg bg-orange-50 text-orange-600 flex items-center justify-center">
+              <FiShoppingBag />
+            </div>
+
+            <div>
+              <p className="font-bold text-gray-900 text-sm">
+                My Cart
+              </p>
+
+              <p className="text-xs text-gray-500">
+                {cartCount} items
+              </p>
+            </div>
+          </button>
+
+          <button
+            onClick={openTrackOrder}
+            className="bg-white border border-gray-200 rounded-xl p-4 flex items-center gap-3 text-left hover:border-orange-300 col-span-2 md:col-span-1"
+          >
+            <div className="w-10 h-10 rounded-lg bg-orange-50 text-orange-600 flex items-center justify-center">
+              <FiClock />
+            </div>
+
+            <div>
+              <p className="font-bold text-gray-900 text-sm">
+                Track Order
+              </p>
+
+              <p className="text-xs text-gray-500">
+                Check order status
+              </p>
+            </div>
+          </button>
 
         </div>
 
       </section>
 
-      {/* =================================================
+      {/* =====================================================
           SEARCH
-      ================================================= */}
+      ===================================================== */}
 
       <section className="max-w-6xl mx-auto px-4 mt-5">
 
@@ -566,24 +650,23 @@ export default function GuestMenuPage() {
           />
 
         </div>
-
       </section>
 
-      {/* =================================================
+      {/* =====================================================
           FOOD FILTER
-      ================================================= */}
+      ===================================================== */}
 
       <section className="max-w-6xl mx-auto px-4 mt-4">
 
-        <div className="flex gap-2">
+        <div className="flex gap-2 overflow-x-auto">
 
           <button
             onClick={() =>
               setFoodFilter("all")
             }
-            className={`px-4 py-2 rounded-full text-sm font-semibold ${
+            className={`px-4 py-2 rounded-full text-sm font-semibold whitespace-nowrap ${
               foodFilter === "all"
-                ? "bg-gray-900 text-white"
+                ? "bg-orange-500 text-white"
                 : "bg-white border border-gray-200 text-gray-600"
             }`}
           >
@@ -594,7 +677,7 @@ export default function GuestMenuPage() {
             onClick={() =>
               setFoodFilter("veg")
             }
-            className={`px-4 py-2 rounded-full text-sm font-semibold ${
+            className={`px-4 py-2 rounded-full text-sm font-semibold whitespace-nowrap ${
               foodFilter === "veg"
                 ? "bg-green-600 text-white"
                 : "bg-white border border-gray-200 text-gray-600"
@@ -607,7 +690,7 @@ export default function GuestMenuPage() {
             onClick={() =>
               setFoodFilter("nonveg")
             }
-            className={`px-4 py-2 rounded-full text-sm font-semibold ${
+            className={`px-4 py-2 rounded-full text-sm font-semibold whitespace-nowrap ${
               foodFilter === "nonveg"
                 ? "bg-red-600 text-white"
                 : "bg-white border border-gray-200 text-gray-600"
@@ -617,12 +700,11 @@ export default function GuestMenuPage() {
           </button>
 
         </div>
-
       </section>
 
-      {/* =================================================
-          FEATURED
-      ================================================= */}
+      {/* =====================================================
+          FEATURED SECTIONS
+      ===================================================== */}
 
       {!search && activeCategory === "All" && (
         <>
@@ -700,13 +782,13 @@ export default function GuestMenuPage() {
         </>
       )}
 
-      {/* =================================================
-          CATEGORY
-      ================================================= */}
+      {/* =====================================================
+          CATEGORY NAVIGATION
+      ===================================================== */}
 
       <section className="max-w-6xl mx-auto px-4 mt-8">
 
-        <h2 className="text-lg font-bold mb-3">
+        <h2 className="text-lg font-bold text-gray-900 mb-3">
           Menu
         </h2>
 
@@ -729,21 +811,18 @@ export default function GuestMenuPage() {
           ))}
 
         </div>
-
       </section>
 
-      {/* =================================================
-          DISHES
-      ================================================= */}
+      {/* =====================================================
+          ALL DISHES
+      ===================================================== */}
 
       <section className="max-w-6xl mx-auto px-4 mt-5">
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
           {filteredDishes.length === 0 ? (
-
             <div className="md:col-span-2 bg-white border border-gray-200 rounded-2xl p-10 text-center">
-
               <p className="font-semibold text-gray-700">
                 No dishes found
               </p>
@@ -751,43 +830,39 @@ export default function GuestMenuPage() {
               <p className="text-sm text-gray-500 mt-1">
                 Try another category or search.
               </p>
-
             </div>
-
           ) : (
-
             filteredDishes.map((dish) => (
               <DishCard
                 key={dish._id}
                 dish={dish}
-                quantity={getCartQuantity(dish._id)}
+                quantity={getCartQuantity(
+                  dish._id
+                )}
                 onAdd={addToCart}
                 onDecrease={decreaseQuantity}
                 onIncrease={increaseQuantity}
                 onSelect={setSelectedDish}
               />
             ))
-
           )}
 
         </div>
-
       </section>
 
-      {/* =================================================
-          CART BAR
-      ================================================= */}
+      {/* =====================================================
+          BOTTOM CART BAR
+      ===================================================== */}
 
       {cartCount > 0 && (
         <div className="fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-gray-200 p-3">
 
-          <div className="max-w-6xl mx-auto">
+          <div className="max-w-6xl mx-auto space-y-2">
 
             <button
               onClick={openCart}
               className="w-full bg-orange-500 hover:bg-orange-600 text-white rounded-xl px-5 py-3 flex items-center justify-between font-bold"
             >
-
               <div className="flex items-center gap-3">
 
                 <div className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center">
@@ -808,24 +883,21 @@ export default function GuestMenuPage() {
                   </p>
 
                 </div>
-
               </div>
 
               <div className="flex items-center gap-2">
                 View Cart
                 <FiChevronRight />
               </div>
-
             </button>
 
           </div>
-
         </div>
       )}
 
-      {/* =================================================
-          MODAL
-      ================================================= */}
+      {/* =====================================================
+          DISH MODAL
+      ===================================================== */}
 
       {selectedDish && (
         <DishModal
@@ -842,10 +914,72 @@ export default function GuestMenuPage() {
         />
       )}
 
+      {/* =====================================================
+          SCHEDULE INFORMATION MODAL
+      ===================================================== */}
+
+      {showScheduleInfo && (
+        <div
+          className="fixed inset-0 z-[110] bg-black/50 flex items-end md:items-center justify-center p-4"
+          onClick={() =>
+            setShowScheduleInfo(false)
+          }
+        >
+          <div
+            className="bg-white w-full max-w-md rounded-2xl p-6"
+            onClick={(e) =>
+              e.stopPropagation()
+            }
+          >
+
+            <div className="flex items-center justify-between">
+
+              <div className="flex items-center gap-3">
+
+                <div className="w-10 h-10 rounded-xl bg-orange-50 text-orange-600 flex items-center justify-center">
+                  <FiCalendar />
+                </div>
+
+                <h2 className="text-lg font-bold">
+                  Schedule Order
+                </h2>
+
+              </div>
+
+              <button
+                onClick={() =>
+                  setShowScheduleInfo(false)
+                }
+                className="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center"
+              >
+                <FiX />
+              </button>
+
+            </div>
+
+            <p className="text-sm text-gray-500 mt-4 leading-6">
+              Your cart is ready. Continue to the
+              cart page to select the date and time
+              for your scheduled order.
+            </p>
+
+            <button
+              onClick={() => {
+                setShowScheduleInfo(false);
+                openCart();
+              }}
+              className="w-full mt-5 bg-orange-500 hover:bg-orange-600 text-white py-3 rounded-xl font-bold"
+            >
+              Continue to Cart
+            </button>
+
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
-
 
 /* =========================================================
    FEATURED SECTION
@@ -865,7 +999,7 @@ function FeaturedSection({
 
       <div className="flex items-center justify-between mb-3">
 
-        <h2 className="text-lg md:text-xl font-bold">
+        <h2 className="text-lg md:text-xl font-bold text-gray-900">
           {title}
         </h2>
 
@@ -882,26 +1016,24 @@ function FeaturedSection({
             key={dish._id}
             className="min-w-[245px] max-w-[245px]"
           >
-
             <DishCard
               dish={dish}
-              quantity={getQuantity(dish._id)}
+              quantity={getQuantity(
+                dish._id
+              )}
               onAdd={onAdd}
               onDecrease={onDecrease}
               onIncrease={onIncrease}
               onSelect={onSelect}
               compact
             />
-
           </div>
         ))}
 
       </div>
-
     </section>
   );
 }
-
 
 /* =========================================================
    DISH CARD
@@ -916,14 +1048,19 @@ function DishCard({
   onSelect,
   compact = false,
 }) {
-  const isAvailable = dish.isAvailable !== false;
+  const isAvailable =
+    dish.isAvailable !== false;
 
   return (
     <div className="bg-white border border-gray-100 rounded-2xl overflow-hidden shadow-sm">
 
+      {/* IMAGE */}
+
       <div
         className="relative cursor-pointer"
-        onClick={() => onSelect(dish)}
+        onClick={() =>
+          onSelect(dish)
+        }
       >
 
         {dish.image ? (
@@ -944,6 +1081,8 @@ function DishCard({
           </div>
         )}
 
+        {/* FOOD TYPE */}
+
         <div className="absolute top-3 left-3">
 
           <span className="w-6 h-6 rounded-full bg-white shadow flex items-center justify-center text-xs">
@@ -953,6 +1092,8 @@ function DishCard({
           </span>
 
         </div>
+
+        {/* BADGES */}
 
         <div className="absolute top-3 right-3 flex flex-col items-end gap-1">
 
@@ -970,7 +1111,17 @@ function DishCard({
 
         </div>
 
+        {!isAvailable && (
+          <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+            <span className="bg-white px-3 py-2 rounded-lg font-bold text-sm">
+              Currently Unavailable
+            </span>
+          </div>
+        )}
+
       </div>
+
+      {/* CONTENT */}
 
       <div className="p-4">
 
@@ -990,35 +1141,38 @@ function DishCard({
 
           </div>
 
-          {dish.rating > 0 && (
+          {Number(dish.rating || 0) > 0 && (
             <span className="flex items-center gap-1 text-xs font-semibold text-gray-700 shrink-0">
-
               <FiStar
                 className="text-yellow-500 fill-yellow-500"
                 size={12}
               />
-
               {dish.rating}
-
             </span>
           )}
 
         </div>
 
+        {/* TAGS */}
+
         {dish.tags?.length > 0 && (
           <div className="flex gap-1 flex-wrap mt-2">
 
-            {dish.tags.slice(0, 3).map((tag) => (
-              <span
-                key={tag}
-                className="bg-gray-100 text-gray-600 px-2 py-1 rounded-md text-[10px] font-medium"
-              >
-                {tag}
-              </span>
-            ))}
+            {dish.tags
+              .slice(0, 3)
+              .map((tag) => (
+                <span
+                  key={tag}
+                  className="bg-gray-100 text-gray-600 px-2 py-1 rounded-md text-[10px] font-medium"
+                >
+                  {tag}
+                </span>
+              ))}
 
           </div>
         )}
+
+        {/* SPICE */}
 
         {dish.spiceLevel && (
           <p className="text-[11px] text-gray-500 mt-2">
@@ -1026,12 +1180,14 @@ function DishCard({
           </p>
         )}
 
+        {/* PRICE + CART */}
+
         <div className="flex items-center justify-between mt-4">
 
           <div>
 
-            <span className="text-lg font-bold">
-              ₹{dish.price}
+            <span className="text-lg font-bold text-gray-900">
+              ₹{Number(dish.price || 0).toFixed(2)}
             </span>
 
             {dish.prepTime && (
@@ -1044,15 +1200,15 @@ function DishCard({
           </div>
 
           {!isAvailable ? (
-
-            <span className="text-xs font-semibold text-red-500">
+            <span className="text-xs text-gray-400 font-semibold">
               Unavailable
             </span>
-
           ) : quantity === 0 ? (
 
             <button
-              onClick={() => onAdd(dish)}
+              onClick={() =>
+                onAdd(dish)
+              }
               className="flex items-center gap-1 bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg text-sm font-bold"
             >
               <FiPlus size={15} />
@@ -1086,17 +1242,13 @@ function DishCard({
               </button>
 
             </div>
-
           )}
 
         </div>
-
       </div>
-
     </div>
   );
 }
-
 
 /* =========================================================
    DISH MODAL
@@ -1110,6 +1262,9 @@ function DishModal({
   onDecrease,
   onIncrease,
 }) {
+  const isAvailable =
+    dish.isAvailable !== false;
+
   return (
     <div
       className="fixed inset-0 z-[100] bg-black/50 flex items-end md:items-center justify-center p-0 md:p-5"
@@ -1118,8 +1273,12 @@ function DishModal({
 
       <div
         className="bg-white w-full md:max-w-lg md:rounded-2xl rounded-t-3xl overflow-hidden max-h-[90vh] overflow-y-auto"
-        onClick={(e) => e.stopPropagation()}
+        onClick={(e) =>
+          e.stopPropagation()
+        }
       >
+
+        {/* IMAGE */}
 
         <div className="relative">
 
@@ -1144,6 +1303,8 @@ function DishModal({
 
         </div>
 
+        {/* DETAILS */}
+
         <div className="p-5">
 
           <div className="flex items-start justify-between gap-3">
@@ -1158,28 +1319,25 @@ function DishModal({
                     : "🔴"}
                 </span>
 
-                <h2 className="text-xl font-bold">
+                <h2 className="text-xl font-bold text-gray-900">
                   {dish.name}
                 </h2>
 
               </div>
 
               <p className="text-orange-600 text-lg font-bold mt-2">
-                ₹{dish.price}
+                ₹{Number(dish.price || 0).toFixed(2)}
               </p>
 
             </div>
 
-            {dish.rating > 0 && (
+            {Number(dish.rating || 0) > 0 && (
               <div className="flex items-center gap-1 bg-green-50 text-green-700 px-2 py-1 rounded-lg text-sm font-bold">
-
                 <FiStar
                   size={13}
                   className="fill-green-600"
                 />
-
                 {dish.rating}
-
               </div>
             )}
 
@@ -1190,6 +1348,8 @@ function DishModal({
               {dish.description}
             </p>
           )}
+
+          {/* INFO */}
 
           <div className="flex gap-2 flex-wrap mt-4">
 
@@ -1213,6 +1373,8 @@ function DishModal({
 
           </div>
 
+          {/* TAGS */}
+
           {dish.tags?.length > 0 && (
             <div className="flex flex-wrap gap-2 mt-4">
 
@@ -1228,12 +1390,22 @@ function DishModal({
             </div>
           )}
 
+          {/* CART */}
+
           <div className="mt-6">
 
-            {quantity === 0 ? (
+            {!isAvailable ? (
+
+              <div className="bg-gray-100 text-gray-500 text-center py-3.5 rounded-xl font-semibold">
+                Currently unavailable
+              </div>
+
+            ) : quantity === 0 ? (
 
               <button
-                onClick={() => onAdd(dish)}
+                onClick={() =>
+                  onAdd(dish)
+                }
                 className="w-full bg-orange-500 hover:bg-orange-600 text-white py-3.5 rounded-xl font-bold"
               >
                 Add to Cart
@@ -1272,21 +1444,15 @@ function DishModal({
                   </button>
 
                 </div>
-
               </div>
-
             )}
 
           </div>
-
         </div>
-
       </div>
-
     </div>
   );
 }
-
 
 /* =========================================================
    BADGE
@@ -1299,7 +1465,6 @@ function Badge({ children }) {
     </span>
   );
 }
-
 
 /* =========================================================
    CAPITALIZE

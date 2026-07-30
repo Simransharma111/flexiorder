@@ -14,6 +14,7 @@ import Homepage from "./pages/Homepage";
 import QRInventoryPage from "./pages/QRInventoryPage";
 import HotelSetupPage from "./pages/HotelSetupPage";
 import HomeRedirect from "./components/HomeRedirect";
+import CartPage from "./pages/CartPage";
 
 export default function App() {
   return (
@@ -39,7 +40,10 @@ export default function App() {
           path="/qr/:qrId"
           element={<GuestMenuPage />}
         />
-
+        <Route
+  path="/cart/:qrId"
+  element={<CartPage />}
+/>
         <Route
           path="/login"
           element={<LoginPage />}

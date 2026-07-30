@@ -21,50 +21,16 @@ export const useCart = () => {
 };
 
 export default function CartProvider({ children }) {
-  // =====================================================
-  // SESSION
-  // =====================================================
-
-  const [qrId, setQrId] = useState(null);
-  const [tableId, setTableId] = useState(null);
-
+  const [cartKey, setCartKey] = useState(null);
   const [cartItems, setCartItems] = useState([]);
 
-  const [cartLoaded, setCartLoaded] = useState(false);
-
-  // =====================================================
-  // CART STORAGE KEY
-  // =====================================================
-
-  const cartKey = qrId
-    ? `cart_${qrId}`
-    : null;
-
-  // =====================================================
-  // SET GUEST SESSION
-  // =====================================================
-
-  const setCartSession = ({
-    qrId: newQrId,
-    tableId: newTableId,
-  }) => {
-    if (!newQrId) {
-      console.warn("QR ID missing");
-      return;
-    }
-
-    setQrId(newQrId);
-    setTableId(newTableId || null);
-  };
-
-  // =====================================================
+  // ==========================================
   // LOAD CART
-  // =====================================================
+  // ==========================================
 
   useEffect(() => {
     if (!cartKey) {
       setCartItems([]);
-      setCartLoaded(false);
       return;
     }
 
@@ -73,13 +39,7 @@ export default function CartProvider({ children }) {
         localStorage.getItem(cartKey);
 
       if (savedCart) {
-        const parsed = JSON.parse(savedCart);
-
-        setCartItems(
-          Array.isArray(parsed)
-            ? parsed
-            : []
-        );
+        setCartItems(JSON.parse(savedCart));
       } else {
         setCartItems([]);
       }
@@ -91,18 +51,14 @@ export default function CartProvider({ children }) {
 
       setCartItems([]);
     }
-
-    setCartLoaded(true);
   }, [cartKey]);
 
-  // =====================================================
+  // ==========================================
   // SAVE CART
-  // =====================================================
+  // ==========================================
 
   useEffect(() => {
-    if (!cartKey || !cartLoaded) {
-      return;
-    }
+    if (!cartKey) return;
 
     try {
       localStorage.setItem(
@@ -115,23 +71,28 @@ export default function CartProvider({ children }) {
         error
       );
     }
-  }, [
-    cartItems,
-    cartKey,
-    cartLoaded,
-  ]);
+  }, [cartItems, cartKey]);
 
-  // =====================================================
+  // ==========================================
+  // SET CART SESSION
+  // ==========================================
+
+  const setCartSession = (qrId) => {
+    if (!qrId) return;
+
+    setCartKey(`cart_${qrId}`);
+  };
+
+  // ==========================================
   // ADD TO CART
-  // =====================================================
+  // ==========================================
 
   const addToCart = (dish) => {
     if (!dish?._id) return;
 
     setCartItems((prev) => {
       const existing = prev.find(
-        (item) =>
-          item._id === dish._id
+        (item) => item._id === dish._id
       );
 
       if (existing) {
@@ -139,8 +100,7 @@ export default function CartProvider({ children }) {
           item._id === dish._id
             ? {
                 ...item,
-                quantity:
-                  item.quantity + 1,
+                quantity: item.quantity + 1,
               }
             : item
         );
@@ -151,19 +111,19 @@ export default function CartProvider({ children }) {
         {
           _id: dish._id,
           name: dish.name,
-          description: dish.description,
+          description: dish.description || "",
           price: Number(dish.price || 0),
-          image: dish.image,
-          foodType: dish.foodType,
+          image: dish.image || "",
+          foodType: dish.foodType || "veg",
           quantity: 1,
         },
       ];
     });
   };
 
-  // =====================================================
+  // ==========================================
   // INCREASE
-  // =====================================================
+  // ==========================================
 
   const increaseQty = (id) => {
     setCartItems((prev) =>
@@ -171,17 +131,16 @@ export default function CartProvider({ children }) {
         item._id === id
           ? {
               ...item,
-              quantity:
-                item.quantity + 1,
+              quantity: item.quantity + 1,
             }
           : item
       )
     );
   };
 
-  // =====================================================
+  // ==========================================
   // DECREASE
-  // =====================================================
+  // ==========================================
 
   const decreaseQty = (id) => {
     setCartItems((prev) =>
@@ -190,21 +149,19 @@ export default function CartProvider({ children }) {
           item._id === id
             ? {
                 ...item,
-                quantity:
-                  item.quantity - 1,
+                quantity: item.quantity - 1,
               }
             : item
         )
         .filter(
-          (item) =>
-            item.quantity > 0
+          (item) => item.quantity > 0
         )
     );
   };
 
-  // =====================================================
-  // REMOVE ITEM
-  // =====================================================
+  // ==========================================
+  // REMOVE
+  // ==========================================
 
   const removeFromCart = (id) => {
     setCartItems((prev) =>
@@ -214,9 +171,9 @@ export default function CartProvider({ children }) {
     );
   };
 
-  // =====================================================
-  // CLEAR CART
-  // =====================================================
+  // ==========================================
+  // CLEAR
+  // ==========================================
 
   const clearCart = () => {
     setCartItems([]);
@@ -226,9 +183,9 @@ export default function CartProvider({ children }) {
     }
   };
 
-  // =====================================================
-  // CART COUNT
-  // =====================================================
+  // ==========================================
+  // TOTAL ITEMS
+  // ==========================================
 
   const cartCount = useMemo(() => {
     return cartItems.reduce(
@@ -238,9 +195,9 @@ export default function CartProvider({ children }) {
     );
   }, [cartItems]);
 
-  // =====================================================
-  // TOTAL
-  // =====================================================
+  // ==========================================
+  // TOTAL PRICE
+  // ==========================================
 
   const totalPrice = useMemo(() => {
     return cartItems.reduce(
@@ -252,29 +209,23 @@ export default function CartProvider({ children }) {
     );
   }, [cartItems]);
 
-  // =====================================================
-  // VALUE
-  // =====================================================
-
-  const value = {
-    qrId,
-    tableId,
-
-    cartItems,
-    cartCount,
-    totalPrice,
-
-    addToCart,
-    increaseQty,
-    decreaseQty,
-    removeFromCart,
-    clearCart,
-
-    setCartSession,
-  };
-
   return (
-    <CartContext.Provider value={value}>
+    <CartContext.Provider
+      value={{
+        cartItems,
+        cartCount,
+        totalPrice,
+
+        addToCart,
+        increaseQty,
+        decreaseQty,
+        removeFromCart,
+        clearCart,
+
+        setCartSession,
+        cartKey,
+      }}
+    >
       {children}
     </CartContext.Provider>
   );
