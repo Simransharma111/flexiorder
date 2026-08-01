@@ -13,6 +13,9 @@ import SuperAdminDashboard from "./pages/SuperAdminDashboard";
 import QRInventoryPage from "./pages/QRInventoryPage";
 import HotelSetupPage from "./pages/HotelSetupPage";
 import CartPage from "./pages/CartPage";
+import OwnerHotelSettings from "./pages/OwnerHotelSettings";
+
+import ChangePassword from "./pages/ChangePassword";
 
 export default function App() {
   return (
@@ -118,7 +121,14 @@ export default function App() {
           path="/track-order/:orderId"
           element={<TrackOrderPage />}
         />
-
+        <Route
+path="/owner/hotel/settings"
+element={<OwnerHotelSettings />}
+/>
+<Route
+path="/change-password"
+element={<ChangePassword/>}
+/>
       </Routes>
     </>
   );

@@ -32,64 +32,9 @@ import QRInventory from "./QRInventoryPage";
 
 import socket from "../socket";
 import api from "../api/axios";
+import OwnerHotelSettings from "./OwnerHotelSettings";
+import {HOTEL_THEMES} from "../constants/hotelThemes";
 
-/* =========================================================
-   THEME SYSTEM
-========================================================= */
-
-const THEME_MAP = {
-  stormy_morning: {
-    primary: "#375d91",
-    secondary: "#0F172A",
-    accent: "#94A3B8",
-  },
-
-  mossy_hollow: {
-    primary: "#4D7C0F",
-    secondary: "#1A2E05",
-    accent: "#84CC16",
-  },
-
-  blue_eclipse: {
-    primary: "#1E293B",
-    secondary: "#020617",
-    accent: "#38BDF8",
-  },
-
-  lush_forest: {
-    primary: "#14532D",
-    secondary: "#052E16",
-    accent: "#22C55E",
-  },
-
-  green_juice: {
-    primary: "#16A34A",
-    secondary: "#052E16",
-    accent: "#4ADE80",
-  },
-
-  chili_spice: {
-    primary: "#DC2626",
-    secondary: "#1F0A0A",
-    accent: "#FB7185",
-  },
-
-  chocolate_truffle: {
-    primary: "#7C2D12",
-    secondary: "#1C0A00",
-    accent: "#FB923C",
-  },
-
-  ink_wash: {
-    primary: "#111827",
-    secondary: "#F8FAFC",
-    accent: "#64748B",
-  },
-};
-
-/* =========================================================
-   NAVIGATION
-========================================================= */
 
 const NAV_ITEMS = [
   {
@@ -132,6 +77,11 @@ const NAV_ITEMS = [
     label: "Inventory",
     icon: FiBox,
   },
+  {
+ key:"settings",
+ label:"Settings",
+ icon:FiSettings,
+},
 ];
 
 /* =========================================================
@@ -214,7 +164,8 @@ export default function OwnerDashboard() {
         },
       });
 
-      setHotel(res.data);
+      // API returns { success: true, hotel }
+      setHotel(res.data?.hotel || null);
     } catch (err) {
       console.log("FETCH HOTEL ERROR:", err);
     }
@@ -310,27 +261,42 @@ export default function OwnerDashboard() {
      THEME
   ========================================================= */
 
-  const currentTheme =
-    THEME_MAP[
-      hotel?.theme?.themeId ||
-        hotel?.theme?.id
-    ] || THEME_MAP.stormy_morning;
+const defaultTheme = HOTEL_THEMES.stormy_morning;
 
-  const primaryColor =
-    hotel?.theme?.primaryColor ||
-    hotel?.theme?.primary ||
-    currentTheme.primary;
+const currentTheme =
+  hotel?.theme?.id && HOTEL_THEMES[hotel.theme.id]
+    ? HOTEL_THEMES[hotel.theme.id]
+    : defaultTheme;
 
-  const secondaryColor =
-    hotel?.theme?.secondaryColor ||
-    hotel?.theme?.secondary ||
-    currentTheme.secondary;
+const primaryColor =
+  hotel?.theme?.primary || hotel?.theme?.primaryColor || currentTheme.primary;
 
-  const accentColor =
-    hotel?.theme?.accentColor ||
-    hotel?.theme?.accent ||
-    currentTheme.accent;
+const secondaryColor =
+  hotel?.theme?.secondary || hotel?.theme?.secondaryColor || currentTheme.secondary;
 
+const accentColor =
+  hotel?.theme?.accent || hotel?.theme?.accentColor || currentTheme.accent;
+
+const themeText =
+  hotel?.theme?.text || currentTheme.text || "#FFFFFF";
+
+// helper: convert hex to rgba
+const hexToRgba = (hex, alpha = 1) => {
+  if (!hex) return `rgba(255,255,255,${alpha})`;
+  let h = hex.replace('#', '');
+  if (h.length === 3) h = h.split('').map((c) => c + c).join('');
+  const num = parseInt(h, 16);
+  const r = (num >> 16) & 255;
+  const g = (num >> 8) & 255;
+  const b = num & 255;
+  return `rgba(${r},${g},${b},${alpha})`;
+};
+
+// derived muted colors for subtle text/backgrounds
+const mutedText = hexToRgba(themeText, 0.78);
+const mutedBg = hexToRgba(themeText, 0.06);
+
+const isDark = (currentTheme && currentTheme.mode === "dark") || false;
   /* =========================================================
      LOGOUT
   ========================================================= */
@@ -497,9 +463,8 @@ export default function OwnerDashboard() {
               </span>
             </div>
 
-            <p className="mt-1 text-sm text-gray-400">
-              {order.guestName || "Guest"} •{" "}
-              {formatTime(order.createdAt)}
+            <p className="mt-1 text-sm" style={{ color: mutedText }}>
+              {order.guestName || "Guest"} • {formatTime(order.createdAt)}
             </p>
           </div>
 
@@ -522,7 +487,10 @@ export default function OwnerDashboard() {
           {order.items?.map((item, index) => (
             <div
               key={`${order._id}-${index}`}
-              className="flex items-center justify-between rounded-xl bg-black/20 px-3 py-2"
+              className="flex items-center justify-between rounded-xl px-3 py-2"
+              style={{
+  background: isDark ? hexToRgba(currentTheme.primary, 0.06) : hexToRgba(themeText, 0.06),
+}}
             >
               <div className="flex items-center gap-3">
                 <span
@@ -540,11 +508,8 @@ export default function OwnerDashboard() {
                 </span>
               </div>
 
-              <span className="text-sm text-gray-400">
-                ₹
-                {Number(
-                  item.price * item.quantity
-                ).toFixed(2)}
+              <span className="text-sm" style={{ color: mutedText }}>
+                ₹{Number(item.price * item.quantity).toFixed(2)}
               </span>
             </div>
           ))}
@@ -585,7 +550,7 @@ export default function OwnerDashboard() {
     <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
       <div className="flex items-start justify-between">
         <div>
-          <p className="text-sm text-gray-400">
+          <p className="text-sm" style={{ color: mutedText }}>
             {title}
           </p>
 
@@ -643,12 +608,12 @@ export default function OwnerDashboard() {
 
           <div className="min-w-0">
             <h1 className="truncate font-bold">
-              {hotel?.name || "FlexiOrder"}
+              {hotel ? hotel.name : "FlexiOrder"}
             </h1>
 
-            <p className="truncate text-xs text-gray-500">
-              Owner Dashboard
-            </p>
+           <p className="truncate text-xs text-gray-500">
+             {hotel?.tagline ? hotel.tagline : `${hotel?.type || "Hotel"} Management`}
+           </p>
           </div>
         </div>
       </div>
@@ -674,13 +639,13 @@ export default function OwnerDashboard() {
                 className={`flex w-full items-center gap-3 rounded-xl px-3 py-3 text-sm transition ${
                   active
                     ? "text-white"
-                    : "text-gray-400 hover:bg-white/5 hover:text-white"
+                    : "hover:bg-white/5 hover:text-white"
                 }`}
                 style={
                   active
                     ? {
                         background: `${primaryColor}35`,
-                        color: accentColor,
+                        color: themeText,
                       }
                     : {}
                 }
@@ -694,7 +659,7 @@ export default function OwnerDashboard() {
                       className="ml-auto rounded-full px-2 py-0.5 text-[10px] font-bold"
                       style={{
                         background: primaryColor,
-                        color: "white",
+                        color: themeText,
                       }}
                     >
                       {orderStats.active}
@@ -828,13 +793,83 @@ export default function OwnerDashboard() {
   const Overview = () => (
     <div className="space-y-6">
       {/* WELCOME */}
-      <div
-        className="relative overflow-hidden rounded-3xl border border-white/10 p-5 md:p-7"
-        style={{
-          background: `linear-gradient(135deg, ${primaryColor}35, rgba(255,255,255,0.03))`,
-        }}
-      >
+     <div
+className="
+relative
+overflow-hidden
+rounded-3xl
+border
+border-white/10
+h-[280px]
+"
+style={{
+backgroundImage:
+`
+linear-gradient(
+90deg,
+${secondaryColor}ee,
+${secondaryColor}55
+),
+url(${hotel?.coverImage})
+`,
+backgroundSize:"cover",
+backgroundPosition:"center"
+}}
+>
         <div className="relative z-10 max-w-2xl">
+          <div className="
+flex
+items-center
+gap-4
+mb-5
+">
+
+
+{
+hotel?.logo && (
+
+<img
+src={hotel.logo}
+className="
+h-20
+w-20
+rounded-2xl
+object-cover
+border
+border-white/30
+"
+/>
+
+)
+
+}
+
+
+<div>
+
+<h1 className="
+text-3xl
+font-bold
+">
+
+{hotel?.name}
+
+</h1>
+
+
+<p className="
+text-gray-200
+">
+
+{hotel?.tagline}
+
+</p>
+
+
+</div>
+
+
+</div>
           <p
             className="text-sm font-medium"
             style={{ color: accentColor }}
@@ -1316,12 +1351,12 @@ export default function OwnerDashboard() {
               orderFilter === key
                 ? {
                     background: primaryColor,
-                    color: "white",
+                    color: themeText,
                   }
                 : {
                     background:
                       "rgba(255,255,255,0.05)",
-                    color: "#9CA3AF",
+                    color: mutedText,
                   }
             }
           >
@@ -1480,19 +1515,58 @@ export default function OwnerDashboard() {
       </div>
     </div>
   );
+/* =========================================================
+   SETTINGS
+========================================================= */
 
+const Settings = () => (
+
+<div className="space-y-5">
+
+<div>
+
+<h1 className="text-2xl font-bold">
+Hotel Settings
+</h1>
+
+
+<p className="mt-1 text-sm text-gray-500">
+Customize your hotel profile, branding and theme.
+</p>
+
+
+</div>
+
+
+
+<div className="
+rounded-2xl
+border
+border-white/10
+bg-white/[0.03]
+p-5
+">
+
+<OwnerHotelSettings />
+
+</div>
+
+
+</div>
+
+);
   /* =========================================================
      MAIN
   ========================================================= */
 
   return (
-    <div
-      className="min-h-screen text-white"
-      style={{
-        background:
-          secondaryColor || "#0F172A",
-      }}
-    >
+  <div
+className="min-h-screen"
+style={{
+background:secondaryColor,
+color:themeText
+}}
+>
       {/* MOBILE SIDEBAR OVERLAY */}
       {sidebarOpen && (
         <div
@@ -1502,11 +1576,12 @@ export default function OwnerDashboard() {
           }
         >
           <aside
-            className="h-full w-[280px] border-r border-white/10 bg-[#0B1120]"
-            onClick={(e) =>
-              e.stopPropagation()
-            }
-          >
+                      className="h-full w-[280px] border-r border-white/10"
+                      style={{ background: secondaryColor, color: themeText }}
+                      onClick={(e) =>
+                        e.stopPropagation()
+                      }
+                    >
             <div className="flex justify-end p-3">
               <button
                 onClick={() =>
@@ -1527,7 +1602,7 @@ export default function OwnerDashboard() {
 
       <div className="flex min-h-screen">
         {/* DESKTOP SIDEBAR */}
-        <aside className="fixed hidden h-screen w-[250px] border-r border-white/10 bg-black/20 md:block">
+        <aside className="fixed hidden h-screen w-[250px] border-r border-white/10 md:block" style={{ background: secondaryColor, color: themeText }}>
           <SidebarContent />
         </aside>
 
@@ -1565,6 +1640,9 @@ export default function OwnerDashboard() {
             {activeTab === "inventory" && (
               <Inventory />
             )}
+            {activeTab === "settings" && (
+  <Settings />
+)}
           </main>
         </div>
       </div>

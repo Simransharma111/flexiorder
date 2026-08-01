@@ -1,73 +1,9 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "../api/axios";
+import {HOTEL_THEMES} from "../constants/hotelThemes";
 
-/* =========================================================
-   HOTEL THEMES
-========================================================= */
 
-export const HOTEL_THEMES = [
-  {
-    id: "stormy_morning",
-    name: "Stormy Morning",
-    primary: "#64748B",
-    secondary: "#0F172A",
-    accent: "#94A3B8",
-  },
-  {
-    id: "mossy_hollow",
-    name: "Mossy Hollow",
-    primary: "#4D7C0F",
-    secondary: "#1A2E05",
-    accent: "#84CC16",
-  },
-  {
-    id: "blue_eclipse",
-    name: "Blue Eclipse",
-    primary: "#1E293B",
-    secondary: "#020617",
-    accent: "#3B82F6",
-  },
-  {
-    id: "lush_forest",
-    name: "Lush Forest",
-    primary: "#14532D",
-    secondary: "#052E16",
-    accent: "#22C55E",
-  },
-  {
-    id: "green_juice",
-    name: "Green Juice",
-    primary: "#16A34A",
-    secondary: "#052E16",
-    accent: "#86EFAC",
-  },
-  {
-    id: "chili_spice",
-    name: "Chili Spice",
-    primary: "#DC2626",
-    secondary: "#1F0A0A",
-    accent: "#F97316",
-  },
-  {
-    id: "chocolate_truffle",
-    name: "Chocolate Truffle",
-    primary: "#7C2D12",
-    secondary: "#1C0A00",
-    accent: "#D97706",
-  },
-  {
-    id: "ink_wash",
-    name: "Ink Wash",
-    primary: "#111827",
-    secondary: "#F8FAFC",
-    accent: "#64748B",
-  },
-];
-
-/* =========================================================
-   COMPONENT
-========================================================= */
 
 export default function HotelSetupPage() {
   const navigate = useNavigate();
@@ -201,6 +137,8 @@ export default function HotelSetupPage() {
       form.append("themePrimary", theme.primary);
       form.append("themeSecondary", theme.secondary);
       form.append("themeAccent", theme.accent);
+      form.append("themeMode", theme.mode);
+      form.append("themeText", theme.text);
 
       /* ---------------------------------------------------
          FILES

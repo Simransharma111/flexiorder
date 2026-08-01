@@ -1,121 +1,197 @@
 import { useState } from "react";
-import { initFCM } from "../utils/fcmPush";
-import {
-  useNavigate,
-} from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 
 import api from "../api/axios";
+import { useAuth } from "../context/AuthContext";
+import { initFCM } from "../utils/fcmPush";
 
-import {
-  useAuth,
-} from "../context/AuthContext";
 
 export default function LoginPage() {
 
-  // =========================
-  // NAVIGATION
-  // =========================
 
-  const navigate =
-    useNavigate();
+  const navigate = useNavigate();
 
-  // =========================
-  // AUTH CONTEXT
-  // =========================
+  const { login } = useAuth();
 
-  const { login } =
-    useAuth();
 
-  // =========================
-  // STATES
-  // =========================
 
-  const [formData, setFormData] =
-    useState({
-      email: "",
-      password: "",
-    });
+  const [formData, setFormData] = useState({
 
-  const [loading, setLoading] =
-    useState(false);
+    email:"",
+    password:""
 
-  // =========================
-  // HANDLE CHANGE
-  // =========================
+  });
 
-  const handleChange = (e) => {
+
+
+  const [loading,setLoading] = useState(false);
+
+
+
+
+
+  const handleChange = (e)=>{
 
     setFormData({
+
       ...formData,
-      [e.target.name]:
-        e.target.value,
+
+      [e.target.name]:e.target.value
+
     });
 
   };
 
-  // =========================
-  // HANDLE LOGIN
-  // =========================
 
-  const handleSubmit = async (
-    e
-  ) => {
+
+
+
+
+
+  const handleSubmit = async(e)=>{
+
 
     e.preventDefault();
 
-    try {
+
+    try{
+
 
       setLoading(true);
 
-      // LOGIN API
+
 
       const res =
-        await api.post(
-          "/auth/login",
-          formData
-        );
+      await api.post(
+        "/auth/login",
+        formData
+      );
+
+
 
       console.log(
-        "LOGIN RESPONSE:",
+        "LOGIN RESPONSE",
         res.data
       );
 
-      // =====================
-      // STORE AUTH
-      // =====================
+
+
+
+
+      /*
+      ======================================
+      SAVE LOGIN DATA
+      ======================================
+      */
+
+
+      localStorage.setItem(
+        "token",
+        res.data.token
+      );
+
+
+      localStorage.setItem(
+        "user",
+        JSON.stringify(res.data.user)
+      );
+
+
+      localStorage.setItem(
+        "role",
+        res.data.user.role
+      );
+
+
 
       login(
         res.data.user,
         res.data.token
       );
 
-      // LOCAL STORAGE
-// LOCAL STORAGE
 
-localStorage.setItem(
-  "token",
-  res.data.token
-);
 
-localStorage.setItem(
-  "user",
-  JSON.stringify(
-    res.data.user
-  )
-);
 
-localStorage.setItem(
-  "role",
-  res.data.user.role
-);
-await initFCM(api);
 
-      // ROLE BASED REDIRECT
-      // =====================
 
-      switch (
+
+      /*
+      ======================================
+      FIRST LOGIN PASSWORD CHANGE
+      ======================================
+      */
+
+
+      if(
+        res.data.mustChangePassword
+      ){
+
+        navigate(
+          "/change-password"
+        );
+
+        return;
+
+      }
+
+
+
+
+
+
+      /*
+      ======================================
+      OWNER HOTEL SETUP
+      ======================================
+      */
+
+
+      if(
+        res.data.user.role==="owner" &&
+        !res.data.hotelSetupCompleted
+      ){
+
+        navigate(
+          "/setup-hotel"
+        );
+
+        return;
+
+      }
+
+
+
+
+
+
+
+      /*
+      ======================================
+      INIT NOTIFICATION
+      AFTER ACCOUNT READY
+      ======================================
+      */
+
+
+      await initFCM(api);
+
+
+
+
+
+
+
+      /*
+      ======================================
+      ROLE BASED DASHBOARD
+      ======================================
+      */
+
+
+      switch(
         res.data.user.role
-      ) {
+      ){
+
 
         case "superadmin":
 
@@ -125,6 +201,8 @@ await initFCM(api);
 
           break;
 
+
+
         case "owner":
 
           navigate(
@@ -132,6 +210,8 @@ await initFCM(api);
           );
 
           break;
+
+
 
         case "staff":
 
@@ -141,122 +221,197 @@ await initFCM(api);
 
           break;
 
+
+
         default:
 
-           navigate("/homepage");
+          navigate(
+            "/"
+          );
+
       }
 
-    } catch (err) {
 
-      console.error(err);
 
-      alert(
-        err.response?.data
-          ?.message ||
-          err.response?.data ||
-          "Login failed"
+
+
+    }
+    catch(err){
+
+
+      console.log(
+        "LOGIN ERROR",
+        err
       );
 
-    } finally {
+
+
+      alert(
+
+        err.response?.data?.message ||
+        "Login failed"
+
+      );
+
+
+    }
+    finally{
+
 
       setLoading(false);
 
+
     }
+
+
   };
 
-  // =========================
-  // UI
-  // =========================
+
 
   return (
 
-    <div className="min-h-screen bg-[#0F172A] text-white flex justify-center items-center px-4">
+
+    <div className="min-h-screen bg-[#0F172A] text-white flex items-center justify-center px-4">
+
 
       <div className="w-full max-w-md bg-white/5 border border-white/10 rounded-3xl p-8 backdrop-blur-lg">
 
-        {/* HEADER */}
+
 
         <h1 className="text-4xl font-bold text-center">
+
           FlexiOrder
+
         </h1>
 
+
+
+
         <p className="text-gray-400 text-center mt-3">
+
           Login to continue
+
         </p>
 
-        {/* FORM */}
+
+
+
+
 
         <form
-          onSubmit={
-            handleSubmit
-          }
+          onSubmit={handleSubmit}
           className="mt-8 space-y-5"
         >
 
-          {/* EMAIL */}
+
+
+
 
           <div>
 
-            <label className="block mb-2 text-sm">
+
+            <label className="block mb-2">
+
               Email
+
             </label>
 
+
             <input
+
               type="email"
+
               name="email"
-              value={
-                formData.email
-              }
-              onChange={
-                handleChange
-              }
+
+              value={formData.email}
+
+              onChange={handleChange}
+
               required
+
               className="w-full bg-white/10 border border-white/10 rounded-2xl px-4 py-3 outline-none"
+
             />
+
 
           </div>
 
-          {/* PASSWORD */}
+
+
+
+
+
 
           <div>
 
-            <label className="block mb-2 text-sm">
+
+            <label className="block mb-2">
+
               Password
+
             </label>
 
+
             <input
+
               type="password"
+
               name="password"
-              value={
-                formData.password
-              }
-              onChange={
-                handleChange
-              }
+
+              value={formData.password}
+
+              onChange={handleChange}
+
               required
+
               className="w-full bg-white/10 border border-white/10 rounded-2xl px-4 py-3 outline-none"
+
             />
+
 
           </div>
 
-          {/* BUTTON */}
+
+
+
+
+
 
           <button
+
             type="submit"
+
             disabled={loading}
-            className="w-full bg-orange-500 hover:bg-orange-600 transition rounded-2xl py-4 text-lg font-bold"
+
+            className="w-full bg-orange-500 hover:bg-orange-600 rounded-2xl py-4 font-bold text-lg"
+
           >
 
-            {loading
-              ? "Logging In..."
-              : "Login"}
+            {
+              loading
+              ?
+              "Logging in..."
+              :
+              "Login"
+            }
+
 
           </button>
 
+
+
+
         </form>
+
+
 
       </div>
 
+
     </div>
+
+
   );
+
+
 }
