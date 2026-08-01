@@ -221,6 +221,14 @@ form.append("themeId", hotel.theme.id);
 form.append("primaryColor", hotel.theme.primary);
 form.append("secondaryColor", hotel.theme.secondary);
 form.append("accentColor", hotel.theme.accent);
+form.append(
+  "themeText",
+  hotel.theme.text || HOTEL_THEMES[hotel.theme.id]?.text || "#FFFFFF"
+);
+form.append(
+  "themeMode",
+  hotel.theme.mode || HOTEL_THEMES[hotel.theme.id]?.mode || "dark"
+);
 
 
 

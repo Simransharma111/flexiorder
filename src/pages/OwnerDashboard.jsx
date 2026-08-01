@@ -1354,8 +1354,7 @@ text-gray-200
                     color: themeText,
                   }
                 : {
-                    background:
-                      "rgba(255,255,255,0.05)",
+                    background: mutedBg,
                     color: mutedText,
                   }
             }
