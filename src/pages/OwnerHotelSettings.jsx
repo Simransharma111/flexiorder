@@ -6,8 +6,10 @@ import {
   FaImage,
 } from "react-icons/fa";
 
+import HOTEL_THEMES from "../constants/hotelThemes";
 
-import {HOTEL_THEMES} from "../constants/hotelThemes";
+
+
 
 export default function OwnerHotelSettings(){
 
@@ -215,19 +217,30 @@ cover
 
 
 
-form.append("themeId", hotel.theme.id);
-
-// Use new consistent field names for colors: primaryColor / secondaryColor / accentColor
-form.append("primaryColor", hotel.theme.primary);
-form.append("secondaryColor", hotel.theme.secondary);
-form.append("accentColor", hotel.theme.accent);
 form.append(
-  "themeText",
-  hotel.theme.text || HOTEL_THEMES[hotel.theme.id]?.text || "#FFFFFF"
+"themeId",
+hotel.theme.id
 );
+
+
+
 form.append(
-  "themeMode",
-  hotel.theme.mode || HOTEL_THEMES[hotel.theme.id]?.mode || "dark"
+"themePrimary",
+hotel.theme.primary
+);
+
+
+
+form.append(
+"themeSecondary",
+hotel.theme.secondary
+);
+
+
+
+form.append(
+"themeAccent",
+hotel.theme.accent
 );
 
 
@@ -279,26 +292,50 @@ setLoading(false);
 
 const changeTheme=(theme)=>{
 
-
 setHotel(prev=>({
 
 ...prev,
 
-
 theme:{
-id:theme.id,
-primary:theme.primary,
-secondary:theme.secondary,
-accent:theme.accent
+  id:theme.id,
+  primary:theme.primary,
+  secondary:theme.secondary,
+  accent:theme.accent,
+  text: theme.text || "#FFFFFF",
+  mode: theme.mode || "dark"
 }
-
 
 }));
 
-
 };
 
+const activeTheme =
+hotel?.theme?.id &&
+HOTEL_THEMES[hotel.theme.id]
+?
+HOTEL_THEMES[hotel.theme.id]
+:
+HOTEL_THEMES.midnight_moss;
 
+
+const resolvedPrimary =
+hotel?.theme?.primary ||
+activeTheme.primary;
+
+
+const resolvedSecondary =
+hotel?.theme?.secondary ||
+activeTheme.secondary;
+
+
+const resolvedAccent =
+hotel?.theme?.accent ||
+activeTheme.accent;
+
+
+const resolvedText =
+hotel?.theme?.text ||
+activeTheme.text;
 
 
 
@@ -341,10 +378,9 @@ md:p-10
 
 style={{
 
-background:
-hotel.theme.secondary,
+background: resolvedSecondary,
 
-color:"white"
+color: resolvedText
 
 }}
 
@@ -385,6 +421,7 @@ w-full
 h-72
 object-cover
 rounded-3xl
+border border-white/20
 "
 
 />
@@ -489,6 +526,7 @@ rounded-full
 border-4
 border-white
 object-cover
+shadow-xl
 "
 
 />
@@ -831,7 +869,7 @@ gap-4
 
 
 {
-Object.values(HOTEL_THEMES).map(theme => (
+HOTEL_THEMES.map(theme=>(
 
 
 <button
@@ -853,7 +891,7 @@ background:
 theme.secondary,
 
 borderColor:
-hotel.theme.id===theme.id
+hotel?.theme?.id === theme.id
 ?
 theme.accent
 :
@@ -972,8 +1010,7 @@ gap-3
 
 style={{
 
-background:
-hotel.theme.primary
+background: resolvedPrimary
 
 }}
 

@@ -1,9 +1,89 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "../api/axios";
-import {HOTEL_THEMES} from "../constants/hotelThemes";
 
+/* =========================================================
+   HOTEL THEMES
+========================================================= */
 
+export const HOTEL_THEMES = [
+  {
+    id: "velvet_sunset",
+    name: "Velvet Sunset",
+    primary: "#F97316",
+    secondary: "#1F0A0A",
+    accent: "#FDBA74",
+    text: "#FFF7ED",
+  },
+  {
+    id: "emerald_luxe",
+    name: "Emerald Luxe",
+    primary: "#0F766E",
+    secondary: "#79c19d",
+    accent: "#1b8a61",
+    text:"#042F2E",
+  },
+  {
+    id: "ocean_breeze",
+    name: "Ocean Breeze",
+    primary: "#2563EB",
+    secondary: "#0F172A",
+    accent: "#7DD3FC",
+    text: "#EFF6FF",
+  },
+  {
+    id: "royal_plum",
+    name: "Royal Plum",
+    primary: "#7C3AED",
+    secondary: "#1F123A",
+    accent: "#C4B5FD",
+    text: "#F5F3FF",
+  },
+  {
+    id: "citrus_glow",
+    name: "Citrus Glow",
+    primary: "#D97706",
+    secondary: "#3B1300",
+    accent: "#FDE68A",
+    text: "#FFFBEB",
+  },
+  {
+    id: "sage_ritual",
+    name: "Sage Ritual",
+    primary: "#edefea",
+    secondary: "#d7dd7b",
+    accent: "#A3E635",
+    text: "#060801",
+  },
+  {
+    id: "midnight_noir",
+    name: "Midnight Noir",
+    primary: "#111827",
+    secondary: "#030712",
+    accent: "#64748B",
+    text: "#F8FAFC",
+  },
+  {
+    id: "pearl_mist",
+    name: "Pearl Mist",
+    primary: "#F8FAFC",
+    secondary: "#E2E8F0",
+    accent: "#475569",
+    text: "#0F172A",
+  },
+  {
+    id: "instagram_inspo",
+    name: "Instagram Inspo",
+    primary: "#FF4D67",
+    secondary: "#FFF5F7",
+    accent: "#1DA1F2",
+    text: "#1F2937",
+  },
+];
+
+/* =========================================================
+   COMPONENT
+========================================================= */
 
 export default function HotelSetupPage() {
   const navigate = useNavigate();
@@ -39,6 +119,8 @@ export default function HotelSetupPage() {
     HOTEL_THEMES.find(
       (theme) => theme.id === formData.themeId
     ) || HOTEL_THEMES[0];
+
+  const previewText = selectedTheme.text || "#FFFFFF";
 
   /* =======================================================
      INPUT CHANGE
@@ -137,8 +219,6 @@ export default function HotelSetupPage() {
       form.append("themePrimary", theme.primary);
       form.append("themeSecondary", theme.secondary);
       form.append("themeAccent", theme.accent);
-      form.append("themeMode", theme.mode);
-      form.append("themeText", theme.text);
 
       /* ---------------------------------------------------
          FILES
@@ -187,7 +267,7 @@ export default function HotelSetupPage() {
       className="min-h-screen px-4 py-8 md:px-8"
       style={{
         background: selectedTheme.secondary,
-        color: "#FFFFFF",
+        color: previewText,
       }}
     >
       <div className="max-w-6xl mx-auto">
@@ -583,10 +663,11 @@ export default function HotelSetupPage() {
                     }
                     className="text-left rounded-2xl p-4 border-2 transition hover:scale-[1.02]"
                     style={{
-                      background: theme.secondary,
+                      background: `linear-gradient(135deg, ${theme.secondary} 0%, ${theme.primary} 100%)`,
                       borderColor: selected
                         ? theme.accent
-                        : "rgba(255,255,255,0.12)",
+                        : "rgba(255,255,255,0.16)",
+                      color: theme.text || "#FFFFFF",
                     }}
                   >
 
@@ -669,15 +750,15 @@ export default function HotelSetupPage() {
               }}
             >
 
-              <p className="text-sm opacity-80">
+              <p className="text-sm opacity-80" style={{ color: previewText }}>
                 LIVE PREVIEW
               </p>
 
-              <h2 className="text-2xl md:text-3xl font-bold mt-2">
+              <h2 className="text-2xl md:text-3xl font-bold mt-2" style={{ color: previewText }}>
                 {formData.name || "Your Hotel Name"}
               </h2>
 
-              <p className="mt-1 opacity-80">
+              <p className="mt-1 opacity-80" style={{ color: previewText }}>
                 {formData.tagline ||
                   "Your hotel tagline will appear here"}
               </p>
@@ -760,7 +841,7 @@ export default function HotelSetupPage() {
                 className="mt-5 px-6 py-3 rounded-xl font-bold"
                 style={{
                   background: selectedTheme.accent,
-                  color: "#000",
+                  color: selectedTheme.secondary,
                 }}
               >
                 Example Button

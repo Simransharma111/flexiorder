@@ -1,23 +1,37 @@
 import { Routes, Route } from "react-router-dom";
 import "./App.css";
 
-import BackButtonHandler from "./components/BackButtonHandler";
-import ProtectedRoute from "./components/ProtectedRoute";
-
+// Public
+import LandingPage from "./pages/LandingPage";
+import AuthPage from "./pages/AuthPage";
 import GuestMenuPage from "./pages/GuestMenuPage";
-import KitchenDashboard from "./pages/KitchenDashboard";
-import LoginPage from "./pages/LoginPage";
-import OwnerDashboard from "./pages/OwnerDashboard";
-import TrackOrderPage from "./pages/TrackOrderPage";
-import SuperAdminDashboard from "./pages/SuperAdminDashboard";
-import QRInventoryPage from "./pages/QRInventoryPage";
-import HotelSetupPage from "./pages/HotelSetupPage";
 import CartPage from "./pages/CartPage";
-import OwnerHotelSettings from "./pages/OwnerHotelSettings";
+import TrackOrderPage from "./pages/TrackOrderPage";
 
+// Owner
+import OwnerDashboard from "./pages/OwnerDashboard";
+import OwnerHotelSettings from "./pages/OwnerHotelSettings";
+import HotelSetupPage from "./pages/HotelSetupPage";
+
+// Staff
+import KitchenDashboard from "./pages/KitchenDashboard";
+
+// Super Admin
+import SuperAdminDashboard from "./pages/SuperAdminDashboard";
+
+// Shared
+import QRInventoryPage from "./pages/QRInventoryPage";
 import ChangePassword from "./pages/ChangePassword";
+//back button handler
+import BackButtonHandler from "./components/BackButtonHandler";
+
+// Protected Route
+import ProtectedRoute from "./components/ProtectedRoute"; 
+import {isMobileApp} from "./utils/platform";
 
 export default function App() {
+  
+const mobile = isMobileApp();
   return (
     <>
       <BackButtonHandler />
@@ -26,15 +40,20 @@ export default function App() {
 
         {/* ================= PUBLIC ================= */}
 
-        {/* Directly open Login Page */}
-        <Route
-          path="/"
-          element={<LoginPage />}
-        />
+        {/* Directly open Auth Page */}
+       <Route
+  path="/"
+  element={<LandingPage />}
+/>
 
         <Route
           path="/login"
-          element={<LoginPage />}
+          element={<AuthPage mode="login" />}
+        />
+
+        <Route
+          path="/register"
+          element={<AuthPage mode="register" />}
         />
 
         {/* Guest QR Menu */}
