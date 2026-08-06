@@ -13,8 +13,8 @@ import OwnerDashboard from "./pages/OwnerDashboard";
 import OwnerHotelSettings from "./pages/OwnerHotelSettings";
 import HotelSetupPage from "./pages/HotelSetupPage";
 
-// Staff
-import KitchenDashboard from "./pages/KitchenDashboard";
+// // Staff
+// import KitchenDashboard from "./pages/KitchenDashboard";
 
 // Super Admin
 import SuperAdminDashboard from "./pages/SuperAdminDashboard";
@@ -28,6 +28,8 @@ import BackButtonHandler from "./components/BackButtonHandler";
 // Protected Route
 import ProtectedRoute from "./components/ProtectedRoute"; 
 import {isMobileApp} from "./utils/platform";
+import Orders from "./components/ownerdashboard/Orders";
+import StaffOrder from "./pages/StaffOrder";
 
 export default function App() {
   
@@ -116,10 +118,14 @@ const mobile = isMobileApp();
             </ProtectedRoute>
           }
         />
+        <Route
+path="/owner/order"
+element={<StaffOrder/>}
+/>
 
         {/* ================= KITCHEN ================= */}
 
-        <Route
+        {/* <Route
           path="/kitchen"
           element={
             <ProtectedRoute
@@ -129,10 +135,10 @@ const mobile = isMobileApp();
                 "superadmin",
               ]}
             >
-              <KitchenDashboard />
+              <Orders />
             </ProtectedRoute>
           }
-        />
+        /> */}
 
         {/* ================= ORDER TRACKING ================= */}
 
@@ -148,6 +154,7 @@ element={<OwnerHotelSettings />}
 path="/change-password"
 element={<ChangePassword/>}
 />
+
       </Routes>
     </>
   );

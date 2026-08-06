@@ -1,156 +1,383 @@
-import React, { useMemo, useState } from "react";
+import React, {
+  useMemo,
+  useState,
+} from "react";
+
 import {
   FiSearch,
-  FiFilter,
   FiShoppingBag,
 } from "react-icons/fi";
 
+import KitchenBoard from "../kitchen/KitchenBoard";
 import OrderCard from "./OrderCard";
 
 
+
 export default function Orders({
+
   orders = [],
-  orderStats,
-  renderOrderCard,
-  themeStyles,
-  themeText,
-  accentColor,
+
+  refresh,
+
+  primaryColor,
+
 }) {
 
 
-const [filter,setFilter] = useState("all");
+const [activeView,setActiveView] = useState("kitchen");
+
 const [search,setSearch] = useState("");
 
 
 
-const filteredOrders = useMemo(()=>{
 
 
-let data = [...orders];
 
 
-// STATUS FILTER
+// ===============================
+// UPDATE STATUS
+// ===============================
 
-if(filter !== "all"){
 
-data = data.filter(
-(order)=>
-order.status === filter
+const updateStatus = async(
+  orderId,
+  status,
+  pauseReason=null
+)=>{
+
+
+try{
+
+
+await fetch(
+
+`${import.meta.env.VITE_API_URL}/kitchen/orders/${orderId}`,
+
+{
+
+method:"PUT",
+
+headers:{
+
+"Content-Type":"application/json",
+
+Authorization:
+`Bearer ${localStorage.getItem("token")}`
+
+},
+
+
+body:JSON.stringify({
+
+status,
+
+pauseReason
+
+})
+
+
+}
+
 );
+
+
+refresh();
+
+
+}
+catch(error){
+
+console.log(
+"Status update error",
+error
+);
+
 
 }
 
 
-// SEARCH
+};
 
-if(search.trim()){
+
+
+
+
+
+
+
+
+// ===============================
+// ACTIVE KITCHEN ORDERS
+// ===============================
+
+
+const kitchenOrders = useMemo(()=>{
+
+
+return orders.filter(
+
+order =>
+
+![
+"delivered",
+"cancelled"
+]
+
+.includes(
+order.status
+)
+
+);
+
+
+},[orders]);
+
+
+
+
+
+
+
+
+
+// ===============================
+// KITCHEN COLUMNS
+// ===============================
+
+
+const newOrders =
+kitchenOrders.filter(
+
+order =>
+order.status==="pending"
+
+);
+
+
+
+
+const preparingOrders =
+kitchenOrders.filter(
+
+order =>
+
+[
+"accepted",
+"preparing"
+]
+
+.includes(
+order.status
+)
+
+);
+
+
+
+
+const readyOrders =
+kitchenOrders.filter(
+
+order =>
+order.status==="ready"
+
+);
+
+
+
+
+const pausedOrders =
+kitchenOrders.filter(
+
+order =>
+order.status==="paused"
+
+);
+
+
+
+
+
+
+
+
+
+// ===============================
+// HISTORY
+// ===============================
+
+
+const historyOrders = useMemo(()=>{
+
+
+return orders.filter(
+
+order =>
+
+[
+"delivered",
+"cancelled"
+
+]
+
+.includes(
+order.status
+)
+
+);
+
+
+},[orders]);
+
+
+
+
+
+
+
+const filteredHistory =
+historyOrders.filter(order=>{
+
+
+if(!search.trim())
+return true;
+
 
 const value =
 search.toLowerCase();
 
 
-data =
-data.filter(order=>{
-
-
-const table =
-String(
-order.locationNumber ||
-order.roomNumber ||
-""
-)
-.toLowerCase();
-
-
-
-const guest =
-(
-order.guestName ||
-""
-)
-.toLowerCase();
-
-
-
-const id =
-(
-order._id ||
-""
-)
-.toLowerCase();
-
-
 
 return (
-table.includes(value) ||
-guest.includes(value) ||
-id.includes(value)
+
+String(order._id)
+.toLowerCase()
+.includes(value)
+
+
+||
+
+
+String(
+
+order.locationNumber ||
+
+order.roomNumber ||
+
+""
+
+)
+
+.toLowerCase()
+
+.includes(value)
+
+
+
+||
+
+
+(
+order.guestName || ""
+
+)
+
+.toLowerCase()
+
+.includes(value)
+
+
 );
+
 
 });
 
 
+
+
+
+
+
+
+
+// ===============================
+// HELPERS
+// ===============================
+
+
+const getLocation=(order)=>{
+
+
+if(order.locationType==="room"){
+
+
+return `Room ${
+order.locationNumber ||
+order.roomNumber ||
+"-"
+}`;
+
+
 }
 
 
-return data;
+
+return `Table ${
+order.locationNumber ||
+order.roomNumber ||
+"-"
+}`;
 
 
-},[
-orders,
-filter,
-search
-]);
+};
 
 
 
 
 
-const filters=[
 
-{
-key:"all",
-label:"All"
-},
 
-{
-key:"pending",
-label:"New"
-},
 
-{
-key:"accepted",
-label:"Accepted"
-},
+const waitingTime=(date)=>{
 
-{
-key:"preparing",
-label:"Preparing"
-},
 
-{
-key:"ready",
-label:"Ready"
-},
+if(!date)
+return 0;
 
-{
-key:"delivered",
-label:"Completed"
-},
 
-{
-key:"cancelled",
-label:"Cancelled"
-}
 
-];
+return Math.floor(
+
+(
+Date.now()
+-
+new Date(date).getTime()
+
+)
+
+/60000
+
+);
+
+
+};
+
+
+
+
+
+
+
 
 
 
 
 return (
 
-<div className="space-y-5">
+<div className="space-y-6">
+
+
+
 
 
 
@@ -159,17 +386,18 @@ return (
 <div>
 
 <h1 className="text-2xl font-bold">
+
 Orders
+
 </h1>
 
-<p
-className="text-sm"
-style={{
-color:themeStyles.mutedText
-}}
->
-Manage all restaurant orders
+
+<p className="text-sm opacity-70">
+
+Manage kitchen workflow and completed orders
+
 </p>
+
 
 </div>
 
@@ -177,55 +405,226 @@ Manage all restaurant orders
 
 
 
-{/* SEARCH + FILTER */}
+
+
+
+
+{/* SWITCH */}
 
 <div
+
 className="
+flex
+gap-2
 rounded-2xl
 border
-p-4
-space-y-4
+p-2
+"
+
+>
+
+
+<button
+
+onClick={()=>setActiveView("kitchen")}
+
+className="
+rounded-xl
+px-5
+py-2
+text-sm
+font-semibold
 "
 
 style={{
 
 background:
-themeStyles.surfaceBg,
 
-borderColor:
-themeStyles.borderColor
+activeView==="kitchen"
+
+?
+
+primaryColor
+
+:
+
+"transparent",
+
+
+color:
+
+activeView==="kitchen"
+
+?
+
+"#fff"
+
+:
+
+"inherit"
+
 
 }}
 
 >
 
+Kitchen Board
+
+</button>
+
+
+
+
+
+
+
+<button
+
+onClick={()=>setActiveView("history")}
+
+className="
+rounded-xl
+px-5
+py-2
+text-sm
+font-semibold
+"
+
+style={{
+
+background:
+
+activeView==="history"
+
+?
+
+primaryColor
+
+:
+
+"transparent",
+
+
+color:
+
+activeView==="history"
+
+?
+
+"#fff"
+
+:
+
+"inherit"
+
+
+}}
+
+>
+
+History
+
+</button>
+
+
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+{/* =========================
+    KITCHEN
+========================= */}
+
+
+
+{
+activeView==="kitchen"
+
+&&
+
+<KitchenBoard
+
+
+newOrders={newOrders}
+
+
+preparingOrders={preparingOrders}
+
+
+readyOrders={readyOrders}
+
+
+pausedOrders={pausedOrders}
+
+
+updateStatus={updateStatus}
+
+
+getLocation={getLocation}
+
+
+getWaitingMinutes={waitingTime}
+
+
+/>
+
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+{/* =========================
+    HISTORY
+========================= */}
+
+
+
+{
+activeView==="history"
+
+&&
+
+<div className="space-y-4">
+
+
+
 
 
 <div
+
 className="
 flex
 items-center
 gap-3
 rounded-xl
-px-3
-py-2
 border
+px-4
+py-3
 "
-
-style={{
-
-borderColor:
-themeStyles.borderColor
-
-}}
 
 >
 
-<FiSearch
-style={{
-color:themeStyles.mutedText
-}}
-/>
+
+<FiSearch/>
 
 
 <input
@@ -233,19 +632,15 @@ color:themeStyles.mutedText
 value={search}
 
 onChange={
-(e)=>
-setSearch(e.target.value)
+e=>setSearch(e.target.value)
 }
 
-placeholder="
-Search table, guest or order id
-"
+placeholder="Search old orders"
 
 className="
+w-full
 bg-transparent
 outline-none
-w-full
-text-sm
 "
 
 />
@@ -257,66 +652,67 @@ text-sm
 
 
 
-<div
-className="
-flex
-gap-2
-overflow-x-auto
-pb-1
-"
 
->
+
+
 
 
 {
-filters.map(item=>(
+filteredHistory.length===0
 
 
-<button
+?
 
-key={item.key}
-
-onClick={()=>
-setFilter(item.key)
-}
+<div
 
 className="
-px-4
-py-2
-rounded-xl
-text-xs
-font-semibold
-whitespace-nowrap
+rounded-2xl
+border
+border-dashed
+py-12
+text-center
 "
-
-style={{
-
-background:
-filter===item.key
-?
-accentColor
-:
-"transparent",
-
-
-color:
-filter===item.key
-?
-"#ffffff"
-:
-themeText,
-
-
-border:
-`1px solid ${themeStyles.borderColor}`
-
-}}
 
 >
 
-{item.label}
 
-</button>
+<FiShoppingBag
+
+className="mx-auto"
+
+size={30}
+
+/>
+
+
+<p className="mt-3">
+
+No history found
+
+</p>
+
+
+</div>
+
+
+
+:
+
+
+<div className="space-y-3">
+
+
+{
+filteredHistory.map(order=>(
+
+
+<OrderCard
+
+key={order._id}
+
+order={order}
+
+/>
 
 
 ))
@@ -327,105 +723,15 @@ border:
 </div>
 
 
-
-</div>
-
-
-
-
-
-
-
-
-{/* ORDER LIST */}
-
-
-{
-filteredOrders.length===0 ?
-
-
-<div
-
-className="
-rounded-2xl
-border
-border-dashed
-py-14
-text-center
-"
-
-style={{
-
-borderColor:
-themeStyles.borderColor
-
-}}
-
->
-
-
-<FiShoppingBag
-
-className="mx-auto"
-
-size={32}
-
-style={{
-
-color:
-themeStyles.mutedText
-
-}}
-
-/>
-
-
-<p
-
-className="mt-3 text-sm"
-
-style={{
-
-color:
-themeStyles.mutedText
-
-}}
-
->
-
-No orders found
-
-</p>
-
-
-</div>
-
-
-
-:
-
-
-<div
-
-className="
-space-y-3
-"
-
->
-
-
-{
-filteredOrders.map(
-(order)=>
-renderOrderCard(order)
-)
 }
 
 
+
 </div>
 
-
 }
+
+
 
 
 

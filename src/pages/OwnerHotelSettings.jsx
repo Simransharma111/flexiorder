@@ -119,30 +119,19 @@ try{
 setLoading(true);
 
 
-await api.put(
-"/hotel/profile",
-{
-
-tagline:hotel.tagline,
-
-description:hotel.description,
-
-address:hotel.address,
-
-phone:hotel.phone,
-
-email:hotel.email,
-
-website:hotel.website,
-
-instagram:hotel.instagram,
-
-whatsapp:hotel.whatsapp,
-
-}
-
+await api.patch(
+  "/hotel/profile",
+  {
+    tagline: hotel.tagline,
+    description: hotel.description,
+    address: hotel.address,
+    phone: hotel.phone,
+    email: hotel.email,
+    website: hotel.website,
+    instagram: hotel.instagram,
+    whatsapp: hotel.whatsapp,
+  }
 );
-
 
 
 alert(
@@ -246,15 +235,14 @@ hotel.theme.accent
 
 
 
-await api.put(
-"/hotel/branding",
-form,
-{
-headers:{
-"Content-Type":
-"multipart/form-data"
-}
-}
+await api.patch(
+  "/hotel/branding",
+  form,
+  {
+    headers: {
+      "Content-Type": "multipart/form-data",
+    },
+  }
 );
 
 
@@ -869,8 +857,7 @@ gap-4
 
 
 {
-HOTEL_THEMES.map(theme=>(
-
+  Object.values(HOTEL_THEMES).map((theme) => (
 
 <button
 

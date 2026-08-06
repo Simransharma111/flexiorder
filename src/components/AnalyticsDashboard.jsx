@@ -129,7 +129,7 @@ export default function AnalyticsDashboard() {
 
       {/* CARDS */}
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
 
         <div className="bg-white/5 border border-white/10 rounded-3xl p-6">
 
@@ -137,9 +137,9 @@ export default function AnalyticsDashboard() {
             Revenue
           </p>
 
-          <h2 className="text-4xl font-bold mt-3">
-            ₹{data.totalRevenue}
-          </h2>
+          <h2 className="text-4xl font-bold mt-3 size-lg">
+  ₹{Math.round(data.totalRevenue || 0)}
+</h2>
 
         </div>
 
@@ -162,8 +162,8 @@ export default function AnalyticsDashboard() {
           </p>
 
           <h2 className="text-4xl font-bold mt-3">
-            ₹{data.avgOrderValue}
-          </h2>
+  ₹{Math.round(data.avgOrderValue || 0).toLocaleString("en-IN")}
+</h2>
 
         </div>
 
