@@ -40,15 +40,23 @@ export default function CartPage() {
   const [successMessage, setSuccessMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
 
-  const applyHotelPricing = (hotel) => {
+  const getHotelPricing = (hotel) => {
     const enabled = Boolean(
       hotel?.gstEnabled ?? hotel?.enableGST ?? hotel?.gst?.enabled
     );
     const rate = Number(
       hotel?.gstPercentage ?? hotel?.gstRate ?? hotel?.gst?.percentage ?? 0
     );
-    setGstEnabled(enabled && rate > 0);
-    setGstRate(rate > 0 ? rate : 0);
+    return {
+      enabled: enabled && rate > 0,
+      rate: rate > 0 ? rate : 0,
+    };
+  };
+
+  const applyHotelPricing = (hotel) => {
+    const pricing = getHotelPricing(hotel);
+    setGstEnabled(pricing.enabled);
+    setGstRate(pricing.rate);
   };
 
   // =========================================================
@@ -178,6 +186,10 @@ export default function CartPage() {
 
     try {
       setPlacingOrder(true);
+      let orderPricing = {
+        enabled: gstEnabled,
+        rate: gstRate,
+      };
 
       // =====================================================
       // GET TABLE INFORMATION
@@ -190,6 +202,7 @@ export default function CartPage() {
           `/qr/menu/${qrId}`
         );
 
+        orderPricing = getHotelPricing(menuResponse.data?.hotel);
         applyHotelPricing(menuResponse.data?.hotel);
 
         tableId =
@@ -220,6 +233,10 @@ export default function CartPage() {
         quantity: Number(item.quantity),
       }));
 
+      const orderGstAmount = orderPricing.enabled
+        ? subtotal * orderPricing.rate / 100
+        : 0;
+
       // =====================================================
       // ORDER DATA
       // =====================================================
@@ -237,9 +254,9 @@ export default function CartPage() {
 
         subtotal,
         discountAmount: discountTotal,
-        gstRate: gstEnabled ? gstRate : 0,
-        gstAmount,
-        totalAmount: finalTotal,
+        gstRate: orderPricing.enabled ? orderPricing.rate : 0,
+        gstAmount: orderGstAmount,
+        totalAmount: subtotal + orderGstAmount,
 
         orderType,
 
