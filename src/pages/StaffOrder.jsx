@@ -89,6 +89,10 @@ const res=await api.get(
 setMenu(
 res.data || []
 );
+localStorage.setItem(
+  `staff_menu_${hotel._id}`,
+  JSON.stringify(res.data || [])
+);
 
 
 }
@@ -98,6 +102,11 @@ console.log(
 "MENU ERROR",
 error.response?.data || error.message
 );
+
+try{
+  const cached=localStorage.getItem(`staff_menu_${hotel?._id}`);
+  if(cached) setMenu(JSON.parse(cached));
+}catch{}
 
 }
 
@@ -126,6 +135,10 @@ const res=await api.get(
 setTables(
 res.data.tables || []
 );
+localStorage.setItem(
+  `staff_tables_${hotel?._id || "current"}`,
+  JSON.stringify(res.data.tables || [])
+);
 
 
 }
@@ -135,6 +148,11 @@ console.log(
 "TABLE ERROR",
 error.response?.data || error.message
 );
+
+try{
+  const cached=localStorage.getItem(`staff_tables_${hotel?._id || "current"}`);
+  if(cached) setTables(JSON.parse(cached));
+}catch{}
 
 }
 
