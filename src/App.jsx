@@ -119,9 +119,15 @@ const mobile = isMobileApp();
           }
         />
         <Route
-path="/owner/order"
-element={<StaffOrder/>}
-/>
+          path="/owner/order"
+          element={
+            <ProtectedRoute
+              allowedRoles={["staff", "owner", "superadmin"]}
+            >
+              <StaffOrder />
+            </ProtectedRoute>
+          }
+        />
 
         {/* ================= KITCHEN ================= */}
 
@@ -147,13 +153,25 @@ element={<StaffOrder/>}
           element={<TrackOrderPage />}
         />
         <Route
-path="/owner/hotel/settings"
-element={<OwnerHotelSettings />}
-/>
-<Route
-path="/change-password"
-element={<ChangePassword/>}
-/>
+          path="/owner/hotel/settings"
+          element={
+            <ProtectedRoute
+              allowedRoles={["owner", "superadmin"]}
+            >
+              <OwnerHotelSettings />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/change-password"
+          element={
+            <ProtectedRoute
+              allowedRoles={["staff", "owner", "superadmin"]}
+            >
+              <ChangePassword />
+            </ProtectedRoute>
+          }
+        />
 
       </Routes>
     </>
