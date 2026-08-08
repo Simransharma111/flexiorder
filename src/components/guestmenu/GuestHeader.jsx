@@ -13,9 +13,6 @@ export default function GuestHeader({
 
   return (
     <header className="
-      sticky
-      top-0
-      z-50
       px-4
       pt-3
     ">
