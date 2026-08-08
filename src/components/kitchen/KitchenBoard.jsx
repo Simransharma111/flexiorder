@@ -22,13 +22,12 @@ const longPressTriggered = useRef(false);
 
 
 const handlePause = ()=>{
-
-if(!reason.trim()) return;
+if(!pauseOrder) return;
 
 updateStatus(
 pauseOrder._id,
 "paused",
-reason
+reason.trim() || null
 );
 
 setPauseOrder(null);
@@ -444,7 +443,7 @@ mt-3
 p-2
 "
 
-placeholder="Reason"
+placeholder="Reason (optional)"
 
 value={reason}
 

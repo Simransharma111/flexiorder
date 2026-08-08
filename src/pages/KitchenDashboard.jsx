@@ -442,7 +442,8 @@ export default function KitchenDashboard() {
   const updateStatus =
     async (
       orderId,
-      status
+      status,
+      pauseReason = null
     ) => {
 
 
@@ -455,7 +456,8 @@ export default function KitchenDashboard() {
             `/kitchen/orders/${orderId}`,
 
             {
-              status
+              status,
+              pauseReason
             },
 
             {
