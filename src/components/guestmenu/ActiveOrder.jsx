@@ -242,40 +242,6 @@ export default function ActiveOrder({
 
 
 
-              {/* TOTAL */}
-
-
-              <div
-                className="
-                flex
-                justify-between
-                mt-4
-                text-sm
-                "
-              >
-
-                <span
-                  className="
-                  text-gray-500
-                  "
-                >
-                  Total
-                </span>
-
-
-                <strong>
-                  ₹
-                  {
-                    Number(
-                      order.totalAmount || 0
-                    ).toFixed(0)
-                  }
-                </strong>
-
-
-              </div>
-
-
             </div>
 
 
