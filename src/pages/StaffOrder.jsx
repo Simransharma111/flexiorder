@@ -34,6 +34,7 @@ const [tableSearch,setTableSearch]=useState("");
 const [orderType,setOrderType]=useState("dinein");
 
 const [guestName,setGuestName]=useState("");
+const [guestContact,setGuestContact]=useState("");
 
 const [cart,setCart]=useState([]);
 
@@ -432,6 +433,7 @@ const orderPayload={
   tableId:orderType === "takeaway" ? null : selectedTable,
   orderType,
   guestName:guestName || "Guest",
+  guestContact:guestContact || null,
   items:cart.map(item=>({
     menuId:item.menuId,
     quantity:item.quantity
@@ -444,6 +446,7 @@ if(!navigator.onLine){
   alert("Saved offline. It will sync when internet returns.");
   setCart([]);
   setGuestName("");
+  setGuestContact("");
   return;
 }
 
@@ -466,6 +469,7 @@ alert(
 setCart([]);
 
 setGuestName("");
+setGuestContact("");
 
 
 
@@ -484,6 +488,7 @@ if(!error.response){
     tableId:orderType === "takeaway" ? null : selectedTable,
     orderType,
     guestName:guestName || "Guest",
+    guestContact:guestContact || null,
     items:cart.map(item=>({
       menuId:item.menuId,
       quantity:item.quantity
@@ -492,6 +497,7 @@ if(!error.response){
   refreshPendingCount();
   setCart([]);
   setGuestName("");
+  setGuestContact("");
   alert("Saved offline. It will sync when internet returns.");
 }else{
   alert("Failed to place order");
@@ -677,6 +683,34 @@ p-4
 
 <label
 className="
+text-sm
+font-bold
+"
+>
+
+Contact
+
+</label>
+
+<input
+type="tel"
+value={guestContact}
+onChange={e=>setGuestContact(e.target.value)}
+placeholder="Optional contact number"
+className="
+mt-2
+w-full
+rounded-xl
+p-3
+bg-transparent
+border
+"
+/>
+
+<label
+className="
+mt-4
+block
 text-sm
 font-bold
 "
