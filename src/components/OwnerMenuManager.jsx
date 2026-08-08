@@ -10,6 +10,8 @@ import {
   FiStar,
   FiUpload,
   FiDownload,
+  FiEye,
+  FiEyeOff,
 } from "react-icons/fi";
 
 export default function OwnerMenuManager() {
@@ -322,6 +324,39 @@ export default function OwnerMenuManager() {
         err?.response?.data?.message ||
           "Failed to delete dish"
       );
+    }
+  };
+
+  const toggleAvailability = async (dish) => {
+    const nextAvailable = !dish.isAvailable;
+    setDishes((prev) => prev.map((item) =>
+      item._id === dish._id
+        ? { ...item, isAvailable: nextAvailable }
+        : item
+    ));
+
+    try {
+      const form = new FormData();
+      form.append("isAvailable", nextAvailable);
+      const response = await api.put(`/menu/dish/${dish._id}`, form, {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+          "Content-Type": "multipart/form-data",
+        },
+      });
+
+      if (response.data) {
+        setDishes((prev) => prev.map((item) =>
+          item._id === dish._id ? response.data : item
+        ));
+      }
+    } catch (err) {
+      setDishes((prev) => prev.map((item) =>
+        item._id === dish._id
+          ? { ...item, isAvailable: dish.isAvailable }
+          : item
+      ));
+      alert(err?.response?.data?.message || "Could not update dish availability");
     }
   };
 
@@ -1351,6 +1386,14 @@ export default function OwnerMenuManager() {
                       <div className="flex justify-end gap-2">
 
                         <button
+                          onClick={() => toggleAvailability(dish)}
+                          className={`w-9 h-9 rounded-lg flex items-center justify-center ${dish.isAvailable ? "bg-green-50 text-green-600 hover:bg-green-100" : "bg-red-50 text-red-600 hover:bg-red-100"}`}
+                          title={dish.isAvailable ? "Hide from menu" : "Show on menu"}
+                        >
+                          {dish.isAvailable ? <FiEye size={15} /> : <FiEyeOff size={15} />}
+                        </button>
+
+                        <button
                           onClick={() =>
                             editDish(dish)
                           }
@@ -1498,6 +1541,16 @@ export default function OwnerMenuManager() {
                 {/* ACTIONS */}
 
                 <div className="flex gap-2 mt-4">
+
+                  <button
+                    onClick={() => toggleAvailability(dish)}
+                    className={`flex-1 py-2 rounded-lg text-sm font-semibold ${dish.isAvailable ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"}`}
+                  >
+                    <span className="inline-flex items-center gap-1">
+                      {dish.isAvailable ? <FiEye /> : <FiEyeOff />}
+                      {dish.isAvailable ? "Hide" : "Show"}
+                    </span>
+                  </button>
 
                   <button
                     onClick={() =>
