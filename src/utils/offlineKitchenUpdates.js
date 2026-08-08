@@ -15,7 +15,22 @@ const writeQueue = (updates) => {
 export const getPendingKitchenUpdates = () => readQueue();
 
 export const queueKitchenUpdate = (update) => {
-  writeQueue([...readQueue(), update]);
+  const queue = readQueue();
+  const existingIndex = queue.findIndex(
+    (item) => item.orderId === update.orderId
+  );
+
+  if (existingIndex === -1) {
+    writeQueue([...queue, update]);
+    return;
+  }
+
+  const nextQueue = [...queue];
+  nextQueue[existingIndex] = {
+    ...nextQueue[existingIndex],
+    ...update,
+  };
+  writeQueue(nextQueue);
 };
 
 export const replacePendingKitchenUpdates = (updates) => {
