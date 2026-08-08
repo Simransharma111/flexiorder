@@ -188,7 +188,11 @@ useEffect(()=>{
   refreshPendingCount();
   syncPendingOrders();
   window.addEventListener("online",syncPendingOrders);
-  return ()=>window.removeEventListener("online",syncPendingOrders);
+  const retryInterval=window.setInterval(syncPendingOrders,15000);
+  return ()=>{
+    window.removeEventListener("online",syncPendingOrders);
+    window.clearInterval(retryInterval);
+  };
 },[]);
 
 
@@ -443,7 +447,6 @@ const orderPayload={
 if(!navigator.onLine){
   queueStaffOrder(orderPayload);
   refreshPendingCount();
-  alert("Saved offline. It will sync when internet returns.");
   setCart([]);
   setGuestName("");
   setGuestContact("");
@@ -498,7 +501,6 @@ if(!error.response){
   setCart([]);
   setGuestName("");
   setGuestContact("");
-  alert("Saved offline. It will sync when internet returns.");
 }else{
   alert("Failed to place order");
 }
