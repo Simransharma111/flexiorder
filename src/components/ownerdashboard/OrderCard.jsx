@@ -7,9 +7,19 @@ export default function OrderCard({
 order,
 primaryColor="#2563eb",
 onAction,
-actionLabel
+actionLabel,
+onLongPress
 
 }){
+
+let pressTimer;
+
+const startPress=()=>{
+  if(!onLongPress) return;
+  pressTimer=window.setTimeout(()=>onLongPress(order),550);
+};
+
+const endPress=()=>window.clearTimeout(pressTimer);
 
 
 const location =
@@ -61,6 +71,16 @@ style={{
 borderColor:`${primaryColor}40`
 
 }}
+
+onPointerDown={startPress}
+onPointerUp={endPress}
+onPointerLeave={endPress}
+onContextMenu={(event)=>{
+  if(!onLongPress) return;
+  event.preventDefault();
+  onLongPress(order);
+}}
+title={onLongPress ? "Long press for actions" : undefined}
 
 >
 

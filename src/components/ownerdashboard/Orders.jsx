@@ -27,6 +27,7 @@ export default function Orders({
 const [activeView,setActiveView] = useState("kitchen");
 
 const [search,setSearch] = useState("");
+const [historyActionOrder,setHistoryActionOrder] = useState(null);
 
 
 
@@ -291,6 +292,12 @@ order.guestName || ""
 
 
 });
+
+const restoreHistoryOrder = async()=>{
+  if(!historyActionOrder) return;
+  await updateStatus(historyActionOrder._id,"preparing");
+  setHistoryActionOrder(null);
+};
 
 
 
@@ -712,6 +719,8 @@ key={order._id}
 
 order={order}
 
+onLongPress={setHistoryActionOrder}
+
 />
 
 
@@ -733,6 +742,30 @@ order={order}
 
 
 
+
+
+{historyActionOrder && (
+  <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center">
+    <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl">
+      <p className="font-bold">History actions</p>
+      <p className="mt-1 text-sm text-gray-500">Restore this order?</p>
+      <button
+        type="button"
+        onClick={restoreHistoryOrder}
+        className="mt-4 w-full rounded-xl bg-orange-500 py-3 font-bold text-white"
+      >
+        Restore to Preparing
+      </button>
+      <button
+        type="button"
+        onClick={() => setHistoryActionOrder(null)}
+        className="mt-2 w-full rounded-xl bg-gray-100 py-3 font-semibold text-gray-700"
+      >
+        Close
+      </button>
+    </div>
+  </div>
+)}
 
 
 </div>
