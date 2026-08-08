@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 
 import api from "../api/axios";
@@ -13,12 +13,13 @@ export default function TrackOrderPage() {
   const [loading, setLoading] = useState(true);
 
   // FETCH ORDER
-  const fetchOrder = async () => {
+  const fetchOrder = useCallback(async () => {
 
     try {
 
       const res = await api.get(
-        `/orders/${orderId}`
+        `/orders/${orderId}`,
+        { skipAuth: true }
       );
 
       // backend returns direct order object
@@ -33,7 +34,7 @@ export default function TrackOrderPage() {
       setLoading(false);
 
     }
-  };
+  }, [orderId]);
 
   useEffect(() => {
 
@@ -51,23 +52,17 @@ export default function TrackOrderPage() {
     );
 
     // LISTEN FOR LIVE UPDATES
-    socket.on(
-      "orderUpdated",
-      (updatedOrder) => {
-
-        setOrder(updatedOrder);
-
-      }
-    );
+    const handleOrderUpdated = (updatedOrder) => setOrder(updatedOrder);
+    socket.on("orderUpdated", handleOrderUpdated);
 
     return () => {
 
       window.clearInterval(pollingId);
-      socket.off("orderUpdated");
+      socket.off("orderUpdated", handleOrderUpdated);
 
     };
 
-  }, [orderId]);
+  }, [fetchOrder, orderId]);
 
   // STATUS STEPS
 const steps = [

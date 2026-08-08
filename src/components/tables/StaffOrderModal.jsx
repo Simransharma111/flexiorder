@@ -1,4 +1,5 @@
-import React, {
+import {
+  useCallback,
   useEffect,
   useState,
 } from "react";
@@ -35,17 +36,7 @@ const [loading,setLoading]=useState(false);
 
 
 
-useEffect(()=>{
-
-fetchMenu();
-
-},[]);
-
-
-
-
-
-const fetchMenu = async()=>{
+const fetchMenu = useCallback(async()=>{
 
 try{
 
@@ -67,7 +58,11 @@ console.log(err);
 
 }
 
-};
+},[table.hotelId]);
+
+useEffect(()=>{
+fetchMenu();
+},[fetchMenu]);
 
 
 

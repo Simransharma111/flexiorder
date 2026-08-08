@@ -1,4 +1,4 @@
-import React, {
+import {
   useEffect,
   useMemo,
   useState,
@@ -35,6 +35,7 @@ import QRInventory from "./QRInventoryPage";
 import OwnerHotelSettings from "./OwnerHotelSettings";
 
 import HOTEL_THEMES from "../constants/hotelThemes";
+import { clearAuthSession } from "../utils/session";
 
 
 
@@ -284,17 +285,7 @@ LOGOUT
 */
 
 const logout=()=>{
-
-
-localStorage.removeItem(
-"token"
-);
-
-localStorage.removeItem(
-"user"
-);
-
-
+clearAuthSession();
 navigate(
 "/login"
 );

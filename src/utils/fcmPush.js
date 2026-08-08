@@ -69,11 +69,6 @@ export const initFCM = async (api) => {
 
         try {
 
-          console.log(
-            "FCM TOKEN:",
-            token.value
-          );
-
           const authToken =
             localStorage.getItem(
               "token"

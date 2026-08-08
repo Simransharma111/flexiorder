@@ -14,6 +14,19 @@ import { useCart } from "../context/CartContext";
 import { useEffect, useState } from "react";
 import api from "../api/axios";
 
+const getHotelPricing = (hotel) => {
+  const enabled = Boolean(
+    hotel?.gstEnabled ?? hotel?.enableGST ?? hotel?.gst?.enabled
+  );
+  const rate = Number(
+    hotel?.gstPercentage ?? hotel?.gstRate ?? hotel?.gst?.percentage ?? 0
+  );
+  return {
+    enabled: enabled && rate > 0,
+    rate: rate > 0 ? rate : 0,
+  };
+};
+
 export default function CartPage() {
   const navigate = useNavigate();
   const { qrId } = useParams();
@@ -40,25 +53,6 @@ export default function CartPage() {
   const [successMessage, setSuccessMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
 
-  const getHotelPricing = (hotel) => {
-    const enabled = Boolean(
-      hotel?.gstEnabled ?? hotel?.enableGST ?? hotel?.gst?.enabled
-    );
-    const rate = Number(
-      hotel?.gstPercentage ?? hotel?.gstRate ?? hotel?.gst?.percentage ?? 0
-    );
-    return {
-      enabled: enabled && rate > 0,
-      rate: rate > 0 ? rate : 0,
-    };
-  };
-
-  const applyHotelPricing = (hotel) => {
-    const pricing = getHotelPricing(hotel);
-    setGstEnabled(pricing.enabled);
-    setGstRate(pricing.rate);
-  };
-
   // =========================================================
   // SET CART SESSION
   // =========================================================
@@ -66,9 +60,11 @@ export default function CartPage() {
   useEffect(() => {
     if (qrId) {
       setCartSession(qrId);
-      api.get(`/qr/menu/${qrId}`)
+      api.get(`/qr/menu/${qrId}`, { skipAuth: true })
         .then((response) => {
-          applyHotelPricing(response.data?.hotel);
+          const pricing = getHotelPricing(response.data?.hotel);
+          setGstEnabled(pricing.enabled);
+          setGstRate(pricing.rate);
           const menu = response.data?.dishes || response.data?.menu || [];
           setUnavailableIds(
             menu
@@ -76,7 +72,9 @@ export default function CartPage() {
               .map((dish) => dish._id)
           );
         })
-        .catch(() => {});
+        .catch((error) => {
+          console.warn("Could not refresh checkout availability", error);
+        });
     }
   }, [qrId, setCartSession]);
 
@@ -160,6 +158,11 @@ export default function CartPage() {
       return;
     }
 
+    if (!navigator.onLine) {
+      setErrorMessage("You are offline. Please reconnect before placing the order.");
+      return;
+    }
+
     if (hasUnavailableItems) {
       setErrorMessage("Remove unavailable dishes before placing the order.");
       return;
@@ -199,11 +202,13 @@ export default function CartPage() {
 
       try {
         const menuResponse = await api.get(
-          `/qr/menu/${qrId}`
+          `/qr/menu/${qrId}`,
+          { skipAuth: true }
         );
 
         orderPricing = getHotelPricing(menuResponse.data?.hotel);
-        applyHotelPricing(menuResponse.data?.hotel);
+        setGstEnabled(orderPricing.enabled);
+        setGstRate(orderPricing.rate);
 
         tableId =
           menuResponse.data?.table?._id ||
@@ -266,20 +271,14 @@ export default function CartPage() {
             : null,
       };
 
-      console.log("📦 ORDER DATA:", orderData);
-
       // =====================================================
       // CREATE ORDER
       // =====================================================
 
       const response = await api.post(
         "/orders",
-        orderData
-      );
-
-      console.log(
-        "✅ ORDER RESPONSE:",
-        response.data
+        orderData,
+        { skipAuth: true }
       );
 
       // =====================================================

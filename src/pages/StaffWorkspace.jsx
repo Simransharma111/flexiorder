@@ -1,7 +1,11 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import api from "../api/axios";
 import StaffOrder from "./StaffOrder";
 import Orders from "../components/ownerdashboard/Orders";
+import { getScopedStorageKey } from "../utils/storageScope";
+
+const HOTEL_CACHE_KEY = "flexiorder_staff_hotel";
+const ORDERS_CACHE_KEY = "flexiorder_staff_orders";
 
 export default function StaffWorkspace() {
   const [hotel, setHotel] = useState(null);
@@ -11,7 +15,7 @@ export default function StaffWorkspace() {
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [updatingOrdering, setUpdatingOrdering] = useState(false);
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
       const [hotelResponse, ordersResponse] = await Promise.all([
         api.get("/hotel/me"),
@@ -21,13 +25,13 @@ export default function StaffWorkspace() {
       const nextOrders = ordersResponse.data?.orders || [];
       setHotel(nextHotel);
       setOrders(nextOrders);
-      localStorage.setItem("flexiorder_staff_hotel", JSON.stringify(nextHotel));
-      localStorage.setItem("flexiorder_staff_orders", JSON.stringify(nextOrders));
+      localStorage.setItem(getScopedStorageKey(HOTEL_CACHE_KEY), JSON.stringify(nextHotel));
+      localStorage.setItem(getScopedStorageKey(ORDERS_CACHE_KEY), JSON.stringify(nextOrders));
     } catch (error) {
       console.error("Staff workspace loading failed", error);
       try {
-        const cachedHotel = localStorage.getItem("flexiorder_staff_hotel");
-        const cachedOrders = localStorage.getItem("flexiorder_staff_orders");
+        const cachedHotel = localStorage.getItem(getScopedStorageKey(HOTEL_CACHE_KEY));
+        const cachedOrders = localStorage.getItem(getScopedStorageKey(ORDERS_CACHE_KEY));
         if (cachedHotel) setHotel(JSON.parse(cachedHotel));
         if (cachedOrders) setOrders(JSON.parse(cachedOrders));
       } catch (cacheError) {
@@ -36,7 +40,7 @@ export default function StaffWorkspace() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);
@@ -50,7 +54,7 @@ export default function StaffWorkspace() {
       window.removeEventListener("offline", handleOffline);
       window.clearInterval(interval);
     };
-  }, []);
+  }, [fetchData]);
 
   const toggleOrdering = async () => {
     if (!hotel || updatingOrdering) return;
@@ -70,7 +74,7 @@ export default function StaffWorkspace() {
       });
       setHotel((prev) => ({ ...prev, orderingEnabled: nextValue }));
       localStorage.setItem(
-        "flexiorder_staff_hotel",
+        getScopedStorageKey(HOTEL_CACHE_KEY),
         JSON.stringify({ ...hotel, orderingEnabled: nextValue })
       );
     } catch (error) {

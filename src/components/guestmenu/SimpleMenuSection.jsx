@@ -1,3 +1,5 @@
+import { getDishPricing } from "../../utils/pricing";
+
 export default function SimpleMenuSection({
   categories,
   dishes,
@@ -46,16 +48,7 @@ export default function SimpleMenuSection({
         {filteredDishes.map((dish) => {
           const quantity = getCartQuantity(dish._id);
           const isVeg = dish.foodType === "veg";
-          const basePrice = Number(dish.price || 0);
-          const discountValue = Number(
-            dish.discountValue ?? dish.discount ?? 0
-          );
-          const discountAmount =
-            dish.discountType === "fixed"
-              ? discountValue
-              : basePrice * discountValue / 100;
-          const finalPrice = Math.max(0, basePrice - discountAmount);
-          const hasDiscount = discountAmount > 0 && finalPrice < basePrice;
+          const { basePrice, finalPrice, hasDiscount } = getDishPricing(dish);
 
           return (
             <button

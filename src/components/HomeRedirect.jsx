@@ -1,27 +1,20 @@
 import { Navigate } from "react-router-dom";
+import { getHomePathForRole } from "../constants/roles";
 
 export default function HomeRedirect() {
   const token = localStorage.getItem("token");
-  const role = localStorage.getItem("role");
+  const role = (() => {
+    try {
+      return JSON.parse(localStorage.getItem("user") || "null")?.role || null;
+    } catch {
+      return null;
+    }
+  })();
 
   // NOT LOGGED IN
   if (!token) {
-    return <Navigate to="/homepage" replace />;
+    return <Navigate to="/" replace />;
   }
 
-  // ROLE BASED REDIRECT
-  if (role === "owner") {
-    return <Navigate to="/owner/dashboard" replace />;
-  }
-
-  if (role === "staff") {
-    return <Navigate to="/kitchen" replace />;
-  }
-
-  if (role === "superadmin") {
-    return <Navigate to="/superadmin" replace />;
-  }
-
-  // fallback
-  return <Navigate to="/homepage" replace />;
+  return <Navigate to={getHomePathForRole(role)} replace />;
 }

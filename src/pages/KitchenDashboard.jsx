@@ -1,6 +1,7 @@
 import {
   useEffect,
   useMemo,
+  useRef,
   useState
 } from "react";
 
@@ -11,10 +12,15 @@ import {
 
 import api from "../api/axios";
 import socket from "../socket";
+import { getScopedStorageKey } from "../utils/storageScope";
+import { clearAuthSession } from "../utils/session";
 import {
   getPendingKitchenUpdates,
+  getKitchenUpdatesNeedingAttention,
   queueKitchenUpdate,
-  replacePendingKitchenUpdates,
+  reconcileKitchenUpdateSync,
+  recordKitchenUpdateFailure,
+  retryKitchenUpdatesNeedingAttention,
 } from "../utils/offlineKitchenUpdates";
 
 
@@ -52,8 +58,12 @@ export default function KitchenDashboard() {
   const [pendingSyncCount, setPendingSyncCount] = useState(
     getPendingKitchenUpdates().length
   );
+  const [attentionCount, setAttentionCount] = useState(
+    getKitchenUpdatesNeedingAttention().length
+  );
 
   const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const syncInFlight = useRef(false);
 
   const scheduleDeliveredRemoval = (orderId) => {
     window.setTimeout(() => {
@@ -159,7 +169,7 @@ export default function KitchenDashboard() {
 
       setOrders(activeOrders);
       localStorage.setItem(
-        "flexiorder_kitchen_active_orders",
+        getScopedStorageKey("flexiorder_kitchen_active_orders"),
         JSON.stringify(activeOrders)
       );
 
@@ -175,10 +185,12 @@ export default function KitchenDashboard() {
 
       try {
         const cached = localStorage.getItem(
-          "flexiorder_kitchen_active_orders"
+          getScopedStorageKey("flexiorder_kitchen_active_orders")
         );
         if (cached) setOrders(JSON.parse(cached));
-      } catch {}
+      } catch (cacheError) {
+        console.warn("Kitchen cache could not be read", cacheError);
+      }
 
 
     }
@@ -347,26 +359,41 @@ export default function KitchenDashboard() {
 
   }, []);
 
+  const retryAttentionUpdates = () => {
+    const pending = retryKitchenUpdatesNeedingAttention();
+    setPendingSyncCount(pending.length);
+    setAttentionCount(0);
+    syncPendingKitchenUpdates();
+  };
+
   const syncPendingKitchenUpdates = async () => {
-    const pending = getPendingKitchenUpdates();
+    if (syncInFlight.current) return;
+    const pending = getPendingKitchenUpdates().filter((item) => !item.requiresAttention);
     if (!pending.length || !navigator.onLine) return;
 
-    const remaining = [];
-    for (const update of pending) {
-      try {
-        await api.put(
-          `/kitchen/orders/${update.orderId}`,
-          {
-            status: update.status,
-            pauseReason: update.pauseReason || null,
-          }
-        );
-      } catch {
-        remaining.push(update);
+    syncInFlight.current = true;
+    try {
+      const remaining = [];
+      for (const update of pending) {
+        try {
+          await api.put(
+            `/kitchen/orders/${update.orderId}`,
+            {
+              status: update.status,
+              pauseReason: update.pauseReason || null,
+              clientMutationId: update.clientMutationId,
+            }
+          );
+        } catch (error) {
+          remaining.push(recordKitchenUpdateFailure(update,error));
+        }
       }
+      const reconciled = reconcileKitchenUpdateSync(pending, remaining);
+      setPendingSyncCount(reconciled.length);
+      setAttentionCount(getKitchenUpdatesNeedingAttention().length);
+    } finally {
+      syncInFlight.current = false;
     }
-    replacePendingKitchenUpdates(remaining);
-    setPendingSyncCount(remaining.length);
   };
 
   useEffect(() => {
@@ -711,14 +738,7 @@ export default function KitchenDashboard() {
 
 
   const logout = () => {
-
-    localStorage.removeItem("token");
-
-    localStorage.removeItem("user");
-
-    localStorage.removeItem("role");
-
-
+    clearAuthSession();
     navigate("/");
 
 
@@ -797,6 +817,10 @@ min-w-0
           orderCount={orders.length}
 
           pendingSyncCount={pendingSyncCount}
+
+          attentionCount={attentionCount}
+
+          onRetryAttention={retryAttentionUpdates}
 
           isOnline={isOnline}
 

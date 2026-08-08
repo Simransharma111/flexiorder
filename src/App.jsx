@@ -1,44 +1,43 @@
-import { Routes, Route } from "react-router-dom";
+import { lazy, Suspense } from "react";
+import { Navigate, Routes, Route } from "react-router-dom";
 import "./App.css";
 
-// Public
-import LandingPage from "./pages/LandingPage";
-import AuthPage from "./pages/AuthPage";
-import GuestMenuPage from "./pages/GuestMenuPage";
-import CartPage from "./pages/CartPage";
-import TrackOrderPage from "./pages/TrackOrderPage";
-
-// Owner
-import OwnerDashboard from "./pages/OwnerDashboard";
-import OwnerHotelSettings from "./pages/OwnerHotelSettings";
-import HotelSetupPage from "./pages/HotelSetupPage";
-
-// Staff
-import KitchenDashboard from "./pages/KitchenDashboard";
-
-// Super Admin
-import SuperAdminDashboard from "./pages/SuperAdminDashboard";
-
-// Shared
-import QRInventoryPage from "./pages/QRInventoryPage";
-import ChangePassword from "./pages/ChangePassword";
 //back button handler
 import BackButtonHandler from "./components/BackButtonHandler";
+import AppErrorBoundary from "./components/AppErrorBoundary";
 
 // Protected Route
 import ProtectedRoute from "./components/ProtectedRoute"; 
-import {isMobileApp} from "./utils/platform";
-import Orders from "./components/ownerdashboard/Orders";
-import StaffWorkspace from "./pages/StaffWorkspace";
+import { OWNER_ROLES, RESTAURANT_ROLES } from "./constants/roles";
+
+const LandingPage = lazy(() => import("./pages/LandingPage"));
+const AuthPage = lazy(() => import("./pages/AuthPage"));
+const GuestMenuPage = lazy(() => import("./pages/GuestMenuPage"));
+const CartPage = lazy(() => import("./pages/CartPage"));
+const TrackOrderPage = lazy(() => import("./pages/TrackOrderPage"));
+const OwnerDashboard = lazy(() => import("./pages/OwnerDashboard"));
+const OwnerHotelSettings = lazy(() => import("./pages/OwnerHotelSettings"));
+const HotelSetupPage = lazy(() => import("./pages/HotelSetupPage"));
+const KitchenDashboard = lazy(() => import("./pages/KitchenDashboard"));
+const SuperAdminDashboard = lazy(() => import("./pages/SuperAdminDashboard"));
+const QRInventoryPage = lazy(() => import("./pages/QRInventoryPage"));
+const ChangePassword = lazy(() => import("./pages/ChangePassword"));
+const StaffWorkspace = lazy(() => import("./pages/StaffWorkspace"));
+
+const RouteFallback = () => (
+  <div className="flex min-h-screen items-center justify-center bg-slate-950 px-4 text-center text-sm font-semibold text-white">
+    Loading FlexiOrder…
+  </div>
+);
 
 export default function App() {
-  
-const mobile = isMobileApp();
   return (
     <>
       <BackButtonHandler />
 
-      <Routes>
+      <AppErrorBoundary>
+        <Suspense fallback={<RouteFallback />}>
+        <Routes>
 
         {/* ================= PUBLIC ================= */}
 
@@ -73,7 +72,11 @@ const mobile = isMobileApp();
         {/* QR Inventory */}
         <Route
           path="/qr"
-          element={<QRInventoryPage />}
+          element={
+            <ProtectedRoute allowedRoles={OWNER_ROLES}>
+              <QRInventoryPage />
+            </ProtectedRoute>
+          }
         />
 
         {/* ================= SUPER ADMIN ================= */}
@@ -93,10 +96,7 @@ const mobile = isMobileApp();
           path="/setup-hotel"
           element={
             <ProtectedRoute
-              allowedRoles={[
-                "owner",
-                "superadmin",
-              ]}
+              allowedRoles={OWNER_ROLES}
             >
               <HotelSetupPage />
             </ProtectedRoute>
@@ -109,10 +109,7 @@ const mobile = isMobileApp();
           path="/owner/dashboard"
           element={
             <ProtectedRoute
-              allowedRoles={[
-                "owner",
-                "superadmin",
-              ]}
+              allowedRoles={OWNER_ROLES}
             >
               <OwnerDashboard />
             </ProtectedRoute>
@@ -122,7 +119,7 @@ const mobile = isMobileApp();
           path="/owner/order"
           element={
             <ProtectedRoute
-              allowedRoles={["staff", "owner", "superadmin"]}
+              allowedRoles={RESTAURANT_ROLES}
             >
               <StaffWorkspace />
             </ProtectedRoute>
@@ -135,11 +132,7 @@ const mobile = isMobileApp();
           path="/kitchen"
           element={
             <ProtectedRoute
-              allowedRoles={[
-                "staff",
-                "owner",
-                "superadmin",
-              ]}
+              allowedRoles={RESTAURANT_ROLES}
             >
               <KitchenDashboard />
             </ProtectedRoute>
@@ -156,7 +149,7 @@ const mobile = isMobileApp();
           path="/owner/hotel/settings"
           element={
             <ProtectedRoute
-              allowedRoles={["owner", "superadmin"]}
+              allowedRoles={OWNER_ROLES}
             >
               <OwnerHotelSettings />
             </ProtectedRoute>
@@ -166,14 +159,18 @@ const mobile = isMobileApp();
           path="/change-password"
           element={
             <ProtectedRoute
-              allowedRoles={["staff", "owner", "superadmin"]}
+              allowedRoles={RESTAURANT_ROLES}
             >
               <ChangePassword />
             </ProtectedRoute>
           }
         />
 
-      </Routes>
+        <Route path="*" element={<Navigate to="/" replace />} />
+
+        </Routes>
+        </Suspense>
+      </AppErrorBoundary>
     </>
   );
 }

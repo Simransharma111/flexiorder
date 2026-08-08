@@ -5,7 +5,10 @@ import reactRefresh from 'eslint-plugin-react-refresh'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
 export default defineConfig([
-  globalIgnores(['dist']),
+  globalIgnores([
+    'dist/**',
+    'android/app/src/main/assets/public/**',
+  ]),
   {
     files: ['**/*.{js,jsx}'],
     extends: [
@@ -17,5 +20,16 @@ export default defineConfig([
       globals: globals.browser,
       parserOptions: { ecmaFeatures: { jsx: true } },
     },
+    rules: {
+      // These React Compiler diagnostics are not correctness requirements for
+      // this non-compiled app and flag normal async data-loading effects.
+      'react-hooks/immutability': 'off',
+      'react-hooks/set-state-in-effect': 'off',
+      'react-refresh/only-export-components': 'off',
+    },
+  },
+  {
+    files: ['src/**/*.test.{js,jsx}'],
+    languageOptions: { globals: globals.node },
   },
 ])

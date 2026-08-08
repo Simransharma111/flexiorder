@@ -1,4 +1,5 @@
-import React, {
+import {
+  useCallback,
   useEffect,
   useState,
 } from "react";
@@ -35,7 +36,7 @@ const [search,setSearch]=useState("");
 
 
 
-const fetchMenu=async()=>{
+const fetchMenu=useCallback(async()=>{
 
 
 try{
@@ -71,7 +72,7 @@ setLoading(false);
 }
 
 
-};
+},[table]);
 
 
 
@@ -90,7 +91,7 @@ fetchMenu();
 }
 
 
-},[table]);
+},[fetchMenu,table]);
 
 
 

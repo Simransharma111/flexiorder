@@ -12,6 +12,7 @@ import {
 } from "react-icons/fi";
 
 import api from "../api/axios";
+import { getPublicAppUrl } from "../config/env";
 
 
 export default function TableQRManager(){
@@ -717,7 +718,7 @@ table.qrId
 <QRCodeCanvas
 
 value={
-`${import.meta.env.VITE_FRONTEND_URL}/qr/${table.qrId}`
+`${getPublicAppUrl()}/qr/${table.qrId}`
 }
 
 size={120}

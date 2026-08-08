@@ -8,6 +8,7 @@ import {
 } from "react-icons/fa";
 
 import api from "../api/axios";
+import { clearAuthSession } from "../utils/session";
 import { useNavigate } from "react-router-dom";
 
 export default function SuperAdminDashboard() {
@@ -211,11 +212,7 @@ export default function SuperAdminDashboard() {
 
   if (!confirmLogout) return;
 
-  localStorage.removeItem("token");
-
-  localStorage.removeItem("user");
-
-  localStorage.removeItem("role");
+  clearAuthSession();
 
   navigate("/");
 };

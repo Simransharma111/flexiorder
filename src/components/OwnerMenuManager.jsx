@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import api from "../api/axios";
 import {
   FiPlus,
@@ -78,20 +78,20 @@ export default function OwnerMenuManager() {
   // FETCH DISHES
   // =====================================================
 
-  useEffect(() => {
-    if (hotelId) {
-      fetchDishes();
-    }
-  }, [hotelId]);
-
-  const fetchDishes = async () => {
+  const fetchDishes = useCallback(async () => {
     try {
       const res = await api.get(`/menu/${hotelId}`);
       setDishes(res.data || []);
     } catch (err) {
       console.error("Failed to fetch dishes:", err);
     }
-  };
+  }, [hotelId]);
+
+  useEffect(() => {
+    if (hotelId) {
+      fetchDishes();
+    }
+  }, [fetchDishes, hotelId]);
 
   // =====================================================
   // HANDLE INPUT
@@ -362,11 +362,16 @@ export default function OwnerMenuManager() {
   };
 
   const exportMenu = () => {
+    const excludedFields = new Set([
+      "_id", "__v", "createdAt", "updatedAt", "image",
+    ]);
     const payload = {
       format: "flexiorder-menu",
       version: 1,
       exportedAt: new Date().toISOString(),
-      dishes: dishes.map(({ _id, __v, createdAt, updatedAt, image, ...dish }) => dish),
+      dishes: dishes.map((dish) => Object.fromEntries(
+        Object.entries(dish).filter(([field]) => !excludedFields.has(field))
+      )),
     };
 
     const blob = new Blob([JSON.stringify(payload, null, 2)], {
@@ -1390,6 +1395,7 @@ export default function OwnerMenuManager() {
                           onClick={() => toggleAvailability(dish)}
                           className={`w-9 h-9 rounded-lg flex items-center justify-center ${dish.isAvailable ? "bg-green-50 text-green-600 hover:bg-green-100" : "bg-red-50 text-red-600 hover:bg-red-100"}`}
                           title={dish.isAvailable ? "Hide from menu" : "Show on menu"}
+                          aria-label={`${dish.isAvailable ? "Hide" : "Show"} ${dish.name}`}
                         >
                           {dish.isAvailable ? <FiEye size={15} /> : <FiEyeOff size={15} />}
                         </button>
@@ -1400,6 +1406,7 @@ export default function OwnerMenuManager() {
                           }
                           className="w-9 h-9 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 flex items-center justify-center"
                           title="Edit"
+                          aria-label={`Edit ${dish.name}`}
                         >
                           <FiEdit2 size={15} />
                         </button>
@@ -1410,6 +1417,7 @@ export default function OwnerMenuManager() {
                           }
                           className="w-9 h-9 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 flex items-center justify-center"
                           title="Delete"
+                          aria-label={`Delete ${dish.name}`}
                         >
                           <FiTrash2 size={15} />
                         </button>

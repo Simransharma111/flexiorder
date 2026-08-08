@@ -1,6 +1,8 @@
-import React, {
+import {
+  useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 
@@ -13,9 +15,13 @@ import KitchenBoard from "../kitchen/KitchenBoard";
 import OrderCard from "./OrderCard";
 import {
   getPendingKitchenUpdates,
+  getKitchenUpdatesNeedingAttention,
   queueKitchenUpdate,
-  replacePendingKitchenUpdates,
+  reconcileKitchenUpdateSync,
+  recordKitchenUpdateFailure,
+  retryKitchenUpdatesNeedingAttention,
 } from "../../utils/offlineKitchenUpdates";
+import api from "../../api/axios";
 
 
 
@@ -38,6 +44,10 @@ const [localOrders,setLocalOrders] = useState(orders);
 const [pendingSyncCount,setPendingSyncCount] = useState(
   getPendingKitchenUpdates().length
 );
+const [attentionCount,setAttentionCount] = useState(
+  getKitchenUpdatesNeedingAttention().length
+);
+const syncInFlight=useRef(false);
 
 useEffect(()=>{
   setLocalOrders(orders);
@@ -45,40 +55,40 @@ useEffect(()=>{
 
 const displayOrders = localOrders;
 
-const syncPendingUpdates = async()=>{
-  const pending = getPendingKitchenUpdates();
+const syncPendingUpdates = useCallback(async()=>{
+  if(syncInFlight.current) return;
+  const pending = getPendingKitchenUpdates().filter((item)=>!item.requiresAttention);
   if(!pending.length || !navigator.onLine){
-    setPendingSyncCount(pending.length);
+    setPendingSyncCount(getPendingKitchenUpdates().length);
+    setAttentionCount(getKitchenUpdatesNeedingAttention().length);
     return;
   }
 
-  const remaining=[];
-  for(const update of pending){
-    try{
-      const response = await fetch(
-        `${import.meta.env.VITE_API_URL}/kitchen/orders/${update.orderId}`,
-        {
-          method:"PUT",
-          headers:{
-            "Content-Type":"application/json",
-            Authorization:`Bearer ${localStorage.getItem("token")}`
-          },
-          body:JSON.stringify({
+  syncInFlight.current=true;
+  try{
+    const remaining=[];
+    for(const update of pending){
+      try{
+        await api.put(
+          `/kitchen/orders/${update.orderId}`,
+          {
             status:update.status,
-            pauseReason:update.pauseReason || null
-          })
-        }
-      );
-      if(!response.ok) throw new Error("Status sync failed");
-    }catch(error){
-      remaining.push(update);
+            pauseReason:update.pauseReason || null,
+            clientMutationId:update.clientMutationId
+          }
+        );
+      }catch(error){
+        remaining.push(recordKitchenUpdateFailure(update,error));
+      }
     }
+    const reconciled=reconcileKitchenUpdateSync(pending,remaining);
+    setPendingSyncCount(reconciled.length);
+    setAttentionCount(getKitchenUpdatesNeedingAttention().length);
+    if(remaining.length !== pending.length) refresh();
+  }finally{
+    syncInFlight.current=false;
   }
-
-  replacePendingKitchenUpdates(remaining);
-  setPendingSyncCount(remaining.length);
-  if(remaining.length !== pending.length) refresh();
-};
+},[refresh]);
 
 useEffect(()=>{
   syncPendingUpdates();
@@ -88,7 +98,7 @@ useEffect(()=>{
     window.removeEventListener("online",syncPendingUpdates);
     window.clearInterval(interval);
   };
-},[]);
+},[syncPendingUpdates]);
 
 
 
@@ -131,38 +141,10 @@ if(!navigator.onLine){
 try{
 
 
-const response=await fetch(
-
-`${import.meta.env.VITE_API_URL}/kitchen/orders/${orderId}`,
-
-{
-
-method:"PUT",
-
-headers:{
-
-"Content-Type":"application/json",
-
-Authorization:
-`Bearer ${localStorage.getItem("token")}`
-
-},
-
-
-body:JSON.stringify({
-
-status,
-
-pauseReason
-
-})
-
-
-}
-
+await api.put(
+  `/kitchen/orders/${orderId}`,
+  {status,pauseReason}
 );
-
-if(!response.ok) throw new Error("Status update failed");
 
 
 refresh();
@@ -500,10 +482,26 @@ Manage kitchen workflow and completed orders
 </p>
 
 {pendingSyncCount > 0 && (
-  <p className="mt-2 flex items-center gap-2 text-xs font-semibold text-red-600">
+  <div className="mt-2 flex flex-wrap items-center gap-2 text-xs font-semibold text-red-600">
     <span className="h-2 w-2 rounded-full bg-red-600" />
-    {pendingSyncCount} update{pendingSyncCount === 1 ? "" : "s"} waiting to sync
-  </p>
+    <span>{attentionCount > 0
+      ? `${attentionCount} update${attentionCount === 1 ? "" : "s"} need attention`
+      : `${pendingSyncCount} update${pendingSyncCount === 1 ? "" : "s"} waiting to sync`}</span>
+    {attentionCount > 0 && navigator.onLine && (
+      <button
+        type="button"
+        onClick={()=>{
+          const pending=retryKitchenUpdatesNeedingAttention();
+          setPendingSyncCount(pending.length);
+          setAttentionCount(0);
+          syncPendingUpdates();
+        }}
+        className="rounded-lg border border-red-200 bg-white px-2 py-1"
+      >
+        Retry updates
+      </button>
+    )}
+  </div>
 )}
 
 

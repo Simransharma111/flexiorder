@@ -1,4 +1,5 @@
 import { motion } from "framer-motion";
+import { Link } from "react-router-dom";
 import {
   FiArrowRight,
   FiPlay,
@@ -23,13 +24,13 @@ export default function Hero() {
         {/* Left */}
 
         <motion.div
-          initial={{ opacity: 0, y: 60 }}
+          initial={false}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: .8 }}
         >
 
           <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-blue-500/20 bg-blue-500/10 px-4 py-2 text-sm text-blue-300">
-            🚀 Trusted by modern restaurants
+            Built for busy restaurant teams
           </div>
 
           <h1 className="text-5xl font-black leading-tight lg:text-7xl">
@@ -61,21 +62,27 @@ export default function Hero() {
 
           <div className="mt-10 flex flex-wrap gap-4">
 
-            <button className="flex items-center gap-2 rounded-2xl bg-blue-600 px-7 py-4 font-semibold transition hover:bg-blue-700">
+            <Link
+              to="/register"
+              className="flex items-center gap-2 rounded-2xl bg-blue-600 px-7 py-4 font-semibold transition hover:bg-blue-700"
+            >
 
               Start Free Trial
 
               <FiArrowRight />
 
-            </button>
+            </Link>
 
-            <button className="flex items-center gap-2 rounded-2xl border border-white/10 px-7 py-4 transition hover:bg-white/10">
+            <a
+              href="#workflow"
+              className="flex items-center gap-2 rounded-2xl border border-white/10 px-7 py-4 transition hover:bg-white/10"
+            >
 
               <FiPlay />
 
-              Watch Demo
+              See How It Works
 
-            </button>
+            </a>
 
           </div>
 
@@ -83,30 +90,30 @@ export default function Hero() {
 
             <div>
 
-              <h2 className="text-3xl font-bold">5K+</h2>
+              <h2 className="text-2xl font-bold">QR-first</h2>
 
               <p className="text-slate-400">
-                Orders Daily
+                No customer app
               </p>
 
             </div>
 
             <div>
 
-              <h2 className="text-3xl font-bold">99.9%</h2>
+              <h2 className="text-2xl font-bold">Offline-aware</h2>
 
               <p className="text-slate-400">
-                Uptime
+                Staff queues
               </p>
 
             </div>
 
             <div>
 
-              <h2 className="text-3xl font-bold">24/7</h2>
+              <h2 className="text-2xl font-bold">Live workflow</h2>
 
               <p className="text-slate-400">
-                Support
+                Waiter and kitchen
               </p>
 
             </div>
@@ -118,7 +125,7 @@ export default function Hero() {
         {/* Right */}
 
         <motion.div
-          initial={{ opacity: 0, scale: .8 }}
+          initial={false}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 1 }}
           className="relative"

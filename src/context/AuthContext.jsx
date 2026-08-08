@@ -4,6 +4,12 @@ import {
   useEffect,
   useState,
 } from "react";
+import {
+  AUTH_CLEARED_EVENT,
+  clearAuthSession,
+  readStoredSession,
+  saveAuthSession,
+} from "../utils/session";
 
 const AuthContext = createContext();
 
@@ -11,49 +17,23 @@ export const AuthProvider = ({
   children,
 }) => {
 
-  const [user, setUser] =
-    useState(null);
+  const [user, setUser] = useState(() => readStoredSession().user);
+  const loading = false;
 
-  const [loading, setLoading] =
-    useState(true);
-
-  // LOAD USER
   useEffect(() => {
-
-    try {
-
-      const token =
-        localStorage.getItem("token");
-
-      const storedUser =
-        localStorage.getItem("user");
-
-      if (token && storedUser) {
-
-        setUser(
-          JSON.parse(storedUser)
-        );
-
-      } else {
-
-        localStorage.removeItem("token");
-        localStorage.removeItem("user");
-
+    const handleAuthCleared = () => setUser(null);
+    const handleStorage = (event) => {
+      if (event.key === "token" || event.key === "user") {
+        setUser(readStoredSession().user);
       }
+    };
 
-    } catch (err) {
-
-      console.log(err);
-
-      localStorage.removeItem("token");
-      localStorage.removeItem("user");
-
-    } finally {
-
-      setLoading(false);
-
-    }
-
+    window.addEventListener(AUTH_CLEARED_EVENT, handleAuthCleared);
+    window.addEventListener("storage", handleStorage);
+    return () => {
+      window.removeEventListener(AUTH_CLEARED_EVENT, handleAuthCleared);
+      window.removeEventListener("storage", handleStorage);
+    };
   }, []);
 
   // LOGIN
@@ -62,20 +42,8 @@ export const AuthProvider = ({
     token
   ) => {
 
-    // REMOVE OLD USER
-    localStorage.clear();
-
-    // SAVE NEW USER
-    localStorage.setItem(
-      "token",
-      token
-    );
-
-    localStorage.setItem(
-      "user",
-      JSON.stringify(userData)
-    );
-
+    clearAuthSession({ notify: false });
+    saveAuthSession(userData, token);
     setUser(userData);
 
   };
@@ -83,13 +51,8 @@ export const AuthProvider = ({
   // LOGOUT
   const logout = () => {
 
-    localStorage.removeItem("token");
-
-    localStorage.removeItem("user");
-
+    clearAuthSession({ notify: false });
     setUser(null);
-
-    window.location.href = "/login";
 
   };
 

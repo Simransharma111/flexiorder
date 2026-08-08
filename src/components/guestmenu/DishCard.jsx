@@ -3,6 +3,7 @@ import {
   FiMinus,
   FiClock
 } from "react-icons/fi";
+import { getDishPricing } from "../../utils/pricing";
 
 
 export default function DishCard({
@@ -18,20 +19,7 @@ export default function DishCard({
   const isAvailable =
     dish.isAvailable !== false;
 
-  const basePrice = Number(dish.price || 0);
-  const discountValue = Number(
-    dish.discountValue ?? dish.discount ?? 0
-  );
-  const discountAmount =
-    dish.discountType === "fixed"
-      ? discountValue
-      : basePrice * discountValue / 100;
-  const finalPrice = Math.max(
-    0,
-    basePrice - discountAmount
-  );
-  const hasDiscount =
-    discountAmount > 0 && finalPrice < basePrice;
+  const { basePrice, finalPrice, hasDiscount } = getDishPricing(dish);
 
 
   return (

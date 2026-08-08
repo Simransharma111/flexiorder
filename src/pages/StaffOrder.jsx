@@ -1,6 +1,8 @@
-import React, {
+import {
+  useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 
@@ -9,14 +11,16 @@ import {
   FiPlus,
   FiShoppingCart,
   FiSearch,
-  FiMapPin,
 } from "react-icons/fi";
 
 import api from "../api/axios";
 import {
   getPendingStaffOrders,
+  getStaffOrdersNeedingAttention,
   queueStaffOrder,
-  replacePendingStaffOrders,
+  reconcileStaffOrderSync,
+  recordStaffOrderFailure,
+  retryStaffOrdersNeedingAttention,
 } from "../utils/offlineOrders";
 
 
@@ -42,7 +46,9 @@ const [search,setSearch]=useState("");
 
 const [loading,setLoading]=useState(false);
 const [pendingSyncCount,setPendingSyncCount]=useState(0);
+const [attentionCount,setAttentionCount]=useState(0);
 const [isOnline,setIsOnline]=useState(navigator.onLine);
+const syncInFlight=useRef(false);
 
 const visibleTables=tables.filter((table)=>{
   if(!tableSearch.trim()) return true;
@@ -51,28 +57,36 @@ const visibleTables=tables.filter((table)=>{
     .includes(tableSearch.trim().toLowerCase());
 });
 
-const refreshPendingCount=()=>{
+const refreshPendingCount=useCallback(()=>{
   setPendingSyncCount(getPendingStaffOrders().length);
-};
+  setAttentionCount(getStaffOrdersNeedingAttention().length);
+},[]);
 
-const syncPendingOrders=async()=>{
-  const pending=getPendingStaffOrders();
+const syncPendingOrders=useCallback(async()=>{
+  if(syncInFlight.current) return;
+  const pending=getPendingStaffOrders().filter((item)=>!item.requiresAttention);
   if(!pending.length || !navigator.onLine){
     refreshPendingCount();
     return;
   }
 
-  const remaining=[];
-  for(const queued of pending){
-    try{
-      await api.post("/orders",queued.payload);
-    }catch(error){
-      remaining.push(queued);
+  syncInFlight.current=true;
+  try{
+    const remaining=[];
+    for(const queued of pending){
+      try{
+        await api.post("/orders",queued.payload);
+      }catch(error){
+        remaining.push(recordStaffOrderFailure(queued,error));
+      }
     }
+    const reconciled=reconcileStaffOrderSync(pending,remaining);
+    setPendingSyncCount(reconciled.length);
+    setAttentionCount(getStaffOrdersNeedingAttention().length);
+  }finally{
+    syncInFlight.current=false;
   }
-  replacePendingStaffOrders(remaining);
-  setPendingSyncCount(remaining.length);
-};
+},[refreshPendingCount]);
 
 
 
@@ -83,7 +97,7 @@ FETCH MENU
 =========================
 */
 
-const fetchMenu=async()=>{
+const fetchMenu=useCallback(async()=>{
 
 try{
 
@@ -117,11 +131,13 @@ error.response?.data || error.message
 try{
   const cached=localStorage.getItem(`staff_menu_${hotel?._id}`);
   if(cached) setMenu(JSON.parse(cached));
-}catch{}
+}catch(cacheError){
+  console.warn("Staff menu cache could not be read",cacheError);
+}
 
 }
 
-};
+},[hotel]);
 
 
 
@@ -133,7 +149,7 @@ FETCH TABLES
 =========================
 */
 
-const fetchTables=async()=>{
+const fetchTables=useCallback(async()=>{
 
 try{
 
@@ -163,11 +179,13 @@ error.response?.data || error.message
 try{
   const cached=localStorage.getItem(`staff_tables_${hotel?._id || "current"}`);
   if(cached) setTables(JSON.parse(cached));
-}catch{}
+}catch(cacheError){
+  console.warn("Staff table cache could not be read",cacheError);
+}
 
 }
 
-};
+},[hotel]);
 
 
 
@@ -183,7 +201,7 @@ fetchTables();
 
 }
 
-},[hotel]);
+},[fetchMenu,fetchTables,hotel?._id]);
 
 useEffect(()=>{
   const handleOnline=()=>setIsOnline(true);
@@ -200,7 +218,7 @@ useEffect(()=>{
     window.removeEventListener("online",syncPendingOrders);
     window.clearInterval(retryInterval);
   };
-},[]);
+},[refreshPendingCount,syncPendingOrders]);
 
 
 
@@ -568,10 +586,27 @@ Create order for guest
 </p>
 
 {(!isOnline || pendingSyncCount > 0) && (
-  <p className="mt-2 flex items-center gap-2 text-xs font-semibold text-red-600">
+  <div className="mt-2 flex flex-wrap items-center gap-2 text-xs font-semibold text-red-600">
     <span className="h-2 w-2 rounded-full bg-red-600" />
-    {!isOnline ? "Offline — orders save on this device" : `${pendingSyncCount} order${pendingSyncCount === 1 ? "" : "s"} waiting to sync`}
-  </p>
+    <span>{!isOnline
+      ? "Offline — orders save on this device"
+      : attentionCount > 0
+        ? `${attentionCount} order${attentionCount === 1 ? "" : "s"} need attention`
+        : `${pendingSyncCount} order${pendingSyncCount === 1 ? "" : "s"} waiting to sync`}</span>
+    {isOnline && attentionCount > 0 && (
+      <button
+        type="button"
+        onClick={()=>{
+          retryStaffOrdersNeedingAttention();
+          refreshPendingCount();
+          syncPendingOrders();
+        }}
+        className="rounded-lg border border-red-200 bg-white px-2 py-1"
+      >
+        Retry all
+      </button>
+    )}
+  </div>
 )}
 
 

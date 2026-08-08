@@ -1,4 +1,4 @@
-import React, { useRef, useState } from "react";
+import { useRef, useState } from "react";
 
 export default function KitchenBoard({
 
@@ -276,6 +276,15 @@ select-none
 active:scale-[0.99]
 "
 onClick={()=>handleCardClick(order)}
+role="button"
+tabIndex={0}
+aria-label={`${getLocation(order)}. ${order.items?.length || 0} items. Tap to advance status; long press for options.`}
+onKeyDown={(event)=>{
+  if(event.key==="Enter" || event.key===" "){
+    event.preventDefault();
+    handleCardClick(order);
+  }
+}}
 onPointerDown={()=>startPress(order)}
 onPointerUp={endPress}
 onPointerLeave={endPress}
@@ -305,7 +314,7 @@ justify-between
 </p>
 
 <p className="text-[10px] text-slate-500">
-  Order #{order._id.slice(-5)}
+  Order #{order._id?.slice(-5) || "local"}
 </p>
 
 

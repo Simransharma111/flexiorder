@@ -1,4 +1,4 @@
-import React from "react";
+import { useRef } from "react";
 import { FiClock } from "react-icons/fi";
 
 
@@ -12,14 +12,14 @@ onLongPress
 
 }){
 
-let pressTimer;
+const pressTimer = useRef(null);
 
 const startPress=()=>{
   if(!onLongPress) return;
-  pressTimer=window.setTimeout(()=>onLongPress(order),550);
+  pressTimer.current=window.setTimeout(()=>onLongPress(order),550);
 };
 
-const endPress=()=>window.clearTimeout(pressTimer);
+const endPress=()=>window.clearTimeout(pressTimer.current);
 
 
 const location =
@@ -77,12 +77,21 @@ borderColor:`${primaryColor}40`
 onPointerDown={startPress}
 onPointerUp={endPress}
 onPointerLeave={endPress}
+role={onLongPress ? "button" : undefined}
+tabIndex={onLongPress ? 0 : undefined}
+onKeyDown={(event)=>{
+  if(onLongPress && (event.key==="Enter" || event.key===" ")){
+    event.preventDefault();
+    onLongPress(order);
+  }
+}}
 onContextMenu={(event)=>{
   if(!onLongPress) return;
   event.preventDefault();
   onLongPress(order);
 }}
 title={onLongPress ? "Long press for actions" : undefined}
+aria-label={onLongPress ? `${location} history actions` : undefined}
 
 >
 

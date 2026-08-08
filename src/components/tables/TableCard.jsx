@@ -1,4 +1,3 @@
-import React from "react";
 
 import {
   FiExternalLink,
@@ -6,6 +5,7 @@ import {
   FiGrid,
   FiMapPin,
 } from "react-icons/fi";
+import { getPublicAppUrl } from "../../config/env";
 
 
 export default function TableCard({
@@ -17,7 +17,7 @@ onOrder,
 
 
 const menuUrl =
-`${import.meta.env.VITE_FRONTEND_URL}/qr/${table.qrId}`;
+`${getPublicAppUrl()}/qr/${table.qrId}`;
 
 
 

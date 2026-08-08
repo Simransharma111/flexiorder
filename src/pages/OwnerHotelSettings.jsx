@@ -324,11 +324,6 @@ hotel?.theme?.secondary ||
 activeTheme.secondary;
 
 
-const resolvedAccent =
-hotel?.theme?.accent ||
-activeTheme.accent;
-
-
 const resolvedText =
 hotel?.theme?.text ||
 activeTheme.text;

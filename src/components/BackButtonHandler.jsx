@@ -64,7 +64,7 @@ export default function BackButtonHandler() {
 
     };
 
-  }, [location.pathname]);
+  }, [location.pathname, navigate]);
 
   return null;
 }

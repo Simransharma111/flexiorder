@@ -1,4 +1,5 @@
 import { 
+  useCallback,
   useEffect,
   useMemo,
   useState,
@@ -18,13 +19,13 @@ import SimpleMenuSection from "../components/guestmenu/SimpleMenuSection";
 import FeaturedSection from "../components/guestmenu/FeaturedSection";
 import ActiveOrder from "../components/guestmenu/ActiveOrder";
 import ScheduleModal from "../components/guestmenu/ScheduleModal";
+import { getDishPricing } from "../utils/pricing";
 
 import {
   FiSearch,
   FiShoppingBag,
   FiCalendar,
   FiChevronRight,
-  FiLoader,
 } from "react-icons/fi";
 
 
@@ -44,7 +45,9 @@ const navigate = useNavigate();
 
 const [hotel,setHotel]=useState(null);
 
-const orderingEnabled = hotel?.orderingEnabled !== false;
+const hostOrderingEnabled = hotel?.orderingEnabled !== false;
+const [isOnline,setIsOnline]=useState(navigator.onLine);
+const orderingEnabled = hostOrderingEnabled && isOnline;
 const simpleMenu =
   hotel?.menuMode === "simple" ||
   hotel?.menuDisplayMode === "simple";
@@ -56,6 +59,17 @@ const [dishes,setDishes]=useState([]);
 const [loading,setLoading]=useState(true);
 
 const [error,setError]=useState("");
+
+useEffect(()=>{
+const handleOnline=()=>setIsOnline(true);
+const handleOffline=()=>setIsOnline(false);
+window.addEventListener("online",handleOnline);
+window.addEventListener("offline",handleOffline);
+return()=>{
+window.removeEventListener("online",handleOnline);
+window.removeEventListener("offline",handleOffline);
+};
+},[]);
 
 
 // =====================================================
@@ -107,35 +121,7 @@ const [
 // =====================================================
 
 
-useEffect(()=>{
-
-if(!qrId){
-
-setError(
-"QR information missing"
-);
-
-setLoading(false);
-
-return;
-
-}
-
-
-fetchMenu();
-const refreshInterval = window.setInterval(
-  () => fetchMenu({ silent: true }),
-  30000
-);
-
-return () => window.clearInterval(refreshInterval);
-
-
-},[qrId]);
-
-
-
-const fetchMenu=async({ silent = false } = {})=>{
+const fetchMenu=useCallback(async({ silent = false } = {})=>{
 
 const cacheKey = `guestMenu_${qrId}`;
 
@@ -147,7 +133,8 @@ setError("");
 
 
 const res=await api.get(
-`/qr/menu/${qrId}`
+`/qr/menu/${qrId}`,
+{skipAuth:true}
 );
 
 
@@ -210,7 +197,22 @@ if (!silent) setLoading(false);
 
 }
 
-};
+},[qrId]);
+
+useEffect(()=>{
+if(!qrId){
+setError("QR information missing");
+setLoading(false);
+return;
+}
+
+fetchMenu();
+const refreshInterval = window.setInterval(
+  () => fetchMenu({ silent: true }),
+  30000
+);
+return () => window.clearInterval(refreshInterval);
+},[fetchMenu,qrId]);
 
 
 
@@ -219,7 +221,7 @@ if (!silent) setLoading(false);
 // =====================================================
 
 
-const fetchActiveOrders=async()=>{
+const fetchActiveOrders=useCallback(async()=>{
 
 
 if(
@@ -237,7 +239,8 @@ setOrderLoading(true);
 
 
 const res=await api.get(
-`/orders/table/${table._id}`
+`/orders/table/${table._id}`,
+{skipAuth:true}
 );
 
 
@@ -301,7 +304,7 @@ setOrderLoading(false);
 }
 
 
-};
+},[qrId,table]);
 
 
 
@@ -330,9 +333,7 @@ return()=>clearInterval(interval);
 
 
 
-},[
-table?._id
-]);
+},[fetchActiveOrders,table?._id]);
 
 
 
@@ -518,18 +519,6 @@ return dish.category;
 })
 .filter(Boolean);
 
-
-
-const basePrice = Number(dish.price || 0);
-const discountValue = Number(
-  dish.discountValue ?? dish.discount ?? 0
-);
-const discountAmount =
-  dish.discountType === "fixed"
-    ? discountValue
-    : basePrice * discountValue / 100;
-const finalPrice = Math.max(0, basePrice - discountAmount);
-
 return [
 "All",
 ...new Set(list)
@@ -644,6 +633,12 @@ if(
 dish.isAvailable===false
 )
 return;
+
+const {
+  basePrice,
+  discountValue,
+  finalPrice,
+} = getDishPricing(dish);
 
 
 
@@ -1079,7 +1074,9 @@ loading={orderLoading}
 {!orderingEnabled && (
   <div className="mx-auto mt-4 max-w-6xl px-4">
     <p className="rounded-xl bg-gray-100 px-4 py-3 text-center text-sm text-gray-500">
-      Ordering is currently unavailable. You can still view the menu.
+      {!isOnline
+        ? "You are offline. The saved menu is available to view; ordering will return when connected."
+        : "Ordering is currently unavailable. You can still view the menu."}
     </p>
   </div>
 )}
@@ -1494,6 +1491,48 @@ orderingEnabled={orderingEnabled}
 
 />
 
+}
+
+{
+bestsellers.length>0 &&
+
+<FeaturedSection
+title="Best Sellers"
+dishes={bestsellers}
+onAdd={addToCart}
+onDecrease={decreaseQuantity}
+onIncrease={increaseQuantity}
+getQuantity={getCartQuantity}
+orderingEnabled={orderingEnabled}
+/>
+}
+
+{
+popular.length>0 &&
+
+<FeaturedSection
+title="Most Popular"
+dishes={popular}
+onAdd={addToCart}
+onDecrease={decreaseQuantity}
+onIncrease={increaseQuantity}
+getQuantity={getCartQuantity}
+orderingEnabled={orderingEnabled}
+/>
+}
+
+{
+newArrivals.length>0 &&
+
+<FeaturedSection
+title="New Arrivals"
+dishes={newArrivals}
+onAdd={addToCart}
+onDecrease={decreaseQuantity}
+onIncrease={increaseQuantity}
+getQuantity={getCartQuantity}
+orderingEnabled={orderingEnabled}
+/>
 }
 
 

@@ -5,37 +5,21 @@ export default function InstallPWA() {
 
   const [show, setShow] = useState(false);
 
-  const [isIOS, setIsIOS] = useState(false);
+  const [isIOS] = useState(() => /iphone|ipad|ipod/i.test(
+    window.navigator.userAgent
+  ));
 
-  const [isInstalled, setIsInstalled] =
-    useState(false);
+  const [isInstalled] = useState(() => (
+    window.matchMedia("(display-mode: standalone)").matches ||
+    Boolean(window.navigator.standalone)
+  ));
+
+  const [dismissed, setDismissed] = useState(() => (
+    localStorage.getItem("pwa-install-dismissed") === "true"
+  ));
 
   useEffect(() => {
-    // Detect iOS
-    const ios = /iphone|ipad|ipod/i.test(
-      window.navigator.userAgent
-    );
-
-    setIsIOS(ios);
-
-    // Detect installed mode
-    const installed =
-      window.matchMedia(
-        "(display-mode: standalone)"
-      ).matches ||
-      window.navigator.standalone;
-
-    setIsInstalled(installed);
-
-    if (installed) return;
-
-    // Prevent showing again if dismissed
-    const dismissed =
-      localStorage.getItem(
-        "pwa-install-dismissed"
-      );
-
-    if (dismissed) return;
+    if (isInstalled || dismissed) return;
 
     const handler = (e) => {
       e.preventDefault();
@@ -56,7 +40,7 @@ export default function InstallPWA() {
         handler
       );
     };
-  }, []);
+  }, [dismissed, isInstalled]);
 
   const handleInstall = async () => {
     if (!deferredPrompt.current) return;
@@ -81,10 +65,11 @@ export default function InstallPWA() {
       "true"
     );
 
+    setDismissed(true);
     setShow(false);
   };
 
-  if (isInstalled) return null;
+  if (isInstalled || dismissed) return null;
 
   // iPhone fallback
   if (isIOS && !show) {

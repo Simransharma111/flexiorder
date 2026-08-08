@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 
 import {
   FiArrowRight,
@@ -7,18 +7,20 @@ import {
   FiGrid,
   FiSmartphone,
   FiUsers,
-  FiShield,
 } from "react-icons/fi";
 
 import api from "../api/axios";
 import { useAuth } from "../context/AuthContext";
 import { initFCM } from "../utils/fcmPush";
+import { getHomePathForRole } from "../constants/roles";
+import { normalizeRole } from "../utils/access";
 
 
 export default function AuthPage({ mode = "login" }) {
 
 
   const navigate = useNavigate();
+  const location = useLocation();
 
   const { login } = useAuth();
 
@@ -139,7 +141,8 @@ export default function AuthPage({ mode = "login" }) {
       const res =
         await api.post(
           endpoint,
-          payload
+          payload,
+          { skipAuth: true }
         );
 
 
@@ -181,7 +184,7 @@ export default function AuthPage({ mode = "login" }) {
 
 
       if (
-        res.data.user.role === "owner" &&
+        normalizeRole(res.data.user.role) === "owner" &&
         !res.data.hotelSetupCompleted
       ) {
 
@@ -203,38 +206,18 @@ export default function AuthPage({ mode = "login" }) {
 
 
 
-      switch (res.data.user.role) {
+      const requestedPath = location.state?.from;
+      const safeRequestedPath =
+        typeof requestedPath === "string" &&
+        requestedPath.startsWith("/") &&
+        !requestedPath.startsWith("//")
+          ? requestedPath
+          : null;
 
-
-        case "superadmin":
-
-          navigate("/superadmin");
-
-          break;
-
-
-
-        case "owner":
-
-          navigate("/owner/dashboard");
-
-          break;
-
-
-
-        case "staff":
-
-          navigate("/kitchen");
-
-          break;
-
-
-
-        default:
-
-          navigate("/");
-
-      }
+      navigate(
+        safeRequestedPath || getHomePathForRole(res.data.user.role),
+        { replace: true }
+      );
 
 
 

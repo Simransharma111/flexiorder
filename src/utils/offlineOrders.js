@@ -1,18 +1,47 @@
+import { getScopedStorageKey } from "./storageScope";
+
 const STORAGE_KEY = "flexiorder_pending_staff_orders";
+const currentStorageKey = () => getScopedStorageKey(STORAGE_KEY);
 
 const readQueue = () => {
   try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+    const parsed = JSON.parse(localStorage.getItem(currentStorageKey()) || "[]");
+    return Array.isArray(parsed) ? parsed : [];
   } catch {
     return [];
   }
 };
 
 const writeQueue = (orders) => {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(orders));
+  localStorage.setItem(currentStorageKey(), JSON.stringify(orders));
+};
+
+const errorMessage = (error) => (
+  error?.response?.data?.message || error?.message || "Sync failed"
+);
+
+const needsAttention = (item, error) => {
+  const status = Number(error?.response?.status || 0);
+  const terminalClientError = status >= 400 && status < 500 && ![408, 429].includes(status);
+  const queuedForTwoMinutes = Date.now() - new Date(item.queuedAt || 0).getTime() >= 120000;
+  return terminalClientError || Number(item.attemptCount || 0) + 1 >= 8 || queuedForTwoMinutes;
 };
 
 export const getPendingStaffOrders = () => readQueue();
+export const getStaffOrdersNeedingAttention = () => (
+  readQueue().filter((item) => item.requiresAttention)
+);
+
+export const retryStaffOrdersNeedingAttention = () => {
+  const next = readQueue().map((item) => item.requiresAttention ? {
+    ...item,
+    requiresAttention: false,
+    attemptCount: 0,
+    lastError: null,
+  } : item);
+  writeQueue(next);
+  return next;
+};
 
 export const queueStaffOrder = (payload) => {
   const clientOrderId =
@@ -22,6 +51,9 @@ export const queueStaffOrder = (payload) => {
   const queuedOrder = {
     clientOrderId,
     queuedAt: new Date().toISOString(),
+    attemptCount: 0,
+    lastAttemptAt: null,
+    lastError: null,
     payload: { ...payload, clientOrderId },
   };
 
@@ -29,6 +61,19 @@ export const queueStaffOrder = (payload) => {
   return queuedOrder;
 };
 
-export const replacePendingStaffOrders = (orders) => {
-  writeQueue(orders);
+export const reconcileStaffOrderSync = (snapshot, failed) => {
+  const snapshotIds = new Set(snapshot.map((item) => item.clientOrderId));
+  const additions = readQueue().filter(
+    (item) => !snapshotIds.has(item.clientOrderId)
+  );
+  writeQueue([...failed, ...additions]);
+  return readQueue();
 };
+
+export const recordStaffOrderFailure = (queuedOrder, error) => ({
+  ...queuedOrder,
+  attemptCount: Number(queuedOrder.attemptCount || 0) + 1,
+  lastAttemptAt: new Date().toISOString(),
+  lastError: errorMessage(error),
+  requiresAttention: needsAttention(queuedOrder, error),
+});

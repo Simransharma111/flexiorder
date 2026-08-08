@@ -19,8 +19,6 @@ export default function Navbar() {
   const links = [
     { label: "Features", href: "#features" },
     { label: "How it Works", href: "#workflow" },
-    { label: "Pricing", href: "#pricing" },
-    { label: "Contact", href: "#contact" },
   ];
 
   return (
@@ -90,8 +88,11 @@ export default function Navbar() {
         {/* Mobile */}
 
         <button
+          type="button"
           onClick={() => setMobileOpen(!mobileOpen)}
           className="text-white lg:hidden"
+          aria-label={mobileOpen ? "Close navigation" : "Open navigation"}
+          aria-expanded={mobileOpen}
         >
           {mobileOpen ? <FiX size={26} /> : <FiMenu size={26} />}
         </button>

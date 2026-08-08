@@ -4,6 +4,8 @@ export default function KitchenHeader({
   setSearch,
   orderCount,
   pendingSyncCount = 0,
+  attentionCount = 0,
+  onRetryAttention,
   isOnline = true,
   toggleSidebar,
 }) {
@@ -26,10 +28,23 @@ export default function KitchenHeader({
           {orderCount} active orders
           {(!isOnline || pendingSyncCount > 0) && (
             <span className="ml-2 font-semibold text-red-600">
-              • {!isOnline ? "Offline — updates save here" : `${pendingSyncCount} waiting to sync`}
+              • {!isOnline
+                ? "Offline — updates save here"
+                : attentionCount > 0
+                  ? `${attentionCount} need attention`
+                  : `${pendingSyncCount} waiting to sync`}
             </span>
           )}
         </p>
+        {isOnline && attentionCount > 0 && (
+          <button
+            type="button"
+            onClick={onRetryAttention}
+            className="mt-1 rounded-md border border-red-200 px-2 py-1 text-[11px] font-semibold text-red-600"
+          >
+            Retry updates
+          </button>
+        )}
       </div>
 
       <input

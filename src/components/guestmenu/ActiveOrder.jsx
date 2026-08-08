@@ -166,7 +166,7 @@ export default function ActiveOrder({
 
                     {
                       order.items?.map(
-                        (item,index)=>
+                        (item)=>
                           `${item.name} × ${item.quantity || 1}`
                       )
                       .join(", ")
