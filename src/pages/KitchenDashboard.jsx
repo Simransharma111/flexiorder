@@ -55,6 +55,16 @@ export default function KitchenDashboard() {
 
   const [isOnline, setIsOnline] = useState(navigator.onLine);
 
+  const scheduleDeliveredRemoval = (orderId) => {
+    window.setTimeout(() => {
+      setOrders(prev =>
+        prev.filter(order =>
+          order._id !== orderId || order.status !== "delivered"
+        )
+      );
+    }, 10000);
+  };
+
 
 
 
@@ -522,6 +532,7 @@ export default function KitchenDashboard() {
               : order
           )
         );
+        if (status === "delivered") scheduleDeliveredRemoval(orderId);
         return;
       }
 
@@ -573,6 +584,8 @@ export default function KitchenDashboard() {
 
         );
 
+        if (status === "delivered") scheduleDeliveredRemoval(orderId);
+
 
 
       }
@@ -590,6 +603,7 @@ export default function KitchenDashboard() {
                 : order
             )
           );
+          if (status === "delivered") scheduleDeliveredRemoval(orderId);
         } else {
           alert("Failed to update order");
         }
