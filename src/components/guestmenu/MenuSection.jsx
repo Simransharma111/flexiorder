@@ -134,6 +134,12 @@ export default function MenuSection({
 
         })}
 
+        {categories.length > 5 && (
+          <span className="sticky right-0 shrink-0 self-center bg-gray-50 px-2 text-xs font-semibold text-gray-500">
+            More ›
+          </span>
+        )}
+
 
       </div>
 
