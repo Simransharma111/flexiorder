@@ -267,9 +267,7 @@ localStorage.setItem(
 `activeOrders_${qrId}`,
 
 JSON.stringify(
-active.map(
-(order)=>order._id
-)
+active
 )
 
 );
@@ -285,7 +283,15 @@ err
 );
 
 
-setActiveOrders([]);
+try {
+  const cached = JSON.parse(
+    localStorage.getItem(`activeOrders_${qrId}`) || "[]"
+  );
+  setActiveOrders(Array.isArray(cached) ? cached : []);
+} catch (cacheError) {
+  console.warn("CACHED ORDER ERROR", cacheError);
+  setActiveOrders([]);
+}
 
 }
 finally{
