@@ -11,6 +11,11 @@ import {
 
 import api from "../api/axios";
 import socket from "../socket";
+import {
+  getPendingKitchenUpdates,
+  queueKitchenUpdate,
+  replacePendingKitchenUpdates,
+} from "../utils/offlineKitchenUpdates";
 
 
 // Components
@@ -137,6 +142,10 @@ export default function KitchenDashboard() {
 
 
       setOrders(activeOrders);
+      localStorage.setItem(
+        "flexiorder_kitchen_active_orders",
+        JSON.stringify(activeOrders)
+      );
 
 
 
@@ -147,6 +156,13 @@ export default function KitchenDashboard() {
         "Orders fetch error",
         err
       );
+
+      try {
+        const cached = localStorage.getItem(
+          "flexiorder_kitchen_active_orders"
+        );
+        if (cached) setOrders(JSON.parse(cached));
+      } catch {}
 
 
     }
@@ -315,6 +331,33 @@ export default function KitchenDashboard() {
 
   }, []);
 
+  const syncPendingKitchenUpdates = async () => {
+    const pending = getPendingKitchenUpdates();
+    if (!pending.length || !navigator.onLine) return;
+
+    const remaining = [];
+    for (const update of pending) {
+      try {
+        await api.put(
+          `/kitchen/orders/${update.orderId}`,
+          {
+            status: update.status,
+            pauseReason: update.pauseReason || null,
+          }
+        );
+      } catch {
+        remaining.push(update);
+      }
+    }
+    replacePendingKitchenUpdates(remaining);
+  };
+
+  useEffect(() => {
+    syncPendingKitchenUpdates();
+    window.addEventListener("online", syncPendingKitchenUpdates);
+    return () => window.removeEventListener("online", syncPendingKitchenUpdates);
+  }, []);
+
   // =========================
   // AUTO REFRESH
   // =========================
@@ -446,6 +489,20 @@ export default function KitchenDashboard() {
       pauseReason = null
     ) => {
 
+      const update = { orderId, status, pauseReason };
+
+      if (!navigator.onLine) {
+        queueKitchenUpdate(update);
+        setOrders(prev =>
+          prev.map(order =>
+            order._id === orderId
+              ? { ...order, status, pauseReason }
+              : order
+          )
+        );
+        return;
+      }
+
 
       try {
 
@@ -501,9 +558,18 @@ export default function KitchenDashboard() {
 
         console.error(err);
 
-        alert(
-          "Failed to update order"
-        );
+        if (!err.response) {
+          queueKitchenUpdate(update);
+          setOrders(prev =>
+            prev.map(order =>
+              order._id === orderId
+                ? { ...order, status, pauseReason }
+                : order
+            )
+          );
+        } else {
+          alert("Failed to update order");
+        }
 
 
       }
