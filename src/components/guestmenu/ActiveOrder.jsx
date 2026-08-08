@@ -2,12 +2,23 @@ import {
   FiClock,
   FiLoader,
 } from "react-icons/fi";
+import { useRef, useState } from "react";
 
 
 export default function ActiveOrder({
   orders,
   loading,
 }) {
+
+  const sliderRef = useRef(null);
+  const [activeIndex, setActiveIndex] = useState(0);
+
+  const handleScroll = (event) => {
+    const width = event.currentTarget.clientWidth || 1;
+    setActiveIndex(
+      Math.round(event.currentTarget.scrollLeft / width)
+    );
+  };
 
 
   if (!orders || orders.length === 0) {
@@ -84,8 +95,15 @@ export default function ActiveOrder({
 
 
       <div
+        ref={sliderRef}
+        onScroll={handleScroll}
         className="
-        space-y-4
+        flex
+        gap-3
+        overflow-x-auto
+        snap-x
+        snap-mandatory
+        scrollbar-hide
         "
       >
 
@@ -96,6 +114,11 @@ export default function ActiveOrder({
             <div
 
               key={order._id}
+
+              className="min-w-full snap-center"
+            >
+
+            <div
 
               className="
               bg-white
@@ -244,12 +267,38 @@ export default function ActiveOrder({
 
             </div>
 
+            </div>
+
 
           ))
         }
 
 
       </div>
+
+      {orders.length > 1 && (
+        <div className="mt-3 flex justify-center gap-1.5" aria-label="Order pages">
+          {orders.map((order, index) => (
+            <button
+              key={order._id}
+              type="button"
+              aria-label={`Show order ${index + 1}`}
+              onClick={() => {
+                sliderRef.current?.children[index]?.scrollIntoView({
+                  behavior: "smooth",
+                  block: "nearest",
+                  inline: "start",
+                });
+              }}
+              className={`h-1.5 rounded-full transition-all ${
+                index === activeIndex
+                  ? "w-5 bg-orange-500"
+                  : "w-1.5 bg-gray-300"
+              }`}
+            />
+          ))}
+        </div>
+      )}
 
 
     </section>
