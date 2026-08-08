@@ -345,9 +345,10 @@ export default function OwnerMenuManager() {
         },
       });
 
-      if (response.data) {
+      const updatedDish = response.data?.dish || response.data;
+      if (updatedDish?._id) {
         setDishes((prev) => prev.map((item) =>
-          item._id === dish._id ? response.data : item
+          item._id === dish._id ? updatedDish : item
         ));
       }
     } catch (err) {
