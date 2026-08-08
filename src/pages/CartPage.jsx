@@ -35,6 +35,7 @@ export default function CartPage() {
   const [guestName, setGuestName] = useState("");
   const [gstEnabled, setGstEnabled] = useState(false);
   const [gstRate, setGstRate] = useState(0);
+  const [unavailableIds, setUnavailableIds] = useState([]);
   const [placingOrder, setPlacingOrder] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
@@ -58,7 +59,15 @@ export default function CartPage() {
     if (qrId) {
       setCartSession(qrId);
       api.get(`/qr/menu/${qrId}`)
-        .then((response) => applyHotelPricing(response.data?.hotel))
+        .then((response) => {
+          applyHotelPricing(response.data?.hotel);
+          const menu = response.data?.dishes || response.data?.menu || [];
+          setUnavailableIds(
+            menu
+              .filter((dish) => dish.isAvailable === false)
+              .map((dish) => dish._id)
+          );
+        })
         .catch(() => {});
     }
   }, [qrId, setCartSession]);
@@ -72,6 +81,9 @@ export default function CartPage() {
   const discountTotal = Math.max(0, originalSubtotal - subtotal);
   const gstAmount = gstEnabled ? subtotal * gstRate / 100 : 0;
   const finalTotal = subtotal + gstAmount;
+  const hasUnavailableItems = cartItems.some((item) =>
+    unavailableIds.includes(item._id)
+  );
 
   // =========================================================
   // MINIMUM SCHEDULE TIME
@@ -137,6 +149,11 @@ export default function CartPage() {
 
     if (!qrId) {
       setErrorMessage("QR information is missing.");
+      return;
+    }
+
+    if (hasUnavailableItems) {
+      setErrorMessage("Remove unavailable dishes before placing the order.");
       return;
     }
 
@@ -473,6 +490,12 @@ export default function CartPage() {
                 )}
 
                 <div className="flex-1 min-w-0">
+
+                  {unavailableIds.includes(item._id) && (
+                    <p className="mb-2 rounded-lg bg-red-50 px-3 py-2 text-xs font-semibold text-red-600">
+                      This dish is no longer available. Remove it to continue.
+                    </p>
+                  )}
 
                   <div className="flex justify-between gap-2">
 
