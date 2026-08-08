@@ -8,6 +8,7 @@ export default function FeaturedSection({
   onAdd,
   onDecrease,
   onIncrease,
+  orderingEnabled = true,
 }) {
 
 
@@ -132,6 +133,8 @@ export default function FeaturedSection({
                 onIncrease={
                   onIncrease
                 }
+
+                orderingEnabled={orderingEnabled}
 
               />
 

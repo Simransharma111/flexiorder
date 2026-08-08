@@ -11,6 +11,7 @@ export default function DishCard({
   onAdd,
   onDecrease,
   onIncrease,
+  orderingEnabled = true,
 }) {
 
 
@@ -237,7 +238,7 @@ export default function DishCard({
           {/* ADD BUTTON */}
 
 
-          {
+          {orderingEnabled && (
             !isAvailable ? (
 
               <span
@@ -363,7 +364,7 @@ export default function DishCard({
 
             )
 
-          }
+          )}
 
 
 

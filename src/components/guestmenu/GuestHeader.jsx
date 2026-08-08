@@ -8,6 +8,7 @@ export default function GuestHeader({
   table,
   cartCount,
   onCart,
+  orderingEnabled = true,
 }) {
 
   return (
@@ -143,7 +144,7 @@ export default function GuestHeader({
 
         {/* CART BUTTON */}
 
-        <button
+        {orderingEnabled && <button
           onClick={onCart}
           className="
             relative
@@ -193,7 +194,7 @@ export default function GuestHeader({
           }
 
 
-        </button>
+        </button>}
 
 
 

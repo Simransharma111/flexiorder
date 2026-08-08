@@ -10,6 +10,7 @@ export default function MenuSection({
   addToCart,
   decreaseQuantity,
   increaseQuantity,
+  orderingEnabled = true,
 }) {
 
 
@@ -289,6 +290,8 @@ export default function MenuSection({
                   onIncrease={
                     increaseQuantity
                   }
+
+                  orderingEnabled={orderingEnabled}
 
                 />
 

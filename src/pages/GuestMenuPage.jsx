@@ -43,6 +43,8 @@ const navigate = useNavigate();
 
 const [hotel,setHotel]=useState(null);
 
+const orderingEnabled = hotel?.orderingEnabled !== false;
+
 const [table,setTable]=useState(null);
 
 const [dishes,setDishes]=useState([]);
@@ -1002,6 +1004,8 @@ cartCount={cartCount}
 
 onCart={openCart}
 
+orderingEnabled={orderingEnabled}
+
 />
 
 
@@ -1017,6 +1021,14 @@ orders={activeOrders}
 loading={orderLoading}
 
 />
+
+{!orderingEnabled && (
+  <div className="mx-auto mt-4 max-w-6xl px-4">
+    <p className="rounded-xl bg-gray-100 px-4 py-3 text-center text-sm text-gray-500">
+      Ordering is currently unavailable. You can still view the menu.
+    </p>
+  </div>
+)}
 
 
 
@@ -1374,6 +1386,8 @@ onIncrease={increaseQuantity}
 
 getQuantity={getCartQuantity}
 
+orderingEnabled={orderingEnabled}
+
 />
 
 }
@@ -1397,6 +1411,8 @@ onIncrease={increaseQuantity}
 
 getQuantity={getCartQuantity}
 
+orderingEnabled={orderingEnabled}
+
 />
 
 }
@@ -1419,6 +1435,8 @@ onDecrease={decreaseQuantity}
 onIncrease={increaseQuantity}
 
 getQuantity={getCartQuantity}
+
+orderingEnabled={orderingEnabled}
 
 />
 
@@ -1456,6 +1474,8 @@ decreaseQuantity={decreaseQuantity}
 
 increaseQuantity={increaseQuantity}
 
+orderingEnabled={orderingEnabled}
+
 />
 
 
@@ -1467,7 +1487,7 @@ increaseQuantity={increaseQuantity}
 
 
 {
-cartCount>0 &&
+orderingEnabled && cartCount>0 &&
 
 
 <div className="
