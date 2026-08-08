@@ -678,6 +678,11 @@ export default function KitchenDashboard() {
     filteredOrders.filter(
       o => o.status === "ready"
     );
+
+  const pausedOrders =
+    filteredOrders.filter(
+      o => o.status === "paused"
+    );
   // =========================
   // LOGOUT
   // =========================
@@ -804,6 +809,10 @@ min-w-0
 
           readyOrders={
             readyOrders
+          }
+
+          pausedOrders={
+            pausedOrders
           }
 
 
