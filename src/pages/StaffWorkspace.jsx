@@ -8,6 +8,7 @@ export default function StaffWorkspace() {
   const [orders, setOrders] = useState([]);
   const [activeTab, setActiveTab] = useState("orders");
   const [loading, setLoading] = useState(true);
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
 
   const fetchData = async () => {
     try {
@@ -37,9 +38,17 @@ export default function StaffWorkspace() {
   };
 
   useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
     fetchData();
     const interval = window.setInterval(fetchData, 15000);
-    return () => window.clearInterval(interval);
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+      window.clearInterval(interval);
+    };
   }, []);
 
   if (loading && !hotel) {
@@ -75,6 +84,12 @@ export default function StaffWorkspace() {
             </button>
           ))}
         </div>
+
+        {!isOnline && (
+          <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700">
+            Offline — showing the latest saved orders. New waiter orders will sync automatically.
+          </div>
+        )}
 
         {activeTab === "take" ? (
           <StaffOrder hotel={hotel} />
