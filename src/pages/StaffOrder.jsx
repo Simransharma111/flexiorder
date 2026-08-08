@@ -42,6 +42,7 @@ const [search,setSearch]=useState("");
 
 const [loading,setLoading]=useState(false);
 const [pendingSyncCount,setPendingSyncCount]=useState(0);
+const [isOnline,setIsOnline]=useState(navigator.onLine);
 
 const visibleTables=tables.filter((table)=>{
   if(!tableSearch.trim()) return true;
@@ -185,11 +186,17 @@ fetchTables();
 },[hotel]);
 
 useEffect(()=>{
+  const handleOnline=()=>setIsOnline(true);
+  const handleOffline=()=>setIsOnline(false);
+  window.addEventListener("online",handleOnline);
+  window.addEventListener("offline",handleOffline);
   refreshPendingCount();
   syncPendingOrders();
   window.addEventListener("online",syncPendingOrders);
   const retryInterval=window.setInterval(syncPendingOrders,15000);
   return ()=>{
+    window.removeEventListener("online",handleOnline);
+    window.removeEventListener("offline",handleOffline);
     window.removeEventListener("online",syncPendingOrders);
     window.clearInterval(retryInterval);
   };
@@ -560,10 +567,10 @@ Create order for guest
 
 </p>
 
-{pendingSyncCount > 0 && (
+{(!isOnline || pendingSyncCount > 0) && (
   <p className="mt-2 flex items-center gap-2 text-xs font-semibold text-red-600">
     <span className="h-2 w-2 rounded-full bg-red-600" />
-    {pendingSyncCount} order{pendingSyncCount === 1 ? "" : "s"} waiting to sync
+    {!isOnline ? "Offline — orders save on this device" : `${pendingSyncCount} order${pendingSyncCount === 1 ? "" : "s"} waiting to sync`}
   </p>
 )}
 
