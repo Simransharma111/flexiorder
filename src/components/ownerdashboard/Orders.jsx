@@ -315,6 +315,11 @@ const restoreHistoryOrder = async()=>{
 const getLocation=(order)=>{
 
 
+if(order.orderType==="takeaway"){
+return "Takeaway";
+}
+
+
 if(order.locationType==="room"){
 
 

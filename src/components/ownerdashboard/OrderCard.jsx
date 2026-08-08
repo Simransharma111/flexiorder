@@ -23,6 +23,10 @@ const endPress=()=>window.clearTimeout(pressTimer);
 
 
 const location =
+order.orderType==="takeaway"
+?
+"Takeaway"
+:
 order.locationType==="room"
 ?
 `Room ${order.locationNumber || order.roomNumber || "-"}`
