@@ -31,6 +31,7 @@ export default function CartPage() {
 
   const [orderType, setOrderType] = useState("now");
   const [scheduledFor, setScheduledFor] = useState("");
+  const [guestContact, setGuestContact] = useState("");
   const [guestName, setGuestName] = useState("");
   const [placingOrder, setPlacingOrder] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
@@ -183,6 +184,9 @@ export default function CartPage() {
 
         guestName:
           guestName.trim() || "Guest",
+
+        guestContact:
+          guestContact.trim() || null,
 
         items,
 
@@ -528,6 +532,17 @@ export default function CartPage() {
           <p className="text-xs text-gray-500 mt-1">
             Optional
           </p>
+
+          <input
+            type="tel"
+            value={guestContact}
+            onChange={(e) =>
+              setGuestContact(e.target.value)
+            }
+            placeholder="Contact number (optional)"
+            disabled={placingOrder}
+            className="w-full mt-3 border border-gray-200 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-orange-400"
+          />
 
           <input
             type="text"
