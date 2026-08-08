@@ -4,6 +4,7 @@ export default function KitchenHeader({
   setSearch,
   orderCount,
   pendingSyncCount = 0,
+  isOnline = true,
   toggleSidebar,
 }) {
   return (
@@ -23,9 +24,9 @@ export default function KitchenHeader({
         </h1>
         <p className="text-xs text-slate-500">
           {orderCount} active orders
-          {pendingSyncCount > 0 && (
+          {(!isOnline || pendingSyncCount > 0) && (
             <span className="ml-2 font-semibold text-red-600">
-              • {pendingSyncCount} waiting to sync
+              • {!isOnline ? "Offline — updates save here" : `${pendingSyncCount} waiting to sync`}
             </span>
           )}
         </p>

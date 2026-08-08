@@ -53,6 +53,8 @@ export default function KitchenDashboard() {
     getPendingKitchenUpdates().length
   );
 
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+
 
 
 
@@ -358,10 +360,16 @@ export default function KitchenDashboard() {
   };
 
   useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
     syncPendingKitchenUpdates();
     window.addEventListener("online", syncPendingKitchenUpdates);
     const retryInterval = window.setInterval(syncPendingKitchenUpdates, 15000);
     return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
       window.removeEventListener("online", syncPendingKitchenUpdates);
       window.clearInterval(retryInterval);
     };
@@ -775,6 +783,8 @@ min-w-0
           orderCount={orders.length}
 
           pendingSyncCount={pendingSyncCount}
+
+          isOnline={isOnline}
 
           toggleSidebar={() =>
             setSidebarOpen(!sidebarOpen)
