@@ -123,19 +123,25 @@ return;
 
 
 fetchMenu();
+const refreshInterval = window.setInterval(
+  () => fetchMenu({ silent: true }),
+  30000
+);
+
+return () => window.clearInterval(refreshInterval);
 
 
 },[qrId]);
 
 
 
-const fetchMenu=async()=>{
+const fetchMenu=async({ silent = false } = {})=>{
 
 const cacheKey = `guestMenu_${qrId}`;
 
 try{
 
-setLoading(true);
+if (!silent) setLoading(true);
 
 setError("");
 
@@ -200,7 +206,7 @@ err?.response?.data?.message ||
 }
 finally{
 
-setLoading(false);
+if (!silent) setLoading(false);
 
 }
 
