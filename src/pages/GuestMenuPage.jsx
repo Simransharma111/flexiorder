@@ -14,6 +14,7 @@ import api from "../api/axios";
 import GuestHeader from "../components/guestmenu/GuestHeader";
 import HeroBanner from "../components/guestmenu/HeroBanner";
 import MenuSection from "../components/guestmenu/MenuSection";
+import SimpleMenuSection from "../components/guestmenu/SimpleMenuSection";
 import FeaturedSection from "../components/guestmenu/FeaturedSection";
 import ActiveOrder from "../components/guestmenu/ActiveOrder";
 import ScheduleModal from "../components/guestmenu/ScheduleModal";
@@ -44,6 +45,9 @@ const navigate = useNavigate();
 const [hotel,setHotel]=useState(null);
 
 const orderingEnabled = hotel?.orderingEnabled !== false;
+const simpleMenu =
+  hotel?.menuMode === "simple" ||
+  hotel?.menuDisplayMode === "simple";
 
 const [table,setTable]=useState(null);
 
@@ -1366,6 +1370,7 @@ foodFilter===item.id
 
 
 {
+!simpleMenu &&
 !search &&
 activeCategory==="All" &&
 
@@ -1460,6 +1465,25 @@ orderingEnabled={orderingEnabled}
 {/* MENU */}
 
 
+{simpleMenu ? (
+<SimpleMenuSection
+
+categories={categories}
+
+dishes={filteredDishes}
+
+activeCategory={activeCategory}
+
+setActiveCategory={setActiveCategory}
+
+getCartQuantity={getCartQuantity}
+
+addToCart={addToCart}
+
+orderingEnabled={orderingEnabled}
+
+/>
+) : (
 <MenuSection
 
 categories={categories}
@@ -1481,6 +1505,7 @@ increaseQuantity={increaseQuantity}
 orderingEnabled={orderingEnabled}
 
 />
+)}
 
 
 
