@@ -289,15 +289,12 @@ justify-between
 
 <p className="font-bold text-sm">
 
-#{order._id.slice(-5)}
+{getLocation(order)}
 
 </p>
 
-
-<p className="text-xs font-semibold">
-
-{getLocation(order)}
-
+<p className="text-[10px] text-slate-500">
+  Order #{order._id.slice(-5)}
 </p>
 
 
