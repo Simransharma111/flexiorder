@@ -128,8 +128,11 @@ return (
 
 <div
 className="
-grid
-grid-cols-1
+flex
+overflow-x-auto
+snap-x
+snap-mandatory
+lg:grid
 lg:grid-cols-2
 2xl:grid-cols-4
 gap-3
@@ -154,6 +157,9 @@ rounded-xl
 border
 border-slate-800
 overflow-hidden
+min-w-full
+snap-center
+lg:min-w-0
 "
 >
 
