@@ -42,15 +42,6 @@ item=>`${item.name} x${item.quantity}`
 
 
 
-const waiting = order.createdAt
-?
-Math.floor(
-(Date.now()-new Date(order.createdAt))
-/60000
-)
-:
-0;
-
 const orderTime = order.createdAt
   ? new Date(order.createdAt).toLocaleTimeString([], {
       hour: "numeric",
@@ -160,7 +151,7 @@ opacity-70
 
 <FiClock size={11}/>
 
-{waiting}m
+{order.status === "cancelled" ? "Cancelled" : "Delivered"}
 
 </span>
 
