@@ -191,10 +191,6 @@ const steps = [
 
                 </div>
 
-                <div className="font-bold text-orange-400">
-                  ₹{item.price * item.quantity}
-                </div>
-
               </div>
 
             ))}
