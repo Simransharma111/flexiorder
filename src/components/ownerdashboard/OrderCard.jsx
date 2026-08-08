@@ -51,6 +51,13 @@ Math.floor(
 :
 0;
 
+const orderTime = order.createdAt
+  ? new Date(order.createdAt).toLocaleTimeString([], {
+      hour: "numeric",
+      minute: "2-digit",
+    })
+  : "";
+
 
 
 return (
@@ -128,6 +135,10 @@ text-sm
 
 {location}
 
+</span>
+
+<span className="text-xs opacity-60">
+{orderTime}
 </span>
 
 
