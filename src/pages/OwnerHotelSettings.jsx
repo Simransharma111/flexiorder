@@ -232,6 +232,11 @@ form.append(
 hotel.theme.accent
 );
 
+form.append(
+  "menuMode",
+  hotel.menuMode || "visual"
+);
+
 
 
 
@@ -813,6 +818,42 @@ Save Profile
 
 
 
+</section>
+
+<section className="
+bg-white/10
+border
+border-white/20
+rounded-3xl
+p-6
+">
+  <h2 className="text-2xl font-bold mb-2">
+    Customer menu
+  </h2>
+  <p className="text-sm opacity-70 mb-5">
+    Choose the menu style customers see.
+  </p>
+
+  <div className="grid gap-3 sm:grid-cols-2">
+    {[
+      ["visual", "Visual menu", "Images and larger dish cards"],
+      ["simple", "Simple menu", "Compact rows for large menus"],
+    ].map(([value, label, description]) => (
+      <button
+        key={value}
+        type="button"
+        onClick={() => updateField("menuMode", value)}
+        className={`rounded-2xl border-2 p-4 text-left ${
+          (hotel.menuMode || "visual") === value
+            ? "border-orange-400 bg-orange-500/10"
+            : "border-white/10 bg-black/10"
+        }`}
+      >
+        <p className="font-bold">{label}</p>
+        <p className="mt-1 text-xs opacity-70">{description}</p>
+      </button>
+    ))}
+  </div>
 </section>
 
 
