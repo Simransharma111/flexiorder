@@ -9,6 +9,7 @@ export default function StaffWorkspace() {
   const [activeTab, setActiveTab] = useState("orders");
   const [loading, setLoading] = useState(true);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [updatingOrdering, setUpdatingOrdering] = useState(false);
 
   const fetchData = async () => {
     try {
@@ -51,6 +52,35 @@ export default function StaffWorkspace() {
     };
   }, []);
 
+  const toggleOrdering = async () => {
+    if (!hotel || updatingOrdering) return;
+
+    const nextValue = hotel.orderingEnabled === false;
+    const confirmed = window.confirm(
+      nextValue
+        ? "Allow customers to place new orders now?"
+        : "Pause customer ordering for the whole restaurant? Customers can still view the menu."
+    );
+    if (!confirmed) return;
+
+    try {
+      setUpdatingOrdering(true);
+      await api.patch("/hotel/profile", {
+        orderingEnabled: nextValue,
+      });
+      setHotel((prev) => ({ ...prev, orderingEnabled: nextValue }));
+      localStorage.setItem(
+        "flexiorder_staff_hotel",
+        JSON.stringify({ ...hotel, orderingEnabled: nextValue })
+      );
+    } catch (error) {
+      console.error("Ordering toggle failed", error);
+      alert(error?.response?.data?.message || "Could not update customer ordering.");
+    } finally {
+      setUpdatingOrdering(false);
+    }
+  };
+
   if (loading && !hotel) {
     return (
       <div className="flex min-h-screen items-center justify-center font-bold">
@@ -64,7 +94,7 @@ export default function StaffWorkspace() {
   return (
     <main className="min-h-screen bg-gray-50 p-3 sm:p-5">
       <div className="mx-auto max-w-7xl">
-        <div className="mb-4 flex rounded-2xl border bg-white p-1 shadow-sm">
+        <div className="mb-4 flex flex-wrap gap-1 rounded-2xl border bg-white p-1 shadow-sm">
           {[
             ["orders", "Orders"],
             ["take", "Take Order"],
@@ -83,6 +113,23 @@ export default function StaffWorkspace() {
               {label}
             </button>
           ))}
+          <button
+            type="button"
+            onClick={toggleOrdering}
+            disabled={updatingOrdering}
+            className={`rounded-xl px-3 py-3 text-xs font-bold transition disabled:opacity-60 ${
+              hotel?.orderingEnabled === false
+                ? "bg-red-50 text-red-700"
+                : "bg-green-50 text-green-700"
+            }`}
+            title="Pause or allow customer ordering"
+          >
+            {updatingOrdering
+              ? "Updating..."
+              : hotel?.orderingEnabled === false
+                ? "Ordering off"
+                : "Ordering on"}
+          </button>
         </div>
 
         {!isOnline && (
