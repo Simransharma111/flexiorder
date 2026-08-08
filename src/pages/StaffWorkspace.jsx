@@ -15,10 +15,22 @@ export default function StaffWorkspace() {
         api.get("/hotel/me"),
         api.get("/kitchen/orders?type=kitchen"),
       ]);
-      setHotel(hotelResponse.data?.hotel || hotelResponse.data);
-      setOrders(ordersResponse.data?.orders || []);
+      const nextHotel = hotelResponse.data?.hotel || hotelResponse.data;
+      const nextOrders = ordersResponse.data?.orders || [];
+      setHotel(nextHotel);
+      setOrders(nextOrders);
+      localStorage.setItem("flexiorder_staff_hotel", JSON.stringify(nextHotel));
+      localStorage.setItem("flexiorder_staff_orders", JSON.stringify(nextOrders));
     } catch (error) {
       console.error("Staff workspace loading failed", error);
+      try {
+        const cachedHotel = localStorage.getItem("flexiorder_staff_hotel");
+        const cachedOrders = localStorage.getItem("flexiorder_staff_orders");
+        if (cachedHotel) setHotel(JSON.parse(cachedHotel));
+        if (cachedOrders) setOrders(JSON.parse(cachedOrders));
+      } catch (cacheError) {
+        console.error("Staff workspace cache failed", cacheError);
+      }
     } finally {
       setLoading(false);
     }
