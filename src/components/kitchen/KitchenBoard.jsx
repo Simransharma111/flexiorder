@@ -42,6 +42,17 @@ setReason("");
 
 };
 
+const handleCancel = ()=>{
+  if(!pauseOrder) return;
+  updateStatus(
+    pauseOrder._id,
+    "cancelled",
+    reason.trim() || null
+  );
+  setPauseOrder(null);
+  setReason("");
+};
+
 
 
 
@@ -452,7 +463,7 @@ w-80
 
 
 <h2 className="font-bold">
-Pause Order
+Order actions
 </h2>
 
 
@@ -501,7 +512,7 @@ rounded-lg
 py-2
 "
 >
-Cancel
+Close
 </button>
 
 
@@ -519,6 +530,19 @@ py-2
 "
 >
 Pause
+</button>
+
+<button
+onClick={handleCancel}
+className="
+flex-1
+bg-red-500
+text-white
+rounded-lg
+py-2
+"
+>
+Cancel order
 </button>
 
 
