@@ -29,7 +29,7 @@ import BackButtonHandler from "./components/BackButtonHandler";
 import ProtectedRoute from "./components/ProtectedRoute"; 
 import {isMobileApp} from "./utils/platform";
 import Orders from "./components/ownerdashboard/Orders";
-import StaffOrder from "./pages/StaffOrder";
+import StaffWorkspace from "./pages/StaffWorkspace";
 
 export default function App() {
   
@@ -124,7 +124,7 @@ const mobile = isMobileApp();
             <ProtectedRoute
               allowedRoles={["staff", "owner", "superadmin"]}
             >
-              <StaffOrder />
+              <StaffWorkspace />
             </ProtectedRoute>
           }
         />
