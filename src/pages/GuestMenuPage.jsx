@@ -131,6 +131,8 @@ fetchMenu();
 
 const fetchMenu=async()=>{
 
+const cacheKey = `guestMenu_${qrId}`;
+
 try{
 
 setLoading(true);
@@ -157,6 +159,14 @@ setDishes(
 res.data?.dishes || []
 );
 
+localStorage.setItem(
+cacheKey,
+JSON.stringify({
+hotel: res.data?.hotel || null,
+table: res.data?.table || null,
+dishes: res.data?.dishes || [],
+})
+);
 
 
 }
@@ -167,6 +177,19 @@ console.log(
 err
 );
 
+try {
+const cached = JSON.parse(localStorage.getItem(cacheKey) || "null");
+
+if (cached?.dishes) {
+setHotel(cached.hotel || null);
+setTable(cached.table || null);
+setDishes(cached.dishes);
+setError("");
+return;
+}
+} catch (cacheError) {
+console.warn("CACHED MENU ERROR", cacheError);
+}
 
 setError(
 err?.response?.data?.message ||

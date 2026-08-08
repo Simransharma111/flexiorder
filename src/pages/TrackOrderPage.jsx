@@ -41,6 +41,9 @@ export default function TrackOrderPage() {
 
     fetchOrder();
 
+    // Keep tracking useful when sockets are unavailable or disconnected.
+    const pollingId = window.setInterval(fetchOrder, 5000);
+
     // JOIN SOCKET ROOM
     socket.emit(
       "joinOrderRoom",
@@ -59,6 +62,7 @@ export default function TrackOrderPage() {
 
     return () => {
 
+      window.clearInterval(pollingId);
       socket.off("orderUpdated");
 
     };
