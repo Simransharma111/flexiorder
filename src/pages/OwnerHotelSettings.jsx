@@ -130,6 +130,7 @@ await api.patch(
     website: hotel.website,
     instagram: hotel.instagram,
     whatsapp: hotel.whatsapp,
+    orderingEnabled: hotel.orderingEnabled !== false,
     gstEnabled: Boolean(hotel.gstEnabled),
     gstPercentage: Number(hotel.gstPercentage || 0),
   }
@@ -835,6 +836,16 @@ p-6
   <p className="text-sm opacity-70 mb-5">
     Choose the menu style customers see.
   </p>
+
+  <label className="mb-5 flex items-center gap-3 text-sm font-semibold">
+    <input
+      type="checkbox"
+      checked={hotel.orderingEnabled !== false}
+      onChange={(event) => updateField("orderingEnabled", event.target.checked)}
+      className="h-4 w-4 accent-orange-500"
+    />
+    Customer ordering enabled
+  </label>
 
   <div className="grid gap-3 sm:grid-cols-2">
     {[
