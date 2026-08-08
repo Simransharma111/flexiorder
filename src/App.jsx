@@ -13,8 +13,8 @@ import OwnerDashboard from "./pages/OwnerDashboard";
 import OwnerHotelSettings from "./pages/OwnerHotelSettings";
 import HotelSetupPage from "./pages/HotelSetupPage";
 
-// // Staff
-// import KitchenDashboard from "./pages/KitchenDashboard";
+// Staff
+import KitchenDashboard from "./pages/KitchenDashboard";
 
 // Super Admin
 import SuperAdminDashboard from "./pages/SuperAdminDashboard";
@@ -131,7 +131,7 @@ const mobile = isMobileApp();
 
         {/* ================= KITCHEN ================= */}
 
-        {/* <Route
+        <Route
           path="/kitchen"
           element={
             <ProtectedRoute
@@ -141,10 +141,10 @@ const mobile = isMobileApp();
                 "superadmin",
               ]}
             >
-              <Orders />
+              <KitchenDashboard />
             </ProtectedRoute>
           }
-        /> */}
+        />
 
         {/* ================= ORDER TRACKING ================= */}
 
