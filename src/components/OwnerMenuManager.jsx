@@ -8,6 +8,8 @@ import {
   FiX,
   FiImage,
   FiStar,
+  FiUpload,
+  FiDownload,
 } from "react-icons/fi";
 
 export default function OwnerMenuManager() {
@@ -17,6 +19,7 @@ export default function OwnerMenuManager() {
   const [search, setSearch] = useState("");
   const [activeCategory, setActiveCategory] = useState("All");
   const [showForm, setShowForm] = useState(false);
+  const [importing, setImporting] = useState(false);
 
   const [formData, setFormData] = useState({
     name: "",
@@ -322,6 +325,84 @@ export default function OwnerMenuManager() {
     }
   };
 
+  const exportMenu = () => {
+    const payload = {
+      format: "flexiorder-menu",
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      dishes: dishes.map(({ _id, __v, createdAt, updatedAt, image, ...dish }) => dish),
+    };
+
+    const blob = new Blob([JSON.stringify(payload, null, 2)], {
+      type: "application/json",
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "flexiorder-menu.json";
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const importMenu = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file || !hotelId) return;
+
+    try {
+      const parsed = JSON.parse(await file.text());
+      const importedDishes = Array.isArray(parsed)
+        ? parsed
+        : parsed?.dishes;
+
+      if (!Array.isArray(importedDishes) || importedDishes.length === 0) {
+        throw new Error("The file does not contain any dishes.");
+      }
+
+      const confirmed = window.confirm(
+        `Import ${importedDishes.length} dishes into this menu? Existing dishes will stay.`
+      );
+      if (!confirmed) return;
+
+      setImporting(true);
+      const token = localStorage.getItem("token");
+      const config = {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "multipart/form-data",
+        },
+      };
+      const created = [];
+
+      for (const dish of importedDishes) {
+        if (!dish?.name || dish?.price === undefined) continue;
+
+        const form = new FormData();
+        [
+          "name", "description", "category", "foodType", "containsEgg",
+          "price", "discountType", "discountValue", "prepTime",
+          "isAvailable", "isRecommended", "isBestseller", "featured",
+          "todaySpecial", "isPopular", "isNewArrival", "chefChoice",
+          "spiceLevel", "displayOrder",
+        ].forEach((field) => {
+          if (dish[field] !== undefined) form.append(field, dish[field]);
+        });
+        form.append("tags", Array.isArray(dish.tags) ? dish.tags.join(",") : (dish.tags || ""));
+
+        const response = await api.post("/menu/dish", form, config);
+        created.push(response.data);
+      }
+
+      setDishes((prev) => [...created, ...prev]);
+      alert(`${created.length} dishes imported successfully.`);
+    } catch (err) {
+      console.error("Menu import failed", err);
+      alert(err?.message || err?.response?.data?.message || "Menu import failed.");
+    } finally {
+      setImporting(false);
+    }
+  };
+
   // =====================================================
   // EDIT
   // =====================================================
@@ -434,16 +515,33 @@ export default function OwnerMenuManager() {
           </p>
         </div>
 
-        <button
-          onClick={() => {
-            resetForm();
-            setShowForm(true);
-          }}
-          className="flex items-center justify-center gap-2 bg-orange-500 hover:bg-orange-600 text-white px-5 py-3 rounded-xl font-semibold transition"
-        >
-          <FiPlus />
-          Add Dish
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <label className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-700 transition hover:bg-gray-50">
+            <FiUpload />
+            {importing ? "Importing..." : "Import menu"}
+            <input type="file" accept=".json,application/json" onChange={importMenu} disabled={importing} className="hidden" />
+          </label>
+          <button
+            type="button"
+            onClick={exportMenu}
+            disabled={!dishes.length}
+            className="flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <FiDownload />
+            Export menu
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              resetForm();
+              setShowForm(true);
+            }}
+            className="flex items-center justify-center gap-2 rounded-xl bg-orange-500 px-5 py-3 font-semibold text-white transition hover:bg-orange-600"
+          >
+            <FiPlus />
+            Add Dish
+          </button>
+        </div>
 
       </div>
 
