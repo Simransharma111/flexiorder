@@ -68,14 +68,18 @@ export default function TrackOrderPage() {
   // STATUS STEPS
 const steps = [
   "pending",
-   "accepted",
   "preparing",
   "ready",
   "delivered",
 ];
 
+  const publicStatus =
+    order?.status === "accepted"
+      ? "preparing"
+      : order?.status;
+
   const currentStep =
-    steps.indexOf(order?.status);
+    steps.indexOf(publicStatus);
 
   // LOADING
   if (loading) {
@@ -245,7 +249,7 @@ const steps = [
                     </div>
 
                     <p className="mt-3 capitalize text-sm">
-                      {step}
+                      {step === "pending" ? "Received" : step}
                     </p>
 
                   </div>
@@ -262,7 +266,7 @@ const steps = [
           <div className="mt-12 text-center">
 
             <h2 className="text-4xl font-bold capitalize text-orange-400">
-              {order.status}
+              {publicStatus === "pending" ? "Received" : publicStatus}
             </h2>
 
           </div>
