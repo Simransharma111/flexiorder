@@ -1,4 +1,5 @@
 import React, {
+  useEffect,
   useMemo,
   useState,
 } from "react";
@@ -10,6 +11,11 @@ import {
 
 import KitchenBoard from "../kitchen/KitchenBoard";
 import OrderCard from "./OrderCard";
+import {
+  getPendingKitchenUpdates,
+  queueKitchenUpdate,
+  replacePendingKitchenUpdates,
+} from "../../utils/offlineKitchenUpdates";
 
 
 
@@ -28,6 +34,54 @@ const [activeView,setActiveView] = useState("kitchen");
 
 const [search,setSearch] = useState("");
 const [historyActionOrder,setHistoryActionOrder] = useState(null);
+const [localOrders,setLocalOrders] = useState(orders);
+
+useEffect(()=>{
+  setLocalOrders(orders);
+},[orders]);
+
+const displayOrders = localOrders;
+
+const syncPendingUpdates = async()=>{
+  const pending = getPendingKitchenUpdates();
+  if(!pending.length || !navigator.onLine) return;
+
+  const remaining=[];
+  for(const update of pending){
+    try{
+      const response = await fetch(
+        `${import.meta.env.VITE_API_URL}/kitchen/orders/${update.orderId}`,
+        {
+          method:"PUT",
+          headers:{
+            "Content-Type":"application/json",
+            Authorization:`Bearer ${localStorage.getItem("token")}`
+          },
+          body:JSON.stringify({
+            status:update.status,
+            pauseReason:update.pauseReason || null
+          })
+        }
+      );
+      if(!response.ok) throw new Error("Status sync failed");
+    }catch(error){
+      remaining.push(update);
+    }
+  }
+
+  replacePendingKitchenUpdates(remaining);
+  if(remaining.length !== pending.length) refresh();
+};
+
+useEffect(()=>{
+  syncPendingUpdates();
+  window.addEventListener("online",syncPendingUpdates);
+  const interval=window.setInterval(syncPendingUpdates,15000);
+  return()=>{
+    window.removeEventListener("online",syncPendingUpdates);
+    window.clearInterval(interval);
+  };
+},[]);
 
 
 
@@ -46,11 +100,30 @@ const updateStatus = async(
   pauseReason=null
 )=>{
 
+const updateLocalOrder=(nextStatus)=>{
+  setLocalOrders(prev=>prev.map(order=>
+    order._id===orderId
+      ? {...order,status:nextStatus,pauseReason}
+      : order
+  ));
+};
+
+if(!navigator.onLine){
+  queueKitchenUpdate({orderId,status,pauseReason});
+  updateLocalOrder(status);
+  if(status==="delivered"){
+    window.setTimeout(()=>setLocalOrders(prev=>prev.filter(order=>
+      order._id!==orderId || order.status!=="delivered"
+    )),10000);
+  }
+  return;
+}
+
 
 try{
 
 
-await fetch(
+const response=await fetch(
 
 `${import.meta.env.VITE_API_URL}/kitchen/orders/${orderId}`,
 
@@ -81,6 +154,8 @@ pauseReason
 
 );
 
+if(!response.ok) throw new Error("Status update failed");
+
 
 refresh();
 
@@ -92,6 +167,11 @@ console.log(
 "Status update error",
 error
 );
+
+if(!error.response){
+  queueKitchenUpdate({orderId,status,pauseReason});
+  updateLocalOrder(status);
+}
 
 
 }
@@ -115,7 +195,7 @@ error
 const kitchenOrders = useMemo(()=>{
 
 
-return orders.filter(
+return displayOrders.filter(
 
 order =>
 
@@ -131,7 +211,7 @@ order.status
 );
 
 
-},[orders]);
+},[displayOrders]);
 
 
 
@@ -211,7 +291,7 @@ order.status==="paused"
 const historyOrders = useMemo(()=>{
 
 
-return orders.filter(
+return displayOrders.filter(
 
 order =>
 
@@ -228,7 +308,7 @@ order.status
 );
 
 
-},[orders]);
+},[displayOrders]);
 
 
 
