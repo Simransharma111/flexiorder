@@ -130,6 +130,8 @@ await api.patch(
     website: hotel.website,
     instagram: hotel.instagram,
     whatsapp: hotel.whatsapp,
+    gstEnabled: Boolean(hotel.gstEnabled),
+    gstPercentage: Number(hotel.gstPercentage || 0),
   }
 );
 
@@ -854,6 +856,46 @@ p-6
       </button>
     ))}
   </div>
+</section>
+
+<section className="
+bg-white/10
+border
+border-white/20
+rounded-3xl
+p-6
+">
+  <h2 className="text-2xl font-bold mb-2">GST</h2>
+  <p className="text-sm opacity-70 mb-5">
+    Show GST in the customer checkout total.
+  </p>
+
+  <label className="flex items-center gap-3 text-sm font-semibold">
+    <input
+      type="checkbox"
+      checked={Boolean(hotel.gstEnabled)}
+      onChange={(event) => updateField("gstEnabled", event.target.checked)}
+      className="h-4 w-4 accent-orange-500"
+    />
+    Enable GST
+  </label>
+
+  {hotel.gstEnabled && (
+    <div className="mt-4 max-w-xs">
+      <label className="mb-1 block text-sm font-semibold">
+        GST percentage
+      </label>
+      <input
+        type="number"
+        min="0"
+        max="100"
+        value={hotel.gstPercentage || ""}
+        onChange={(event) => updateField("gstPercentage", event.target.value)}
+        placeholder="e.g. 5"
+        className="w-full rounded-xl border border-white/20 bg-black/10 px-4 py-3 outline-none"
+      />
+    </div>
+  )}
 </section>
 
 

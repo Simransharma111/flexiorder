@@ -33,9 +33,22 @@ export default function CartPage() {
   const [scheduledFor, setScheduledFor] = useState("");
   const [guestContact, setGuestContact] = useState("");
   const [guestName, setGuestName] = useState("");
+  const [gstEnabled, setGstEnabled] = useState(false);
+  const [gstRate, setGstRate] = useState(0);
   const [placingOrder, setPlacingOrder] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
+
+  const applyHotelPricing = (hotel) => {
+    const enabled = Boolean(
+      hotel?.gstEnabled ?? hotel?.enableGST ?? hotel?.gst?.enabled
+    );
+    const rate = Number(
+      hotel?.gstPercentage ?? hotel?.gstRate ?? hotel?.gst?.percentage ?? 0
+    );
+    setGstEnabled(enabled && rate > 0);
+    setGstRate(rate > 0 ? rate : 0);
+  };
 
   // =========================================================
   // SET CART SESSION
@@ -44,8 +57,21 @@ export default function CartPage() {
   useEffect(() => {
     if (qrId) {
       setCartSession(qrId);
+      api.get(`/qr/menu/${qrId}`)
+        .then((response) => applyHotelPricing(response.data?.hotel))
+        .catch(() => {});
     }
   }, [qrId, setCartSession]);
+
+  const subtotal = Number(totalPrice || 0);
+  const originalSubtotal = cartItems.reduce(
+    (total, item) =>
+      total + Number(item.originalPrice ?? item.price ?? 0) * Number(item.quantity || 0),
+    0
+  );
+  const discountTotal = Math.max(0, originalSubtotal - subtotal);
+  const gstAmount = gstEnabled ? subtotal * gstRate / 100 : 0;
+  const finalTotal = subtotal + gstAmount;
 
   // =========================================================
   // MINIMUM SCHEDULE TIME
@@ -147,6 +173,8 @@ export default function CartPage() {
           `/qr/menu/${qrId}`
         );
 
+        applyHotelPricing(menuResponse.data?.hotel);
+
         tableId =
           menuResponse.data?.table?._id ||
           menuResponse.data?.table?.id ||
@@ -189,6 +217,12 @@ export default function CartPage() {
           guestContact.trim() || null,
 
         items,
+
+        subtotal,
+        discountAmount: discountTotal,
+        gstRate: gstEnabled ? gstRate : 0,
+        gstAmount,
+        totalAmount: finalTotal,
 
         orderType,
 
@@ -649,12 +683,23 @@ export default function CartPage() {
             <span>Subtotal</span>
 
             <span>
-              ₹
-              {Number(
-                totalPrice || 0
-              ).toFixed(2)}
+              ₹{subtotal.toFixed(2)}
             </span>
           </div>
+
+          {discountTotal > 0 && (
+            <div className="mt-2 flex justify-between text-green-600">
+              <span>Discount</span>
+              <span>-₹{discountTotal.toFixed(2)}</span>
+            </div>
+          )}
+
+          {gstEnabled && (
+            <div className="mt-2 flex justify-between text-gray-500">
+              <span>GST ({gstRate}%)</span>
+              <span>₹{gstAmount.toFixed(2)}</span>
+            </div>
+          )}
 
           <div className="border-t my-4" />
 
@@ -662,10 +707,7 @@ export default function CartPage() {
             <span>Total</span>
 
             <span>
-              ₹
-              {Number(
-                totalPrice || 0
-              ).toFixed(2)}
+              ₹{finalTotal.toFixed(2)}
             </span>
           </div>
 
@@ -700,10 +742,7 @@ export default function CartPage() {
 
                 <span>•</span>
 
-                ₹
-                {Number(
-                  totalPrice || 0
-                ).toFixed(2)}
+                ₹{finalTotal.toFixed(2)}
               </>
             )}
 
