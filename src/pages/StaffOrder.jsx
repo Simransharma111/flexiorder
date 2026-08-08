@@ -13,6 +13,11 @@ import {
 } from "react-icons/fi";
 
 import api from "../api/axios";
+import {
+  getPendingStaffOrders,
+  queueStaffOrder,
+  replacePendingStaffOrders,
+} from "../utils/offlineOrders";
 
 
 export default function StaffOrder({
@@ -33,6 +38,30 @@ const [cart,setCart]=useState([]);
 const [search,setSearch]=useState("");
 
 const [loading,setLoading]=useState(false);
+const [pendingSyncCount,setPendingSyncCount]=useState(0);
+
+const refreshPendingCount=()=>{
+  setPendingSyncCount(getPendingStaffOrders().length);
+};
+
+const syncPendingOrders=async()=>{
+  const pending=getPendingStaffOrders();
+  if(!pending.length || !navigator.onLine){
+    refreshPendingCount();
+    return;
+  }
+
+  const remaining=[];
+  for(const queued of pending){
+    try{
+      await api.post("/orders",queued.payload);
+    }catch(error){
+      remaining.push(queued);
+    }
+  }
+  replacePendingStaffOrders(remaining);
+  setPendingSyncCount(remaining.length);
+};
 
 
 
@@ -126,6 +155,13 @@ fetchTables();
 }
 
 },[hotel]);
+
+useEffect(()=>{
+  refreshPendingCount();
+  syncPendingOrders();
+  window.addEventListener("online",syncPendingOrders);
+  return ()=>window.removeEventListener("online",syncPendingOrders);
+},[]);
 
 
 
@@ -365,30 +401,29 @@ try{
 
 setLoading(true);
 
+const orderPayload={
+  tableId:selectedTable,
+  guestName:guestName || "Guest",
+  items:cart.map(item=>({
+    menuId:item.menuId,
+    quantity:item.quantity
+  }))
+};
+
+if(!navigator.onLine){
+  queueStaffOrder(orderPayload);
+  refreshPendingCount();
+  alert("Saved offline. It will sync when internet returns.");
+  setCart([]);
+  setGuestName("");
+  return;
+}
+
 
 
 await api.post(
 "/orders",
-{
-
-tableId:selectedTable,
-
-guestName:
-guestName || "Guest",
-
-
-items:
-
-cart.map(item=>({
-
-menuId:item.menuId,
-
-quantity:item.quantity
-
-}))
-
-
-}
+orderPayload
 
 );
 
@@ -416,9 +451,22 @@ error.response?.data || error.message
 );
 
 
-alert(
-"Failed to place order"
-);
+if(!error.response){
+  queueStaffOrder({
+    tableId:selectedTable,
+    guestName:guestName || "Guest",
+    items:cart.map(item=>({
+      menuId:item.menuId,
+      quantity:item.quantity
+    }))
+  });
+  refreshPendingCount();
+  setCart([]);
+  setGuestName("");
+  alert("Saved offline. It will sync when internet returns.");
+}else{
+  alert("Failed to place order");
+}
 
 
 }
@@ -474,6 +522,13 @@ opacity-60
 Create order for guest
 
 </p>
+
+{pendingSyncCount > 0 && (
+  <p className="mt-2 flex items-center gap-2 text-xs font-semibold text-red-600">
+    <span className="h-2 w-2 rounded-full bg-red-600" />
+    {pendingSyncCount} order{pendingSyncCount === 1 ? "" : "s"} waiting to sync
+  </p>
+)}
 
 
 </div>
