@@ -49,6 +49,10 @@ export default function KitchenDashboard() {
 
   const [search, setSearch] = useState("");
 
+  const [pendingSyncCount, setPendingSyncCount] = useState(
+    getPendingKitchenUpdates().length
+  );
+
 
 
 
@@ -350,12 +354,17 @@ export default function KitchenDashboard() {
       }
     }
     replacePendingKitchenUpdates(remaining);
+    setPendingSyncCount(remaining.length);
   };
 
   useEffect(() => {
     syncPendingKitchenUpdates();
     window.addEventListener("online", syncPendingKitchenUpdates);
-    return () => window.removeEventListener("online", syncPendingKitchenUpdates);
+    const retryInterval = window.setInterval(syncPendingKitchenUpdates, 15000);
+    return () => {
+      window.removeEventListener("online", syncPendingKitchenUpdates);
+      window.clearInterval(retryInterval);
+    };
   }, []);
 
   // =========================
@@ -497,6 +506,7 @@ export default function KitchenDashboard() {
 
       if (!navigator.onLine) {
         queueKitchenUpdate(update);
+        setPendingSyncCount(getPendingKitchenUpdates().length);
         setOrders(prev =>
           prev.map(order =>
             order._id === orderId
@@ -564,6 +574,7 @@ export default function KitchenDashboard() {
 
         if (!err.response) {
           queueKitchenUpdate(update);
+          setPendingSyncCount(getPendingKitchenUpdates().length);
           setOrders(prev =>
             prev.map(order =>
               order._id === orderId
@@ -757,6 +768,8 @@ min-w-0
           setSearch={setSearch}
 
           orderCount={orders.length}
+
+          pendingSyncCount={pendingSyncCount}
 
           toggleSidebar={() =>
             setSidebarOpen(!sidebarOpen)

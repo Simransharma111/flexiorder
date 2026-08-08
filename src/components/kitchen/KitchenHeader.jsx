@@ -3,6 +3,7 @@ export default function KitchenHeader({
   search,
   setSearch,
   orderCount,
+  pendingSyncCount = 0,
   toggleSidebar,
 }) {
   return (
@@ -20,7 +21,14 @@ export default function KitchenHeader({
         <h1 className="truncate text-lg font-bold text-slate-900">
           {hotel?.name || "Kitchen"}
         </h1>
-        <p className="text-xs text-slate-500">{orderCount} active orders</p>
+        <p className="text-xs text-slate-500">
+          {orderCount} active orders
+          {pendingSyncCount > 0 && (
+            <span className="ml-2 font-semibold text-red-600">
+              • {pendingSyncCount} waiting to sync
+            </span>
+          )}
+        </p>
       </div>
 
       <input
