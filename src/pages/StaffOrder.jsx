@@ -31,6 +31,7 @@ const [tables,setTables]=useState([]);
 
 const [selectedTable,setSelectedTable]=useState("");
 const [tableSearch,setTableSearch]=useState("");
+const [orderType,setOrderType]=useState("dinein");
 
 const [guestName,setGuestName]=useState("");
 
@@ -398,7 +399,7 @@ PLACE ORDER
 const placeOrder=async()=>{
 
 
-if(!selectedTable){
+if(!selectedTable && orderType !== "takeaway"){
 
 alert(
 "Select table first"
@@ -428,7 +429,8 @@ try{
 setLoading(true);
 
 const orderPayload={
-  tableId:selectedTable,
+  tableId:orderType === "takeaway" ? null : selectedTable,
+  orderType,
   guestName:guestName || "Guest",
   items:cart.map(item=>({
     menuId:item.menuId,
@@ -479,7 +481,8 @@ error.response?.data || error.message
 
 if(!error.response){
   queueStaffOrder({
-    tableId:selectedTable,
+    tableId:orderType === "takeaway" ? null : selectedTable,
+    orderType,
     guestName:guestName || "Guest",
     items:cart.map(item=>({
       menuId:item.menuId,
@@ -620,7 +623,10 @@ Select Table / Room
       <button
         key={table._id}
         type="button"
-        onClick={() => setSelectedTable(table._id)}
+        onClick={() => {
+          setSelectedTable(table._id);
+          setOrderType("dinein");
+        }}
         className={`rounded-xl border px-2 py-3 text-xs font-bold ${
           selectedTable === table._id
             ? "border-orange-500 bg-orange-500 text-white"
@@ -632,6 +638,21 @@ Select Table / Room
     );
   })}
 </div>
+
+<button
+  type="button"
+  onClick={() => {
+    setOrderType("takeaway");
+    setSelectedTable("");
+  }}
+  className={`mt-3 w-full rounded-xl border px-3 py-2 text-sm font-bold ${
+    orderType === "takeaway"
+      ? "border-orange-500 bg-orange-50 text-orange-700"
+      : "border-gray-200 text-gray-600"
+  }`}
+>
+  Takeaway
+</button>
 
 
 </div>
