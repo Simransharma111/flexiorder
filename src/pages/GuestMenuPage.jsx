@@ -1055,13 +1055,12 @@ loading={orderLoading}
 
 {/* HERO */}
 
-<HeroBanner
-
-hotel={hotel}
-
-table={table}
-
-/>
+{!simpleMenu && (
+  <HeroBanner
+    hotel={hotel}
+    table={table}
+  />
+)}
 
 
 
