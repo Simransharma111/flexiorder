@@ -35,6 +35,9 @@ const [activeView,setActiveView] = useState("kitchen");
 const [search,setSearch] = useState("");
 const [historyActionOrder,setHistoryActionOrder] = useState(null);
 const [localOrders,setLocalOrders] = useState(orders);
+const [pendingSyncCount,setPendingSyncCount] = useState(
+  getPendingKitchenUpdates().length
+);
 
 useEffect(()=>{
   setLocalOrders(orders);
@@ -44,7 +47,10 @@ const displayOrders = localOrders;
 
 const syncPendingUpdates = async()=>{
   const pending = getPendingKitchenUpdates();
-  if(!pending.length || !navigator.onLine) return;
+  if(!pending.length || !navigator.onLine){
+    setPendingSyncCount(pending.length);
+    return;
+  }
 
   const remaining=[];
   for(const update of pending){
@@ -70,6 +76,7 @@ const syncPendingUpdates = async()=>{
   }
 
   replacePendingKitchenUpdates(remaining);
+  setPendingSyncCount(remaining.length);
   if(remaining.length !== pending.length) refresh();
 };
 
@@ -110,6 +117,7 @@ const updateLocalOrder=(nextStatus)=>{
 
 if(!navigator.onLine){
   queueKitchenUpdate({orderId,status,pauseReason});
+  setPendingSyncCount(getPendingKitchenUpdates().length);
   updateLocalOrder(status);
   if(status==="delivered"){
     window.setTimeout(()=>setLocalOrders(prev=>prev.filter(order=>
@@ -170,6 +178,7 @@ error
 
 if(!error.response){
   queueKitchenUpdate({orderId,status,pauseReason});
+  setPendingSyncCount(getPendingKitchenUpdates().length);
   updateLocalOrder(status);
 }
 
@@ -489,6 +498,13 @@ Orders
 Manage kitchen workflow and completed orders
 
 </p>
+
+{pendingSyncCount > 0 && (
+  <p className="mt-2 flex items-center gap-2 text-xs font-semibold text-red-600">
+    <span className="h-2 w-2 rounded-full bg-red-600" />
+    {pendingSyncCount} update{pendingSyncCount === 1 ? "" : "s"} waiting to sync
+  </p>
+)}
 
 
 </div>
