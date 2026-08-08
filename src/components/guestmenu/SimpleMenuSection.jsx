@@ -86,6 +86,13 @@ export default function SimpleMenuSection({
                     Contains egg
                   </span>
                 )}
+                {dish.spiceLevel && (
+                  <span className="mt-1 block text-[11px] font-semibold text-red-500">
+                    {dish.spiceLevel === "mild" && "🌶️"}
+                    {dish.spiceLevel === "medium" && "🌶️🌶️"}
+                    {dish.spiceLevel === "hot" && "🌶️🌶️🌶️"}
+                  </span>
+                )}
               </span>
 
               <span className="shrink-0 font-semibold text-gray-900">

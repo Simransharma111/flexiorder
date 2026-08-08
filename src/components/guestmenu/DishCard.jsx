@@ -260,6 +260,14 @@ export default function DishCard({
             </p>
           )}
 
+          {dish.spiceLevel && (
+            <p className="mt-2 text-[11px] font-semibold text-red-500" aria-label={`Spice level ${dish.spiceLevel}`}>
+              {dish.spiceLevel === "mild" && "🌶️"}
+              {dish.spiceLevel === "medium" && "🌶️🌶️"}
+              {dish.spiceLevel === "hot" && "🌶️🌶️🌶️"}
+            </p>
+          )}
+
 
 
 
