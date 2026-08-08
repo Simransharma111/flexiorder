@@ -1069,7 +1069,7 @@ loading={orderLoading}
 {/* QUICK ACTIONS */}
 
 
-<section className="
+{orderingEnabled && <section className="
 max-w-6xl 
 mx-auto 
 px-4 
@@ -1216,7 +1216,7 @@ text-gray-500
 </div>
 
 
-</section>
+</section>}
 
 
 
