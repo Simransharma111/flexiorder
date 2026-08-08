@@ -374,7 +374,9 @@ search.trim().toLowerCase();
 
 
 
-return dishes.filter((dish)=>{
+return dishes
+.filter((dish)=>dish.isAvailable !== false)
+.filter((dish)=>{
 
 
 let category =
@@ -457,7 +459,9 @@ const categories = useMemo(()=>{
 
 
 const list =
-dishes.map((dish)=>{
+dishes
+.filter((dish)=>dish.isAvailable !== false)
+.map((dish)=>{
 
 
 if(
