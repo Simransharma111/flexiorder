@@ -485,6 +485,16 @@ return dish.category;
 
 
 
+const basePrice = Number(dish.price || 0);
+const discountValue = Number(
+  dish.discountValue ?? dish.discount ?? 0
+);
+const discountAmount =
+  dish.discountType === "fixed"
+    ? discountValue
+    : basePrice * discountValue / 100;
+const finalPrice = Math.max(0, basePrice - discountAmount);
+
 return [
 "All",
 ...new Set(list)
@@ -653,9 +663,10 @@ name:dish.name,
 description:
 dish.description,
 
-price:Number(
-dish.price || 0
-),
+price:finalPrice,
+originalPrice:basePrice,
+discountType:dish.discountType || "percentage",
+discountValue,
 
 image:dish.image,
 

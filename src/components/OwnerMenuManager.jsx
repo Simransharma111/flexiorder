@@ -24,6 +24,8 @@ export default function OwnerMenuManager() {
     category: "Main Course",
     foodType: "veg",
     price: "",
+    discountType: "percentage",
+    discountValue: "",
     prepTime: "",
 
     isAvailable: true,
@@ -153,6 +155,8 @@ export default function OwnerMenuManager() {
       form.append("category", formData.category);
       form.append("foodType", formData.foodType);
       form.append("price", formData.price);
+      form.append("discountType", formData.discountType);
+      form.append("discountValue", formData.discountValue);
       form.append("prepTime", formData.prepTime);
 
       form.append("isAvailable", formData.isAvailable);
@@ -251,6 +255,8 @@ export default function OwnerMenuManager() {
       category: "Main Course",
       foodType: "veg",
       price: "",
+      discountType: "percentage",
+      discountValue: "",
       prepTime: "",
 
       isAvailable: true,
@@ -326,6 +332,8 @@ export default function OwnerMenuManager() {
       category: dish.category || "Main Course",
       foodType: dish.foodType || "veg",
       price: dish.price || "",
+      discountType: dish.discountType || "percentage",
+      discountValue: dish.discountValue || "",
       prepTime: dish.prepTime || "",
 
       isAvailable:
@@ -565,6 +573,32 @@ export default function OwnerMenuManager() {
                   className="w-full border border-gray-200 rounded-lg px-3 py-3 outline-none focus:ring-2 focus:ring-orange-400"
                   required
                 />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold mb-1">
+                  Discount (optional)
+                </label>
+                <div className="flex gap-2">
+                  <select
+                    name="discountType"
+                    value={formData.discountType}
+                    onChange={handleChange}
+                    className="w-28 rounded-lg border border-gray-200 px-3 py-3 outline-none"
+                  >
+                    <option value="percentage">%</option>
+                    <option value="fixed">₹</option>
+                  </select>
+                  <input
+                    type="number"
+                    min="0"
+                    name="discountValue"
+                    placeholder="Amount"
+                    value={formData.discountValue}
+                    onChange={handleChange}
+                    className="min-w-0 flex-1 rounded-lg border border-gray-200 px-3 py-3 outline-none"
+                  />
+                </div>
               </div>
 
               <div>

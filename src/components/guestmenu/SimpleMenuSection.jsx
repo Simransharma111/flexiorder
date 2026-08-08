@@ -41,6 +41,16 @@ export default function SimpleMenuSection({
         {filteredDishes.map((dish) => {
           const quantity = getCartQuantity(dish._id);
           const isVeg = dish.foodType === "veg";
+          const basePrice = Number(dish.price || 0);
+          const discountValue = Number(
+            dish.discountValue ?? dish.discount ?? 0
+          );
+          const discountAmount =
+            dish.discountType === "fixed"
+              ? discountValue
+              : basePrice * discountValue / 100;
+          const finalPrice = Math.max(0, basePrice - discountAmount);
+          const hasDiscount = discountAmount > 0 && finalPrice < basePrice;
 
           return (
             <button
@@ -69,7 +79,14 @@ export default function SimpleMenuSection({
               </span>
 
               <span className="shrink-0 font-semibold text-gray-900">
-                ₹{Number(dish.price || 0).toFixed(0)}
+                {hasDiscount && (
+                  <span className="mr-1 text-xs text-gray-400 line-through">
+                    ₹{basePrice.toFixed(0)}
+                  </span>
+                )}
+                <span className={hasDiscount ? "text-green-600" : ""}>
+                  ₹{finalPrice.toFixed(0)}
+                </span>
               </span>
 
               {orderingEnabled && quantity > 0 && (

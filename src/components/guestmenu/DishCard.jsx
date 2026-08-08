@@ -18,6 +18,21 @@ export default function DishCard({
   const isAvailable =
     dish.isAvailable !== false;
 
+  const basePrice = Number(dish.price || 0);
+  const discountValue = Number(
+    dish.discountValue ?? dish.discount ?? 0
+  );
+  const discountAmount =
+    dish.discountType === "fixed"
+      ? discountValue
+      : basePrice * discountValue / 100;
+  const finalPrice = Math.max(
+    0,
+    basePrice - discountAmount
+  );
+  const hasDiscount =
+    discountAmount > 0 && finalPrice < basePrice;
+
 
   return (
 
@@ -201,7 +216,14 @@ export default function DishCard({
               "
             >
 
-              ₹{Number(dish.price || 0).toFixed(0)}
+              {hasDiscount && (
+                <span className="mr-2 text-sm text-gray-400 line-through">
+                  ₹{basePrice.toFixed(0)}
+                </span>
+              )}
+              <span className={hasDiscount ? "text-green-600" : ""}>
+                ₹{finalPrice.toFixed(0)}
+              </span>
 
             </p>
 

@@ -106,13 +106,26 @@ export default function CartProvider({ children }) {
         );
       }
 
+      const basePrice = Number(dish.price || 0);
+      const discountValue = Number(
+        dish.discountValue ?? dish.discount ?? 0
+      );
+      const discountAmount =
+        dish.discountType === "fixed"
+          ? discountValue
+          : basePrice * discountValue / 100;
+      const finalPrice = Math.max(0, basePrice - discountAmount);
+
       return [
         ...prev,
         {
           _id: dish._id,
           name: dish.name,
           description: dish.description || "",
-          price: Number(dish.price || 0),
+          price: finalPrice,
+          originalPrice: basePrice,
+          discountType: dish.discountType || "percentage",
+          discountValue,
           image: dish.image || "",
           foodType: dish.foodType || "veg",
           quantity: 1,

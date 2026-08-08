@@ -458,11 +458,15 @@ export default function CartPage() {
 
                   </div>
 
-                  <p className="text-orange-600 font-bold mt-1">
-                    ₹
-                    {Number(
-                      item.price || 0
-                    ).toFixed(2)}
+                  <p className="font-bold mt-1">
+                    {Number(item.originalPrice || 0) > Number(item.price || 0) && (
+                      <span className="mr-2 text-sm text-gray-400 line-through">
+                        ₹{Number(item.originalPrice).toFixed(2)}
+                      </span>
+                    )}
+                    <span className={Number(item.originalPrice || 0) > Number(item.price || 0) ? "text-green-600" : "text-orange-600"}>
+                      ₹{Number(item.price || 0).toFixed(2)}
+                    </span>
                   </p>
 
                   <div className="flex items-center justify-between mt-3 gap-3">
