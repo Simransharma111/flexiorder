@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 
 export default function KitchenBoard({
 
@@ -16,6 +16,8 @@ export default function KitchenBoard({
 
 const [pauseOrder,setPauseOrder] = useState(null);
 const [reason,setReason] = useState("");
+const pressTimer = useRef(null);
+const longPressTriggered = useRef(false);
 
 
 
@@ -70,31 +72,52 @@ color:"text-orange-400"
 
 
 
-const action=(order)=>{
+const nextStatus=(status)=>{
 
 
-switch(order.status){
+switch(status){
 
 case "pending":
-return ["Accept","accepted"];
+return "accepted";
 
 case "accepted":
-return ["Prepare","preparing"];
+return "preparing";
 
 case "preparing":
-return ["Ready","ready"];
+return "ready";
 
 case "ready":
-return ["Deliver","delivered"];
+return "delivered";
 
 case "paused":
-return ["Resume","preparing"];
+return "preparing";
 
 default:
 return null;
 
 }
 
+};
+
+const startPress=(order)=>{
+  longPressTriggered.current=false;
+  clearTimeout(pressTimer.current);
+  pressTimer.current=setTimeout(()=>{
+    longPressTriggered.current=true;
+    setPauseOrder(order);
+  },550);
+};
+
+const endPress=()=>clearTimeout(pressTimer.current);
+
+const handleCardClick=(order)=>{
+  if(longPressTriggered.current){
+    longPressTriggered.current=false;
+    return;
+  }
+
+  const status=nextStatus(order.status);
+  if(status) updateStatus(order._id,status);
 };
 
 
@@ -211,9 +234,6 @@ No orders
 col.orders.map(order=>{
 
 
-const btn=action(order);
-
-
 return (
 
 <div
@@ -226,7 +246,19 @@ border
 border-slate-800
 rounded-lg
 p-2
+cursor-pointer
+select-none
+active:scale-[0.99]
 "
+onClick={()=>handleCardClick(order)}
+onPointerDown={()=>startPress(order)}
+onPointerUp={endPress}
+onPointerLeave={endPress}
+onContextMenu={(event)=>{
+  event.preventDefault();
+  setPauseOrder(order);
+}}
+title="Tap to advance · Long press for options"
 >
 
 
@@ -336,79 +368,6 @@ order.items?.length>2 &&
 
 
 
-
-
-
-
-<div
-className="
-flex
-gap-2
-mt-2
-"
->
-
-
-{
-btn &&
-
-<button
-
-onClick={()=>updateStatus(
-order._id,
-btn[1]
-)}
-
-className="
-flex-1
-bg-white
-text-black
-rounded-md
-py-1
-text-xs
-font-bold
-"
-
->
-
-{btn[0]}
-
-</button>
-
-}
-
-
-
-{
-![
-"ready",
-"delivered",
-"paused"
-]
-.includes(order.status)
-
-&&
-
-<button
-
-onClick={()=>setPauseOrder(order)}
-
-className="
-bg-orange-500
-rounded-md
-px-2
-text-xs
-font-bold
-"
-
->
-⏸
-</button>
-
-}
-
-
-</div>
 
 
 
