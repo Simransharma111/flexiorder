@@ -18,6 +18,13 @@ const [pauseOrder,setPauseOrder] = useState(null);
 const [reason,setReason] = useState("");
 const pressTimer = useRef(null);
 const longPressTriggered = useRef(false);
+const boardRef = useRef(null);
+const [activeColumn,setActiveColumn] = useState(0);
+
+const handleBoardScroll=(event)=>{
+  const width=event.currentTarget.clientWidth || 1;
+  setActiveColumn(Math.round(event.currentTarget.scrollLeft / width));
+};
 
 
 
@@ -127,6 +134,8 @@ const handleCardClick=(order)=>{
 return (
 
 <div
+ref={boardRef}
+onScroll={handleBoardScroll}
 className="
 flex
 overflow-x-auto
@@ -398,6 +407,17 @@ order.items?.length>2 &&
 ))
 
 }
+
+<div className="flex justify-center gap-1.5 bg-slate-950 pb-3 lg:hidden">
+  {columns.map((column,index)=>(
+    <span
+      key={column.title}
+      className={`h-1.5 rounded-full transition-all ${
+        index === activeColumn ? "w-5 bg-white" : "w-1.5 bg-slate-600"
+      }`}
+    />
+  ))}
+</div>
 
 
 
