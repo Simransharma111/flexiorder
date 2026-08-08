@@ -81,6 +81,11 @@ export default function SimpleMenuSection({
                     {dish.prepTime} min
                   </span>
                 )}
+                {isVeg && dish.containsEgg && (
+                  <span className="mt-1 block text-[11px] font-semibold text-amber-600">
+                    Contains egg
+                  </span>
+                )}
               </span>
 
               <span className="shrink-0 font-semibold text-gray-900">

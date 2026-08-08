@@ -23,6 +23,7 @@ export default function OwnerMenuManager() {
     description: "",
     category: "Main Course",
     foodType: "veg",
+    containsEgg: false,
     price: "",
     discountType: "percentage",
     discountValue: "",
@@ -154,6 +155,7 @@ export default function OwnerMenuManager() {
       form.append("description", formData.description);
       form.append("category", formData.category);
       form.append("foodType", formData.foodType);
+      form.append("containsEgg", formData.containsEgg);
       form.append("price", formData.price);
       form.append("discountType", formData.discountType);
       form.append("discountValue", formData.discountValue);
@@ -254,6 +256,7 @@ export default function OwnerMenuManager() {
       description: "",
       category: "Main Course",
       foodType: "veg",
+      containsEgg: false,
       price: "",
       discountType: "percentage",
       discountValue: "",
@@ -331,6 +334,7 @@ export default function OwnerMenuManager() {
       description: dish.description || "",
       category: dish.category || "Main Course",
       foodType: dish.foodType || "veg",
+      containsEgg: dish.containsEgg ?? false,
       price: dish.price || "",
       discountType: dish.discountType || "percentage",
       discountValue: dish.discountValue || "",
@@ -704,6 +708,20 @@ export default function OwnerMenuManager() {
             </div>
 
             {/* DESCRIPTION */}
+
+            {formData.foodType === "veg" && (
+              <label className="mt-5 flex items-center gap-3 text-sm font-semibold">
+                <input
+                  type="checkbox"
+                  checked={formData.containsEgg}
+                  onChange={(event) =>
+                    handleCheckbox("containsEgg", event.target.checked)
+                  }
+                  className="h-4 w-4 accent-green-600"
+                />
+                Contains egg
+              </label>
+            )}
 
             <div className="mt-5">
 

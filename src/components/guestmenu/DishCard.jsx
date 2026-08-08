@@ -221,7 +221,7 @@ export default function DishCard({
                   ₹{basePrice.toFixed(0)}
                 </span>
               )}
-              <span className={hasDiscount ? "text-green-600" : ""}>
+                <span className={hasDiscount ? "text-green-600" : ""}>
                 ₹{finalPrice.toFixed(0)}
               </span>
 
@@ -253,6 +253,12 @@ export default function DishCard({
 
 
           </div>
+
+          {dish.foodType === "veg" && dish.containsEgg && (
+            <p className="mt-2 text-[11px] font-semibold text-amber-600">
+              Contains egg
+            </p>
+          )}
 
 
 
