@@ -308,13 +308,7 @@ function StatusBadge({
       `}
     >
 
-      {
-        status
-        ?.charAt(0)
-        ?.toUpperCase()
-        +
-        status?.slice(1)
-      }
+      {getPublicStatusLabel(status)}
 
     </span>
 
@@ -349,6 +343,24 @@ function getStatusTitle(status){
 
   }
 
+}
+
+function getPublicStatusLabel(status){
+  switch(status){
+    case "pending":
+      return "Received";
+    case "accepted":
+    case "preparing":
+      return "Preparing";
+    case "ready":
+      return "Ready";
+    case "delivered":
+      return "Delivered";
+    case "cancelled":
+      return "Cancelled";
+    default:
+      return "Updating";
+  }
 }
 
 
