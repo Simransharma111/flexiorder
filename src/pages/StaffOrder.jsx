@@ -30,6 +30,7 @@ const [menu,setMenu]=useState([]);
 const [tables,setTables]=useState([]);
 
 const [selectedTable,setSelectedTable]=useState("");
+const [tableSearch,setTableSearch]=useState("");
 
 const [guestName,setGuestName]=useState("");
 
@@ -39,6 +40,13 @@ const [search,setSearch]=useState("");
 
 const [loading,setLoading]=useState(false);
 const [pendingSyncCount,setPendingSyncCount]=useState(0);
+
+const visibleTables=tables.filter((table)=>{
+  if(!tableSearch.trim()) return true;
+  return String(table.tableNumber || "")
+    .toLowerCase()
+    .includes(tableSearch.trim().toLowerCase());
+});
 
 const refreshPendingCount=()=>{
   setPendingSyncCount(getPendingStaffOrders().length);
@@ -594,71 +602,36 @@ Select Table / Room
 </label>
 
 
-<select
+{tables.length > 12 && (
+  <input
+    value={tableSearch}
+    onChange={(event) => setTableSearch(event.target.value)}
+    placeholder="Search table or room"
+    className="mt-2 w-full rounded-xl border bg-transparent p-3"
+  />
+)}
 
-value={selectedTable}
-
-onChange={
-e=>setSelectedTable(e.target.value)
-}
-
-className="
-mt-2
-w-full
-rounded-xl
-p-3
-bg-transparent
-border
-"
-
->
-
-
-<option value="">
-
-Choose
-
-</option>
-
-
-{
-
-tables.map(table=>(
-
-
-<option
-
-key={table._id}
-
-value={table._id}
-
->
-
-{
-
-table.type==="room"
-
-?
-
-`Room ${table.tableNumber}`
-
-:
-
-`Table ${table.tableNumber}`
-
-}
-
-
-</option>
-
-
-))
-
-
-}
-
-
-</select>
+<div className="mt-3 grid max-h-48 grid-cols-3 gap-2 overflow-y-auto sm:grid-cols-4">
+  {visibleTables.map((table) => {
+    const label = table.type === "room"
+      ? `Room ${table.tableNumber}`
+      : `Table ${table.tableNumber}`;
+    return (
+      <button
+        key={table._id}
+        type="button"
+        onClick={() => setSelectedTable(table._id)}
+        className={`rounded-xl border px-2 py-3 text-xs font-bold ${
+          selectedTable === table._id
+            ? "border-orange-500 bg-orange-500 text-white"
+            : "border-gray-200 hover:bg-gray-50"
+        }`}
+      >
+        {label}
+      </button>
+    );
+  })}
+</div>
 
 
 </div>
