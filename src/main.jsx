@@ -7,23 +7,14 @@ import App from "./App";
 import "./index.css";
 
 import CartProvider from "./context/CartContext";
-// import { registerSW } from "virtual:pwa-register";
 
-// registerSW({
-//   immediate: true,
-// });
-
-// if ("serviceWorker" in navigator) {
-//   window.addEventListener("load", async () => {
-//     await navigator.serviceWorker.register(
-//       "/sw.js"
-//     );
-
-//     console.log(
-//       "Custom Service Worker Registered"
-//     );
-//   });
-// }
+if (import.meta.env.PROD && "serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("/sw.js").catch((error) => {
+      console.warn("Service worker registration failed", error);
+    });
+  });
+}
 
 ReactDOM.createRoot(document.getElementById("root")).render(
 <React.StrictMode>
