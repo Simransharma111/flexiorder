@@ -211,34 +211,33 @@ export default function KitchenDashboard() {
 
 
     const handleOrderUpdate = (updatedOrder) => {
-      if (
+      if (updatedOrder.status === "cancelled") {
+        setOrders(prev =>
+          prev.filter(order => order._id !== updatedOrder._id)
+        );
+        return;
+      }
 
-        updatedOrder.status === "delivered"
-
-        ||
-
-        updatedOrder.status === "cancelled"
-
-      ) {
-
-
-        setOrders(
-
-          prev =>
-
-            prev.filter(
-
-              order =>
-
-                order._id !== updatedOrder._id
-
-            )
-
+      if (updatedOrder.status === "delivered") {
+        setOrders(prev =>
+          prev.map(order =>
+            order._id === updatedOrder._id
+              ? updatedOrder
+              : order
+          )
         );
 
+        window.setTimeout(() => {
+          setOrders(prev =>
+            prev.filter(
+              order =>
+                order._id !== updatedOrder._id ||
+                order.status !== "delivered"
+            )
+          );
+        }, 10000);
 
         return;
-
       }
 
       setOrders(
