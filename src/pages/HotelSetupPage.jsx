@@ -1,85 +1,13 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "../api/axios";
+import { HOTEL_THEME_CHOICES } from "../constants/hotelThemes";
 
 /* =========================================================
    HOTEL THEMES
 ========================================================= */
 
-export const HOTEL_THEMES = [
-  {
-    id: "velvet_sunset",
-    name: "Velvet Sunset",
-    primary: "#F97316",
-    secondary: "#1F0A0A",
-    accent: "#FDBA74",
-    text: "#FFF7ED",
-  },
-  {
-    id: "emerald_luxe",
-    name: "Emerald Luxe",
-    primary: "#0F766E",
-    secondary: "#79c19d",
-    accent: "#1b8a61",
-    text:"#042F2E",
-  },
-  {
-    id: "ocean_breeze",
-    name: "Ocean Breeze",
-    primary: "#2563EB",
-    secondary: "#0F172A",
-    accent: "#7DD3FC",
-    text: "#EFF6FF",
-  },
-  {
-    id: "royal_plum",
-    name: "Royal Plum",
-    primary: "#7C3AED",
-    secondary: "#1F123A",
-    accent: "#C4B5FD",
-    text: "#F5F3FF",
-  },
-  {
-    id: "citrus_glow",
-    name: "Citrus Glow",
-    primary: "#D97706",
-    secondary: "#3B1300",
-    accent: "#FDE68A",
-    text: "#FFFBEB",
-  },
-  {
-    id: "sage_ritual",
-    name: "Sage Ritual",
-    primary: "#edefea",
-    secondary: "#d7dd7b",
-    accent: "#A3E635",
-    text: "#060801",
-  },
-  {
-    id: "midnight_noir",
-    name: "Midnight Noir",
-    primary: "#111827",
-    secondary: "#030712",
-    accent: "#64748B",
-    text: "#F8FAFC",
-  },
-  {
-    id: "pearl_mist",
-    name: "Pearl Mist",
-    primary: "#F8FAFC",
-    secondary: "#E2E8F0",
-    accent: "#475569",
-    text: "#0F172A",
-  },
-  {
-    id: "instagram_inspo",
-    name: "Instagram Inspo",
-    primary: "#FF4D67",
-    secondary: "#FFF5F7",
-    accent: "#1DA1F2",
-    text: "#1F2937",
-  },
-];
+export const HOTEL_THEMES = HOTEL_THEME_CHOICES;
 
 /* =========================================================
    COMPONENT
@@ -105,7 +33,7 @@ export default function HotelSetupPage() {
     website: "",
     instagram: "",
     whatsapp: "",
-    themeId: "stormy_morning",
+    themeId: "mint_glow",
   });
 
   const [logoFile, setLogoFile] = useState(null);
@@ -679,7 +607,7 @@ export default function HotelSetupPage() {
                           color: theme.accent,
                         }}
                       >
-                        {theme.name}
+                        {theme.label}
                       </h3>
 
                       {selected && (

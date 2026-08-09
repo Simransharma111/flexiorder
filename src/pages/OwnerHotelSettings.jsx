@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import api from "../api/axios";
 import {
   FaPen,
@@ -6,12 +6,13 @@ import {
   FaImage,
 } from "react-icons/fa";
 
-import HOTEL_THEMES from "../constants/hotelThemes";
+import { HOTEL_THEME_CHOICES } from "../constants/hotelThemes";
+import { getHotelThemeStyle, resolveHotelTheme } from "../utils/hotelTheme";
 
 
 
 
-export default function OwnerHotelSettings(){
+export default function OwnerHotelSettings({ onHotelChange }){
 
 
 const [hotel,setHotel]=useState(null);
@@ -36,15 +37,7 @@ const [coverPreview,setCoverPreview]=useState("");
    LOAD HOTEL
 ========================================================= */
 
-useEffect(()=>{
-
-fetchHotel();
-
-},[]);
-
-
-
-const fetchHotel=async()=>{
+const fetchHotel=useCallback(async()=>{
 
 try{
 
@@ -58,6 +51,7 @@ const data=res.data.hotel;
 
 
 setHotel(data);
+onHotelChange?.(data);
 
 
 setLogoPreview(
@@ -76,7 +70,11 @@ console.log(err);
 
 }
 
-};
+}, [onHotelChange]);
+
+useEffect(()=>{
+  fetchHotel();
+},[fetchHotel]);
 
 
 
@@ -209,31 +207,21 @@ cover
 
 
 
-form.append(
-"themeId",
-hotel.theme.id
-);
+const theme = resolveHotelTheme(hotel);
+
+form.append("themeId", theme.id);
 
 
 
-form.append(
-"themePrimary",
-hotel.theme.primary
-);
+form.append("themePrimary", theme.primary);
 
 
 
-form.append(
-"themeSecondary",
-hotel.theme.secondary
-);
+form.append("themeSecondary", theme.secondary);
 
 
 
-form.append(
-"themeAccent",
-hotel.theme.accent
-);
+form.append("themeAccent", theme.accent);
 
 form.append(
   "menuMode",
@@ -287,36 +275,27 @@ setLoading(false);
 
 
 const changeTheme=(theme)=>{
-
-setHotel(prev=>({
-
-...prev,
-
-theme:{
-  id:theme.id,
-  primary:theme.primary,
-  secondary:theme.secondary,
-  accent:theme.accent,
-  text: theme.text || "#FFFFFF",
-  mode: theme.mode || "dark"
-}
-
-}));
+  setHotel((previous) => {
+    const next = {
+      ...previous,
+      theme: {
+        id: theme.id,
+        primary: theme.primary,
+        secondary: theme.secondary,
+        accent: theme.accent,
+        brand: theme.brand,
+        text: theme.text || "#FFFFFF",
+        mode: theme.mode || "dark",
+      },
+    };
+    onHotelChange?.(next);
+    return next;
+  });
 
 };
 
-const activeTheme =
-hotel?.theme?.id &&
-HOTEL_THEMES[hotel.theme.id]
-?
-HOTEL_THEMES[hotel.theme.id]
-:
-HOTEL_THEMES.midnight_moss;
-
-
-const resolvedPrimary =
-hotel?.theme?.primary ||
-activeTheme.primary;
+const resolvedTheme = resolveHotelTheme(hotel);
+const resolvedPrimary = resolvedTheme.brand;
 
 
 if(!hotel){
@@ -347,7 +326,7 @@ Loading...
 return(
 
 
-<div className="owner-settings-compact">
+<div className="owner-settings-compact" style={getHotelThemeStyle(hotel)}>
 
 
 
@@ -918,7 +897,7 @@ gap-4
 
 
 {
-  Object.values(HOTEL_THEMES).map((theme) => (
+  HOTEL_THEME_CHOICES.map((theme) => (
 
 <button
 
@@ -958,7 +937,7 @@ color:theme.accent
 className="font-bold"
 >
 
-{theme.name}
+{theme.label}
 
 </h3>
 
@@ -1056,11 +1035,7 @@ items-center
 gap-3
 "
 
-style={{
-
-background: resolvedPrimary
-
-}}
+style={{ background: resolvedPrimary, color: resolvedTheme.onAccent }}
 
 >
 

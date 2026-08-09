@@ -20,6 +20,9 @@ import FeaturedSection from "../components/guestmenu/FeaturedSection";
 import ActiveOrder from "../components/guestmenu/ActiveOrder";
 import ScheduleModal from "../components/guestmenu/ScheduleModal";
 import { getDishPricing } from "../utils/pricing";
+import { sortDishesForDisplay } from "../utils/menuOrdering";
+import { getHotelThemeStyle } from "../utils/hotelTheme";
+import { buildCategoryList, categoryKey } from "../utils/menuCategories";
 
 import {
   FiSearch,
@@ -418,7 +421,7 @@ search.trim().toLowerCase();
 
 
 
-return dishes
+return sortDishesForDisplay(dishes
 .filter((dish)=>dish.isAvailable !== false)
 .filter((dish)=>{
 
@@ -440,7 +443,7 @@ dish.category?.name;
 
 const categoryMatch =
 activeCategory==="All" ||
-category===activeCategory;
+categoryKey(category)===categoryKey(activeCategory);
 
 
 
@@ -488,7 +491,7 @@ searchMatch
 
 
 
-});
+}));
 
 
 },[
@@ -506,40 +509,16 @@ activeCategory
 // =====================================================
 
 
-const categories = useMemo(()=>{
+const categories = useMemo(
+  () => buildCategoryList(dishes.filter((dish) => dish.isAvailable !== false)),
+  [dishes]
+);
 
-
-const list =
-dishes
-.filter((dish)=>dish.isAvailable !== false)
-.map((dish)=>{
-
-
-if(
-typeof dish.category==="object"
-){
-
-return dish.category?.name;
-
-}
-
-
-return dish.category;
-
-
-})
-.filter(Boolean);
-
-return [
-"All",
-...new Set(list)
-];
-
-
-
-},[
-dishes
-]);
+useEffect(() => {
+  if (!categories.some((category) => categoryKey(category) === categoryKey(activeCategory))) {
+    setActiveCategory("All");
+  }
+}, [activeCategory, categories]);
 
 
 
@@ -555,56 +534,56 @@ dish.isAvailable!==false;
 
 
 const featured =
-dishes.filter(
+sortDishesForDisplay(dishes.filter(
 (dish)=>
 availableDish(dish) &&
 dish.featured
-);
+));
 
 
 
 const todaySpecial =
-dishes.filter(
+sortDishesForDisplay(dishes.filter(
 (dish)=>
 availableDish(dish) &&
 dish.todaySpecial
-);
+));
 
 
 
 const recommended =
-dishes.filter(
+sortDishesForDisplay(dishes.filter(
 (dish)=>
 availableDish(dish) &&
 dish.isRecommended
-);
+));
 
 
 
 const popular =
-dishes.filter(
+sortDishesForDisplay(dishes.filter(
 (dish)=>
 availableDish(dish) &&
 dish.isPopular
-);
+));
 
 
 
 const bestsellers =
-dishes.filter(
+sortDishesForDisplay(dishes.filter(
 (dish)=>
 availableDish(dish) &&
 dish.isBestseller
-);
+));
 
 
 
 const newArrivals =
-dishes.filter(
+sortDishesForDisplay(dishes.filter(
 (dish)=>
 availableDish(dish) &&
 dish.isNewArrival
-);
+));
 
 
 
@@ -1050,11 +1029,7 @@ Try Again
 
 return (
 
-<div className="
-min-h-screen 
-bg-gray-50 
-pb-32
-">
+<div className="guest-menu-page min-h-screen pb-32" style={getHotelThemeStyle(hotel)}>
 
 
 

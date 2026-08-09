@@ -8,6 +8,8 @@ import {
 import {
   App as CapacitorApp,
 } from "@capacitor/app";
+import { getHomePathForRole } from "../constants/roles";
+import { readStoredSession } from "../utils/session";
 
 export default function BackButtonHandler() {
 
@@ -28,6 +30,32 @@ export default function BackButtonHandler() {
           await CapacitorApp.addListener(
             "backButton",
             () => {
+
+              const { user } = readStoredSession();
+              if (user) {
+                const home = getHomePathForRole(user.role);
+                const authenticatedRoots = [
+                  "/owner/dashboard",
+                  "/owner/order",
+                  "/kitchen",
+                  "/display",
+                  "/superadmin",
+                ];
+
+                if (location.pathname === home) {
+                  CapacitorApp.exitApp();
+                  return;
+                }
+
+                if (
+                  authenticatedRoots.includes(location.pathname) ||
+                  location.pathname.startsWith("/owner/") ||
+                  location.pathname === "/change-password"
+                ) {
+                  navigate(home, { replace: true });
+                  return;
+                }
+              }
 
               // EXIT ONLY ON HOME
 

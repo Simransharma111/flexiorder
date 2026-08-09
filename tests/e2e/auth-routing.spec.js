@@ -48,3 +48,28 @@ test("does not allow staff to open owner-only settings", async ({ page }) => {
   await expect(page).toHaveURL(/\/$/);
   await expect(page.getByRole("heading", { name: /Run Your Restaurant Smarter/ })).toBeVisible();
 });
+
+test("owner login ignores a stale kitchen redirect and opens owner Today", async ({ page }) => {
+  const user = {
+    _id: "owner-1",
+    email: "owner@flexi.test",
+    role: "owner",
+    hotelId: "hotel-1",
+  };
+  await page.route("**/auth/login", (route) => fulfillJson(route, {
+    user,
+    token: makeToken(user._id),
+    hotelSetupCompleted: true,
+  }));
+  await page.route("**/hotel/me", (route) => fulfillJson(route, { hotel }));
+  await page.route("**/kitchen/orders?type=kitchen", (route) => fulfillJson(route, { orders: [] }));
+
+  await page.goto("/kitchen");
+  await expect(page).toHaveURL(/\/login$/);
+  await page.getByPlaceholder("Email Address").fill(user.email);
+  await page.getByPlaceholder("Password").fill("correct-password");
+  await page.getByRole("button", { name: "Login" }).click();
+
+  await expect(page).toHaveURL(/\/owner\/dashboard$/);
+  await expect(page.getByRole("heading", { name: "Today" })).toBeVisible();
+});

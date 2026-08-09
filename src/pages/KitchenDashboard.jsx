@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import api from "../api/axios";
 import socket from "../socket";
 import KitchenBoard from "../components/kitchen/KitchenBoard";
-import { clearAuthSession } from "../utils/session";
+import { clearAuthSession, readStoredSession } from "../utils/session";
 import { getScopedStorageKey } from "../utils/storageScope";
 import {
   mergeOrders,
@@ -23,6 +23,7 @@ import {
   recordKitchenUpdateFailure,
   retryKitchenUpdatesNeedingAttention,
 } from "../utils/offlineKitchenUpdates";
+import { getHotelThemeStyle } from "../utils/hotelTheme";
 
 const CACHE_KEY = "flexiorder_kitchen_active_orders";
 
@@ -38,6 +39,7 @@ export default function KitchenDashboard() {
   const [attentionCount, setAttentionCount] = useState(getKitchenUpdatesNeedingAttention().length);
   const syncInFlight = useRef(false);
   const deliveredTimers = useRef(new Map());
+  const currentRole = readStoredSession().user?.role;
 
   const cacheOrders = (next) => {
     localStorage.setItem(getScopedStorageKey(CACHE_KEY), JSON.stringify(next));
@@ -216,6 +218,7 @@ export default function KitchenDashboard() {
   };
 
   const logout = () => {
+    if (!window.confirm("Sign out of FlexiOrder on this device?")) return;
     clearAuthSession();
     navigate("/login");
   };
@@ -223,7 +226,7 @@ export default function KitchenDashboard() {
   if (loading && !orders.length) return <div className="ops-loading">Loading kitchen…</div>;
 
   return (
-    <main className="ops-workspace ops-kitchen-workspace">
+    <main className="ops-workspace ops-kitchen-workspace" style={getHotelThemeStyle(hotel)}>
       <button type="button" className="ops-edge-trigger" aria-label="Open kitchen tools" onClick={() => setToolsOpen(true)}>•••</button>
       <span className={`ops-connection-dot ${isOnline ? "is-online" : "is-offline"}`} title={isOnline ? "Online" : "Offline"} aria-label={isOnline ? "Online" : "Offline"} />
 
@@ -237,6 +240,9 @@ export default function KitchenDashboard() {
             <label className="ops-search"><FiSearch /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search table or dish" /></label>
             <button type="button" onClick={fetchOrders}><FiRefreshCw /> Refresh</button>
             <button type="button" onClick={() => navigate("/owner/order")}>Waiter workspace</button>
+            {["owner", "superadmin"].includes(currentRole) && (
+              <button type="button" onClick={() => navigate("/owner/dashboard")}>Manage restaurant</button>
+            )}
             <button type="button" onClick={logout}><FiLogOut /> Sign out</button>
             <button type="button" className="ops-sheet-cancel" onClick={() => setToolsOpen(false)}>Close</button>
           </aside>

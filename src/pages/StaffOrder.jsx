@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FiArrowLeft, FiMinus, FiPlus, FiSearch, FiShoppingBag, FiX } from "react-icons/fi";
 import api from "../api/axios";
 import { getDishPricing } from "../utils/pricing";
+import { sortDishesForDisplay } from "../utils/menuOrdering";
+import { buildCategoryList, categoryKey } from "../utils/menuCategories";
 import {
   getPendingStaffOrders,
   getStaffOrdersEligibleForHandled,
@@ -131,10 +133,10 @@ export default function StaffOrder({ hotel, onOrderCreated }) {
     };
   }, [refreshQueueCounts, syncPendingOrders]);
 
-  const categories = useMemo(() => ["All", ...new Set(menu
-    .filter((dish) => dish.isAvailable !== false)
-    .map((dish) => typeof dish.category === "object" ? dish.category?.name : dish.category)
-    .filter(Boolean))], [menu]);
+  const categories = useMemo(
+    () => buildCategoryList(menu.filter((dish) => dish.isAvailable !== false)),
+    [menu]
+  );
 
   const visibleTables = useMemo(() => {
     const term = tableSearch.trim().toLowerCase();
@@ -143,11 +145,10 @@ export default function StaffOrder({ hotel, onOrderCreated }) {
 
   const visibleMenu = useMemo(() => {
     const term = dishSearch.trim().toLowerCase();
-    return menu.filter((dish) => dish.isAvailable !== false).filter((dish) => {
-      const dishCategory = typeof dish.category === "object" ? dish.category?.name : dish.category;
-      return (category === "All" || dishCategory === category) &&
+    return sortDishesForDisplay(menu.filter((dish) => dish.isAvailable !== false).filter((dish) => {
+      return (category === "All" || categoryKey(dish.category) === categoryKey(category)) &&
         (!term || String(dish.name || "").toLowerCase().includes(term));
-    });
+    }));
   }, [category, dishSearch, menu]);
 
   const quantityFor = (dishId) => cart.find((item) => item.menuId === dishId)?.quantity || 0;

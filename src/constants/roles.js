@@ -26,3 +26,29 @@ export const getHomePathForRole = (role) => {
       return "/";
   }
 };
+
+export const getPostLoginPath = (role, requestedPath) => {
+  const normalizedRole = normalizeRole(role);
+  const home = getHomePathForRole(normalizedRole);
+  const safePath = typeof requestedPath === "string" &&
+    requestedPath.startsWith("/") &&
+    !requestedPath.startsWith("//")
+      ? (requestedPath.replace(/\/+$/, "") || "/")
+      : null;
+
+  if (!safePath) return home;
+  if (normalizedRole === "owner") {
+    return safePath.startsWith("/owner/") && safePath !== "/owner/order"
+      ? safePath
+      : home;
+  }
+  if (normalizedRole === "superadmin") {
+    return safePath.startsWith("/superadmin") || safePath.startsWith("/owner/")
+      ? safePath
+      : home;
+  }
+  if (["staff", "kitchen", "manager", "cashier"].includes(normalizedRole)) {
+    return ["/kitchen", "/owner/order"].includes(safePath) ? safePath : home;
+  }
+  return home;
+};

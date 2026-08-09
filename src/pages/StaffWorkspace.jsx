@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { FiMoreVertical, FiPower, FiX } from "react-icons/fi";
+import { FiLogOut, FiMoreVertical, FiPower, FiX } from "react-icons/fi";
 import { useNavigate } from "react-router-dom";
 import api from "../api/axios";
 import socket from "../socket";
@@ -8,6 +8,8 @@ import Orders from "../components/ownerdashboard/Orders";
 import { getScopedStorageKey } from "../utils/storageScope";
 import { mergeOrders, orderKey, reconcileAuthoritativeOrders } from "../utils/orderModel";
 import { getPendingKitchenUpdates } from "../utils/offlineKitchenUpdates";
+import { getHotelThemeStyle } from "../utils/hotelTheme";
+import { clearAuthSession, readStoredSession } from "../utils/session";
 
 const HOTEL_CACHE_KEY = "flexiorder_staff_hotel";
 const ORDERS_CACHE_KEY = "flexiorder_staff_orders";
@@ -21,6 +23,7 @@ export default function StaffWorkspace() {
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [updatingOrdering, setUpdatingOrdering] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const currentRole = readStoredSession().user?.role;
 
   const persistOrders = useCallback((next) => {
     localStorage.setItem(getScopedStorageKey(ORDERS_CACHE_KEY), JSON.stringify(next));
@@ -117,10 +120,16 @@ export default function StaffWorkspace() {
     setActiveTab("orders");
   }, [persistOrders]);
 
+  const logout = () => {
+    if (!window.confirm("Sign out of FlexiOrder on this device?")) return;
+    clearAuthSession();
+    navigate("/login");
+  };
+
   if (loading && !hotel) return <div className="ops-loading">Loading waiter workspace…</div>;
 
   return (
-    <main className="ops-workspace ops-waiter-workspace">
+    <main className="ops-workspace ops-waiter-workspace" style={getHotelThemeStyle(hotel)}>
       <header className="ops-waiter-tabs">
         <div role="tablist" aria-label="Waiter workspace">
           <button type="button" role="tab" aria-selected={activeTab === "orders"} className={activeTab === "orders" ? "is-active" : ""} onClick={() => setActiveTab("orders")}>Orders</button>
@@ -135,7 +144,11 @@ export default function StaffWorkspace() {
           <aside className="ops-tools-sheet" onClick={(event) => event.stopPropagation()}>
             <div className="ops-tools-sheet__brand"><strong>{hotel?.name || "Restaurant"}</strong><span>Waiter workspace</span></div>
             <button type="button" onClick={() => navigate("/kitchen")}>Kitchen workspace</button>
+            {["owner", "superadmin"].includes(currentRole) && (
+              <button type="button" onClick={() => navigate("/owner/dashboard")}>Manage restaurant</button>
+            )}
             <button type="button" onClick={toggleOrdering} disabled={updatingOrdering}><FiPower /> {hotel?.orderingEnabled === false ? "Turn customer ordering on" : "Pause customer ordering"}</button>
+            <button type="button" onClick={logout}><FiLogOut /> Sign out</button>
             <button type="button" className="ops-sheet-cancel" onClick={() => setMenuOpen(false)}><FiX /> Close</button>
           </aside>
         </div>

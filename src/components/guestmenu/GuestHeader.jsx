@@ -4,10 +4,8 @@ export default function GuestHeader({ hotel, table, cartCount, onCart, orderingE
   const location = table?.type === "room"
     ? `Room ${table?.locationNumber || table?.tableNumber || ""}`
     : `Table ${table?.locationNumber || table?.tableNumber || ""}`;
-  const primary = hotel?.theme?.primary || "#00796b";
-
   return (
-    <header className="guest-brand-strip" style={{ "--guest-brand": primary }}>
+    <header className="guest-brand-strip">
       <div className="guest-brand-strip__inner">
         <div className="guest-brand-strip__logo" aria-hidden={!hotel?.logo}>
           {hotel?.logo ? <img src={hotel.logo} alt="" /> : <span>{hotel?.name?.charAt(0) || "F"}</span>}

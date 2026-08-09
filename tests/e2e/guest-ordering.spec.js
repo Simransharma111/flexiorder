@@ -2,6 +2,17 @@ import { expect, test } from "@playwright/test";
 import { fulfillJson, hotel, mockGuestMenu, table } from "./helpers";
 
 test.describe("customer QR ordering", () => {
+  test("applies the host theme to guest branding and menu controls", async ({ page }) => {
+    await mockGuestMenu(page, {
+      hotel: { theme: { id: "lavender_hues" } },
+    });
+
+    await page.goto("/qr/qr-123");
+
+    await expect(page.getByRole("banner")).toHaveCSS("background-color", "rgb(167, 139, 250)");
+    await expect(page.locator(".guest-menu-page")).toHaveCSS("--primary", "#a78bfa");
+  });
+
   test("shows the available menu, discount, dietary details, and places an order with GST", async ({ page }) => {
     await mockGuestMenu(page);
 

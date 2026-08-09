@@ -38,6 +38,7 @@ import HOTEL_THEMES from "../constants/hotelThemes";
 import { mergeOrders, reconcileAuthoritativeOrders } from "../utils/orderModel";
 import { getPendingKitchenUpdates } from "../utils/offlineKitchenUpdates";
 import { clearAuthSession } from "../utils/session";
+import { getHotelThemeStyle } from "../utils/hotelTheme";
 
 
 
@@ -284,6 +285,7 @@ LOGOUT
 */
 
 const logout=()=>{
+if (!window.confirm("Sign out of FlexiOrder on this device?")) return;
 clearAuthSession();
 navigate(
 "/login"
@@ -446,7 +448,7 @@ fetchOrders();
 
 return (
 
-<div className="owner-shell">
+<div className="owner-shell" style={getHotelThemeStyle(hotel)}>
 
 
 {/* MOBILE SIDEBAR */}
@@ -717,7 +719,7 @@ setRefreshKey={setRefreshKey}
 {
 activeTab==="settings" &&
 
-<OwnerHotelSettings/>
+<OwnerHotelSettings onHotelChange={setHotel}/>
 
 }
 

@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import api from "../api/axios";
+import { sortDishesForDisplay } from "../utils/menuOrdering";
+import { buildCategoryList, categoryKey, categoryName, normalizeCategory } from "../utils/menuCategories";
 import {
   FiPlus,
   FiSearch,
@@ -13,6 +15,17 @@ import {
   FiEye,
   FiEyeOff,
 } from "react-icons/fi";
+
+const DEFAULT_CATEGORIES = [
+  "Starters",
+  "Main Course",
+  "Breads",
+  "Rice",
+  "Snacks",
+  "Desserts",
+  "Drinks",
+  "Breakfast",
+];
 
 export default function OwnerMenuManager() {
   const [dishes, setDishes] = useState([]);
@@ -62,17 +75,16 @@ export default function OwnerMenuManager() {
   // CATEGORIES
   // =====================================================
 
-  const categories = [
-    "All",
-    "Starters",
-    "Main Course",
-    "Breads",
-    "Rice",
-    "Snacks",
-    "Desserts",
-    "Drinks",
-    "Breakfast",
-  ];
+  const categories = useMemo(
+    () => buildCategoryList(dishes, DEFAULT_CATEGORIES),
+    [dishes]
+  );
+
+  useEffect(() => {
+    if (!categories.some((category) => categoryKey(category) === categoryKey(activeCategory))) {
+      setActiveCategory("All");
+    }
+  }, [activeCategory, categories]);
 
   // =====================================================
   // FETCH DISHES
@@ -149,6 +161,17 @@ export default function OwnerMenuManager() {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
+    const enteredCategory = categoryName(formData.category);
+    if (!enteredCategory) {
+      alert("Enter a category name.");
+      return;
+    }
+    if (categoryKey(enteredCategory) === "all") {
+      alert('“All” is reserved for viewing the full menu. Choose another category name.');
+      return;
+    }
+    const normalizedCategory = normalizeCategory(enteredCategory, categories);
+
     try {
       setLoading(true);
 
@@ -158,7 +181,7 @@ export default function OwnerMenuManager() {
 
       form.append("name", formData.name);
       form.append("description", formData.description);
-      form.append("category", formData.category);
+      form.append("category", normalizedCategory);
       form.append("foodType", formData.foodType);
       form.append("containsEgg", formData.containsEgg);
       form.append("price", formData.price);
@@ -369,9 +392,12 @@ export default function OwnerMenuManager() {
       format: "flexiorder-menu",
       version: 1,
       exportedAt: new Date().toISOString(),
-      dishes: dishes.map((dish) => Object.fromEntries(
-        Object.entries(dish).filter(([field]) => !excludedFields.has(field))
-      )),
+      dishes: dishes.map((dish) => ({
+        ...Object.fromEntries(
+          Object.entries(dish).filter(([field]) => !excludedFields.has(field))
+        ),
+        category: categoryName(dish.category),
+      })),
     };
 
     const blob = new Blob([JSON.stringify(payload, null, 2)], {
@@ -418,9 +444,14 @@ export default function OwnerMenuManager() {
       for (const dish of importedDishes) {
         if (!dish?.name || dish?.price === undefined) continue;
 
+        const importedCategory = categoryName(dish.category);
+        const safeCategory = importedCategory && categoryKey(importedCategory) !== "all"
+          ? normalizeCategory(importedCategory, categories)
+          : "Main Course";
+
         const form = new FormData();
         [
-          "name", "description", "category", "foodType", "containsEgg",
+          "name", "description", "foodType", "containsEgg",
           "price", "discountType", "discountValue", "prepTime",
           "isAvailable", "isRecommended", "isBestseller", "featured",
           "todaySpecial", "isPopular", "isNewArrival", "chefChoice",
@@ -428,6 +459,7 @@ export default function OwnerMenuManager() {
         ].forEach((field) => {
           if (dish[field] !== undefined) form.append(field, dish[field]);
         });
+        form.append("category", safeCategory);
         form.append("tags", Array.isArray(dish.tags) ? dish.tags.join(",") : (dish.tags || ""));
 
         const response = await api.post("/menu/dish", form, config);
@@ -454,7 +486,7 @@ export default function OwnerMenuManager() {
     setFormData({
       name: dish.name || "",
       description: dish.description || "",
-      category: dish.category || "Main Course",
+      category: categoryName(dish.category) || "Main Course",
       foodType: dish.foodType || "veg",
       containsEgg: dish.containsEgg ?? false,
       price: dish.price || "",
@@ -512,10 +544,10 @@ export default function OwnerMenuManager() {
   // =====================================================
 
   const filteredDishes = useMemo(() => {
-    return dishes.filter((dish) => {
+    return sortDishesForDisplay(dishes.filter((dish) => {
       const categoryMatch =
         activeCategory === "All" ||
-        dish.category === activeCategory;
+        categoryKey(dish.category) === categoryKey(activeCategory);
 
       const searchMatch =
         dish.name
@@ -526,7 +558,7 @@ export default function OwnerMenuManager() {
           .includes(search.toLowerCase());
 
       return categoryMatch && searchMatch;
-    });
+    }));
   }, [
     dishes,
     activeCategory,
@@ -688,11 +720,12 @@ export default function OwnerMenuManager() {
             <div className="grid md:grid-cols-2 gap-4">
 
               <div>
-                <label className="block text-sm font-semibold mb-1">
+                <label htmlFor="dish-name" className="block text-sm font-semibold mb-1">
                   Dish Name
                 </label>
 
                 <input
+                  id="dish-name"
                   name="name"
                   placeholder="e.g. Paneer Butter Masala"
                   value={formData.name}
@@ -745,25 +778,29 @@ export default function OwnerMenuManager() {
               </div>
 
               <div>
-                <label className="block text-sm font-semibold mb-1">
+                <label htmlFor="dish-category" className="block text-sm font-semibold mb-1">
                   Category
                 </label>
 
-                <select
+                <input
+                  id="dish-category"
+                  type="text"
+                  list="menu-category-options"
                   name="category"
                   value={formData.category}
                   onChange={handleChange}
+                  placeholder="Choose or type a category"
                   className="w-full border border-gray-200 rounded-lg px-3 py-3 outline-none"
-                >
-                  <option>Starters</option>
-                  <option>Main Course</option>
-                  <option>Breads</option>
-                  <option>Rice</option>
-                  <option>Snacks</option>
-                  <option>Desserts</option>
-                  <option>Drinks</option>
-                  <option>Breakfast</option>
-                </select>
+                  required
+                />
+                <datalist id="menu-category-options">
+                  {categories.filter((category) => category !== "All").map((category) => (
+                    <option value={category} key={category} />
+                  ))}
+                </datalist>
+                <p className="mt-1 text-xs text-gray-500">
+                  Select a suggestion or type your own category name.
+                </p>
               </div>
 
               <div>
@@ -1118,16 +1155,20 @@ export default function OwnerMenuManager() {
 
               <div>
                 <label className="block text-sm font-semibold mb-1">
-                  Display Order
+                  Menu priority (optional)
                 </label>
 
                 <input
                   type="number"
+                  min="0"
                   name="displayOrder"
                   value={formData.displayOrder}
                   onChange={handleChange}
                   className="w-full border border-gray-200 rounded-lg px-3 py-3"
                 />
+                <p className="mt-1 text-xs text-gray-500">
+                  Positive numbers appear first; 1 is highest. Leave 0 for normal order.
+                </p>
               </div>
 
             </div>
@@ -1298,7 +1339,7 @@ export default function OwnerMenuManager() {
                     {/* CATEGORY */}
 
                     <td className="px-5 py-4 text-sm">
-                      {dish.category}
+                      {categoryName(dish.category) || "Uncategorized"}
                     </td>
 
                     {/* FOOD TYPE */}
@@ -1476,7 +1517,7 @@ export default function OwnerMenuManager() {
                     </div>
 
                     <p className="text-xs text-gray-500 mt-1">
-                      {dish.category} •{" "}
+                      {categoryName(dish.category) || "Uncategorized"} •{" "}
                       {dish.prepTime} min
                     </p>
 
