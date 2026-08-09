@@ -1,203 +1,28 @@
-import {
-  FiShoppingBag,
-  FiMapPin,
-} from "react-icons/fi";
+import { FiMapPin, FiShoppingBag } from "react-icons/fi";
 
-export default function GuestHeader({
-  hotel,
-  table,
-  cartCount,
-  onCart,
-  orderingEnabled = true,
-}) {
+export default function GuestHeader({ hotel, table, cartCount, onCart, orderingEnabled = true }) {
+  const location = table?.type === "room"
+    ? `Room ${table?.locationNumber || table?.tableNumber || ""}`
+    : `Table ${table?.locationNumber || table?.tableNumber || ""}`;
+  const primary = hotel?.theme?.primary || "#00796b";
 
   return (
-    <header className="
-      px-4
-      pt-3
-    ">
-
-      <div className="
-        max-w-6xl
-        mx-auto
-        bg-white/90
-        backdrop-blur-xl
-        border
-        border-gray-100
-        shadow-sm
-        rounded-2xl
-        px-4
-        py-3
-        flex
-        items-center
-        justify-between
-      ">
-
-
-        {/* HOTEL BRAND */}
-
-        <div className="
-          flex
-          items-center
-          gap-3
-          min-w-0
-        ">
-
-
-          {/* LOGO */}
-
-          <div className="
-            w-11
-            h-11
-            rounded-xl
-            overflow-hidden
-            bg-orange-100
-            flex
-            items-center
-            justify-center
-            shrink-0
-          ">
-
-            {
-              hotel?.logo
-              ?
-
-              <img
-                src={hotel.logo}
-                alt={hotel.name}
-                className="
-                  w-full
-                  h-full
-                  object-cover
-                "
-              />
-
-              :
-
-              <span className="
-                text-orange-600
-                font-bold
-                text-lg
-              ">
-                {hotel?.name?.charAt(0) || "H"}
-              </span>
-
-            }
-
-          </div>
-
-
-
-          {/* NAME */}
-
-          <div className="
-            min-w-0
-          ">
-
-            <h1 className="
-              font-bold
-              text-gray-900
-              text-sm
-              truncate
-            ">
-              {hotel?.name || "Hotel"}
-            </h1>
-
-
-            <div className="
-              flex
-              items-center
-              gap-1
-              text-xs
-              text-gray-500
-              mt-0.5
-            ">
-
-              <FiMapPin
-                size={12}
-                className="text-orange-500"
-              />
-
-              <span>
-                {
-                  table?.locationNumber
-                  ||
-                  table?.roomNumber
-                  ||
-                  "Guest"
-                }
-              </span>
-
-            </div>
-
-
-          </div>
-
-
+    <header className="guest-brand-strip" style={{ "--guest-brand": primary }}>
+      <div className="guest-brand-strip__inner">
+        <div className="guest-brand-strip__logo" aria-hidden={!hotel?.logo}>
+          {hotel?.logo ? <img src={hotel.logo} alt="" /> : <span>{hotel?.name?.charAt(0) || "F"}</span>}
         </div>
-
-
-
-
-        {/* CART BUTTON */}
-
-        {orderingEnabled && <button
-          onClick={onCart}
-          className="
-            relative
-            w-11
-            h-11
-            rounded-xl
-            bg-orange-500
-            hover:bg-orange-600
-            text-white
-            flex
-            items-center
-            justify-center
-            transition
-          "
-        >
-
-          <FiShoppingBag
-            size={20}
-          />
-
-
-          {
-            cartCount > 0 && (
-
-              <span className="
-                absolute
-                -top-1
-                -right-1
-                bg-white
-                text-orange-600
-                text-[11px]
-                font-bold
-                w-5
-                h-5
-                rounded-full
-                flex
-                items-center
-                justify-center
-                shadow
-              ">
-
-                {cartCount}
-
-              </span>
-
-            )
-          }
-
-
-        </button>}
-
-
-
+        <div className="guest-brand-strip__identity">
+          <h1>{hotel?.name || "Restaurant"}</h1>
+          <p>{hotel?.tagline || hotel?.description || "Welcome"}</p>
+        </div>
+        <span className="guest-brand-strip__location"><FiMapPin /> {location}</span>
+        {orderingEnabled && cartCount > 0 && (
+          <button type="button" onClick={onCart} aria-label={`Open cart with ${cartCount} items`}>
+            <FiShoppingBag /><b>{cartCount}</b>
+          </button>
+        )}
       </div>
-
-
     </header>
   );
 }

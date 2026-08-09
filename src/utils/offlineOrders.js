@@ -20,6 +20,9 @@ const errorMessage = (error) => (
   error?.response?.data?.message || error?.message || "Sync failed"
 );
 
+const isAmbiguousFailure = (error) => !error?.response ||
+  Number(error.response.status || 0) >= 500;
+
 const needsAttention = (item, error) => {
   const status = Number(error?.response?.status || 0);
   const terminalClientError = status >= 400 && status < 500 && ![408, 429].includes(status);
@@ -31,10 +34,25 @@ export const getPendingStaffOrders = () => readQueue();
 export const getStaffOrdersNeedingAttention = () => (
   readQueue().filter((item) => item.requiresAttention)
 );
+export const getStaffOrdersEligibleForHandled = () => (
+  readQueue().filter((item) => item.requiresAttention && item.ambiguousOutcome !== false)
+);
 
 export const retryStaffOrdersNeedingAttention = () => {
   const next = readQueue().map((item) => item.requiresAttention ? {
     ...item,
+    requiresAttention: false,
+    attemptCount: 0,
+    lastError: null,
+  } : item);
+  writeQueue(next);
+  return next;
+};
+
+export const markStaffOrdersHandled = () => {
+  const next = readQueue().map((item) => item.requiresAttention && item.ambiguousOutcome !== false ? {
+    ...item,
+    alreadyHandled: true,
     requiresAttention: false,
     attemptCount: 0,
     lastError: null,
@@ -75,5 +93,6 @@ export const recordStaffOrderFailure = (queuedOrder, error) => ({
   attemptCount: Number(queuedOrder.attemptCount || 0) + 1,
   lastAttemptAt: new Date().toISOString(),
   lastError: errorMessage(error),
+  ambiguousOutcome: isAmbiguousFailure(error),
   requiresAttention: needsAttention(queuedOrder, error),
 });

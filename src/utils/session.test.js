@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   clearAuthSession,
   clearSessionForUnauthorizedResponse,
@@ -30,6 +30,10 @@ const tokenWithPayload = (payload) => {
 describe("session utilities", () => {
   beforeEach(() => {
     vi.stubGlobal("localStorage", createStorage());
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
   });
 
   it("reads JWT payloads and detects expiry", () => {

@@ -1,410 +1,108 @@
-import {
-  useEffect,
-  useState,
-} from "react";
-
+import { useCallback, useEffect, useState } from "react";
+import { FiEdit2, FiTrash2, FiUserPlus, FiX } from "react-icons/fi";
 import api from "../api/axios";
 
+const EMPTY_FORM = { name: "", email: "", password: "", position: "Kitchen Staff" };
+const unwrapStaff = (data) => data?.staff || data?.user || data;
+
 export default function StaffManager() {
+  const [staff, setStaff] = useState([]);
+  const [editingId, setEditingId] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [fetching, setFetching] = useState(true);
+  const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
+  const [formData, setFormData] = useState(EMPTY_FORM);
 
-  // =========================
-  // STATES
-  // =========================
-
-  const [staff, setStaff] =
-    useState([]);
-
-    const [editingId, setEditingId] =
-  useState(null);
-
-  const [loading, setLoading] =
-    useState(false);
-
-  const [formData, setFormData] =
-    useState({
-      name: "",
-      email: "",
-      password: "",
-      position: "Kitchen Staff",
-    });
-
-  // =========================
-  // FETCH STAFF
-  // =========================
-
-  useEffect(() => {
-    fetchStaff();
+  const fetchStaff = useCallback(async () => {
+    try {
+      setFetching(true);
+      setError("");
+      const response = await api.get("/staff");
+      const result = response.data?.staff || response.data?.users || response.data || [];
+      setStaff(Array.isArray(result) ? result : []);
+      return true;
+    } catch (requestError) {
+      setError(requestError?.response?.data?.message || "Could not load staff. Try again.");
+      return false;
+    } finally {
+      setFetching(false);
+    }
   }, []);
 
-  const fetchStaff = async () => {
+  useEffect(() => { fetchStaff(); }, [fetchStaff]);
 
-    try {
+  const resetForm = () => { setEditingId(null); setFormData(EMPTY_FORM); setError(""); };
 
-      const token =
-        localStorage.getItem("token");
-
-      const res = await api.get(
-        "/staff",
-        {
-          headers: {
-            Authorization:
-              `Bearer ${token}`,
-          },
-        }
-      );
-
-      setStaff(res.data);
-
-    } catch (err) {
-
-      console.log(err);
-
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    setError("");
+    setMessage("");
+    if (formData.password && formData.password.length < 6) {
+      setError("Use a password with at least 6 characters.");
+      return;
     }
-  };
-
-  // =========================
-  // HANDLE CHANGE
-  // =========================
-
-  const handleChange = (e) => {
-
-    setFormData({
-      ...formData,
-      [e.target.name]:
-        e.target.value,
-    });
-
-  };
-
-  // =========================
-  // CREATE STAFF
-  // =========================
-
-  const handleSubmit = async (
-  e
-) => {
-
-  e.preventDefault();
-
-  try {
-
     setLoading(true);
-
-    const token =
-      localStorage.getItem("token");
-
-    const config = {
-      headers: {
-        Authorization:
-          `Bearer ${token}`,
-      },
-    };
-
-    // UPDATE
-
-    if (editingId) {
-
-      const res =
-        await api.put(
-          `/staff/${editingId}`,
-          formData,
-          config
-        );
-
-      setStaff((prev) =>
-        prev.map((item) =>
-          item._id === editingId
-            ? res.data
-            : item
-        )
-      );
-
-      setEditingId(null);
-
-    }
-
-    // CREATE
-
-    else {
-
-      const res =
-        await api.post(
-          "/staff/create",
-          formData,
-          config
-        );
-
-      setStaff((prev) => [
-        res.data,
-        ...prev,
-      ]);
-    }
-
-    // RESET
-
-    setFormData({
-      name: "",
-      email: "",
-      password: "",
-      position:
-        "Kitchen Staff",
-    });
-
-  } catch (err) {
-
-    console.log(err);
-
-  } finally {
-
-    setLoading(false);
-
-  }
-};
-  // =========================
-  // DELETE STAFF
-  // =========================
-
-  const deleteStaff = async (
-    id
-  ) => {
-
-    const confirmDelete =
-      window.confirm(
-        "Remove this staff member?"
-      );
-
-    if (!confirmDelete) return;
-
     try {
-
-      const token =
-        localStorage.getItem("token");
-
-      await api.delete(
-        `/staff/${id}`,
-        {
-          headers: {
-            Authorization:
-              `Bearer ${token}`,
-          },
-        }
-      );
-
-      setStaff((prev) =>
-        prev.filter(
-          (user) =>
-            user._id !== id
-        )
-      );
-
-    } catch (err) {
-
-      console.log(err);
-
-      alert(
-        "Failed to remove staff"
-      );
-
+      const payload = { ...formData };
+      if (editingId && !payload.password) delete payload.password;
+      const response = editingId
+        ? await api.put(`/staff/${editingId}`, payload)
+        : await api.post("/staff/create", payload);
+      const saved = unwrapStaff(response.data);
+      if (!saved?._id) {
+        const refreshed = await fetchStaff();
+        if (!refreshed) return;
+      } else if (editingId) {
+        setStaff((current) => current.map((item) => item._id === editingId ? { ...item, ...saved } : item));
+      } else {
+        setStaff((current) => [saved, ...current.filter((item) => item._id !== saved._id)]);
+      }
+      setMessage(editingId ? "Staff details updated." : "Staff account created.");
+      resetForm();
+    } catch (requestError) {
+      const status = requestError?.response?.status;
+      const serverMessage = requestError?.response?.data?.message || requestError?.response?.data?.error;
+      setError(serverMessage || (status === 409 ? "This email is already being used." : "Could not save staff. Check the details and try again."));
+    } finally {
+      setLoading(false);
     }
   };
 
-  return (
-
-    <div>
-
-      {/* HEADER */}
-
-      <div className="mb-8">
-
-        <h2 className="text-3xl font-bold">
-          Staff Manager
-        </h2>
-
-        <p className="text-gray-400 mt-2">
-          Create and manage hotel staff
-        </p>
-
-      </div>
-
-      {/* FORM */}
-
-      <form
-        onSubmit={handleSubmit}
-        className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-white/5 border border-white/10 rounded-3xl p-6"
-      >
-
-        {/* NAME */}
-
-        <input
-          type="text"
-          name="name"
-          placeholder="Staff Name"
-          value={formData.name}
-          onChange={handleChange}
-          required
-          className="bg-white/10 rounded-2xl px-4 py-3 outline-none"
-        />
-
-        {/* EMAIL */}
-
-        <input
-          type="email"
-          name="email"
-          placeholder="Email"
-          value={formData.email}
-          onChange={handleChange}
-          required
-          className="bg-white/10 rounded-2xl px-4 py-3 outline-none"
-        />
-
-        {/* PASSWORD */}
-
-        <input
-          type="password"
-          name="password"
-          placeholder="Password"
-          value={formData.password}
-          onChange={handleChange}
-          required
-          className="bg-white/10 rounded-2xl px-4 py-3 outline-none"
-        />
-
-        {/* POSITION */}
-
-        <select
-  name="position"
-  value={formData.position}
-  onChange={handleChange}
-  className="bg-white/10 text-white rounded-2xl px-4 py-3 outline-none"
->
-  <option className="text-black">
-    Kitchen Staff
-  </option>
-
-  <option className="text-black">
-    Waiter
-  </option>
-
-  <option className="text-black">
-    Cashier
-  </option>
-
-  <option className="text-black">
-    Manager
-  </option>
-</select>
-
-        {/* BUTTON */}
-
-        <button
-          type="submit"
-          disabled={loading}
-          className="bg-orange-500 hover:bg-orange-600 transition rounded-2xl py-3 font-bold md:col-span-2"
-        >
-          {
-            loading
-              ? "Creating..."
-              : "Add Staff"
-          }
-        </button>
-
-      </form>
-
-      {/* STAFF LIST */}
-
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 mt-10">
-
-        {
-          staff.length === 0 ? (
-
-            <div className="text-gray-400">
-              No staff members found
-            </div>
-
-          ) : (
-
-            staff.map((user) => (
-
-              <div
-                key={user._id}
-                className="bg-white/5 border border-white/10 rounded-3xl p-6"
-              >
-
-                {/* NAME */}
-
-                <h3 className="text-2xl font-bold">
-                  {user.name}
-                </h3>
-
-                {/* EMAIL */}
-
-                <p className="text-gray-400 mt-2">
-                  {user.email}
-                </p>
-
-                {/* POSITION */}
-
-                <div className="mt-4 flex gap-3">
-
-                  <span className="bg-orange-500/20 text-orange-400 px-4 py-1 rounded-full text-sm">
-                    {user.position}
-                  </span>
-
-                  <span className="bg-blue-500/20 text-blue-400 px-4 py-1 rounded-full text-sm">
-                    {user.role}
-                  </span>
-
-                </div>
-
-                {/* DELETE */}
-
-                <div className="flex gap-3 mt-6">
-
-  <button
-    onClick={() => {
-
-      setEditingId(user._id);
-
-      setFormData({
-        name: user.name,
-        email: user.email,
-        password: "",
-        position:
-          user.position,
-      });
-
-      window.scrollTo({
-        top: 0,
-        behavior: "smooth",
-      });
-
-    }}
-    className="flex-1 bg-blue-500 hover:bg-blue-600 transition py-3 rounded-2xl"
-  >
-    Edit
-  </button>
-
-  <button
-    onClick={() =>
-      deleteStaff(
-        user._id
-      )
+  const deleteStaff = async (id) => {
+    if (!window.confirm("Remove this staff member?")) return;
+    try {
+      setError("");
+      await api.delete(`/staff/${id}`);
+      setStaff((current) => current.filter((item) => item._id !== id));
+      setMessage("Staff member removed.");
+      if (editingId === id) resetForm();
+    } catch (requestError) {
+      setError(requestError?.response?.data?.message || "Could not remove staff.");
     }
-    className="flex-1 bg-red-500 hover:bg-red-600 transition py-3 rounded-2xl"
-  >
-    Remove
-  </button>
+  };
 
-</div>
+  const editStaff = (user) => {
+    setEditingId(user._id);
+    setFormData({ name: user.name || "", email: user.email || "", password: "", position: user.position || "Kitchen Staff" });
+    setError("");
+    setMessage("");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
 
-              </div>
-
-            ))
-          )
-        }
-
-      </div>
-
+  return <section className="owner-staff">
+    <div className="owner-section-heading"><div><h1>Staff</h1><p>Create or update staff access</p></div><FiUserPlus /></div>
+    {error && <div className="ops-inline-error" role="alert"><span>{error}</span><button type="button" aria-label="Dismiss error" onClick={() => setError("")}><FiX /></button></div>}
+    {message && <div className="ops-inline-success" role="status"><span>{message}</span><button type="button" aria-label="Dismiss message" onClick={() => setMessage("")}><FiX /></button></div>}
+    <form className="owner-staff-form" onSubmit={handleSubmit}>
+      <input name="name" value={formData.name} onChange={(event) => setFormData((current) => ({ ...current, name: event.target.value }))} placeholder="Staff name" autoComplete="name" required />
+      <input name="email" type="email" value={formData.email} onChange={(event) => setFormData((current) => ({ ...current, email: event.target.value }))} placeholder="Email" autoComplete="email" required />
+      <input name="password" type="password" value={formData.password} onChange={(event) => setFormData((current) => ({ ...current, password: event.target.value }))} placeholder={editingId ? "New password (optional)" : "Password"} autoComplete="new-password" required={!editingId} />
+      <select name="position" value={formData.position} onChange={(event) => setFormData((current) => ({ ...current, position: event.target.value }))}><option>Kitchen Staff</option><option>Waiter</option><option>Cashier</option><option>Manager</option></select>
+      <div><button type="submit" disabled={loading}>{loading ? (editingId ? "Updating…" : "Creating…") : (editingId ? "Update staff" : "Add staff")}</button>{editingId && <button type="button" onClick={resetForm}>Cancel</button>}</div>
+    </form>
+    <div className="owner-staff-list">
+      {fetching ? <p className="ops-empty-row">Loading staff…</p> : staff.length ? staff.map((user) => <article key={user._id}><div><strong>{user.name}</strong><span>{user.email}</span><small>{user.position || user.role || "Staff"}</small></div><button type="button" aria-label={`Edit ${user.name}`} onClick={() => editStaff(user)}><FiEdit2 /></button><button type="button" aria-label={`Remove ${user.name}`} onClick={() => deleteStaff(user._id)}><FiTrash2 /></button></article>) : <p className="ops-empty-row">No staff members yet</p>}
     </div>
-  );
+  </section>;
 }

@@ -225,10 +225,16 @@ export default function AuthPage({ mode = "login" }) {
     catch (err) {
 
 
+      const message =
+        err.response?.data?.message ||
+        (!err.response && err.request
+          ? "Unable to reach FlexiOrder. Check your internet and try again."
+          : "Something went wrong");
+
+
       alert(
 
-        err.response?.data?.message ||
-        "Something went wrong"
+        message
 
       );
 

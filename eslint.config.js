@@ -7,6 +7,7 @@ import { defineConfig, globalIgnores } from 'eslint/config'
 export default defineConfig([
   globalIgnores([
     'dist/**',
+    'android/**/build/**',
     'android/app/src/main/assets/public/**',
   ]),
   {
@@ -31,5 +32,11 @@ export default defineConfig([
   {
     files: ['src/**/*.test.{js,jsx}'],
     languageOptions: { globals: globals.node },
+  },
+  {
+    files: ['playwright.config.js', 'tests/e2e/**/*.js'],
+    languageOptions: {
+      globals: { ...globals.node, ...globals.browser },
+    },
   },
 ])

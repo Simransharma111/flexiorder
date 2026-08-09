@@ -8,6 +8,11 @@
     "build": "vite build",
     "lint": "eslint .",
     "test": "vitest",
+    "test:e2e": "playwright test",
+    "test:e2e:ci": "playwright test --fail-on-flaky-tests",
+    "test:e2e:headed": "playwright test --headed",
+    "test:ci": "npm run check && npm run test:e2e:ci",
+    "audit:ci": "npm audit --audit-level=high",
     "check": "npm run lint && npm test -- --run && npm run build",
     "preview": "vite preview"
   },
@@ -37,6 +42,7 @@
   "devDependencies": {
     "@capacitor/cli": "^8.3.4",
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.62.1",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.1",

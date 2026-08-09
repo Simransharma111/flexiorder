@@ -1,19 +1,31 @@
 import { useCallback, useEffect, useState } from "react";
+import { FiMoreVertical, FiPower, FiX } from "react-icons/fi";
+import { useNavigate } from "react-router-dom";
 import api from "../api/axios";
+import socket from "../socket";
 import StaffOrder from "./StaffOrder";
 import Orders from "../components/ownerdashboard/Orders";
 import { getScopedStorageKey } from "../utils/storageScope";
+import { mergeOrders, orderKey, reconcileAuthoritativeOrders } from "../utils/orderModel";
+import { getPendingKitchenUpdates } from "../utils/offlineKitchenUpdates";
 
 const HOTEL_CACHE_KEY = "flexiorder_staff_hotel";
 const ORDERS_CACHE_KEY = "flexiorder_staff_orders";
 
 export default function StaffWorkspace() {
+  const navigate = useNavigate();
   const [hotel, setHotel] = useState(null);
   const [orders, setOrders] = useState([]);
   const [activeTab, setActiveTab] = useState("orders");
   const [loading, setLoading] = useState(true);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [updatingOrdering, setUpdatingOrdering] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  const persistOrders = useCallback((next) => {
+    localStorage.setItem(getScopedStorageKey(ORDERS_CACHE_KEY), JSON.stringify(next));
+    return next;
+  }, []);
 
   const fetchData = useCallback(async () => {
     try {
@@ -22,25 +34,26 @@ export default function StaffWorkspace() {
         api.get("/kitchen/orders?type=kitchen"),
       ]);
       const nextHotel = hotelResponse.data?.hotel || hotelResponse.data;
-      const nextOrders = ordersResponse.data?.orders || [];
+      const nextOrders = ordersResponse.data?.orders || ordersResponse.data || [];
       setHotel(nextHotel);
-      setOrders(nextOrders);
+      setOrders((current) => persistOrders(
+        reconcileAuthoritativeOrders(current, nextOrders, getPendingKitchenUpdates())
+      ));
       localStorage.setItem(getScopedStorageKey(HOTEL_CACHE_KEY), JSON.stringify(nextHotel));
-      localStorage.setItem(getScopedStorageKey(ORDERS_CACHE_KEY), JSON.stringify(nextOrders));
     } catch (error) {
-      console.error("Staff workspace loading failed", error);
+      console.warn("Staff workspace loading failed", error);
       try {
         const cachedHotel = localStorage.getItem(getScopedStorageKey(HOTEL_CACHE_KEY));
         const cachedOrders = localStorage.getItem(getScopedStorageKey(ORDERS_CACHE_KEY));
         if (cachedHotel) setHotel(JSON.parse(cachedHotel));
-        if (cachedOrders) setOrders(JSON.parse(cachedOrders));
+        if (cachedOrders) setOrders((current) => mergeOrders(current, JSON.parse(cachedOrders)));
       } catch (cacheError) {
-        console.error("Staff workspace cache failed", cacheError);
+        console.warn("Staff workspace cache failed", cacheError);
       }
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [persistOrders]);
 
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);
@@ -56,101 +69,85 @@ export default function StaffWorkspace() {
     };
   }, [fetchData]);
 
+  useEffect(() => {
+    if (hotel?._id) socket.emit("joinHotel", hotel._id);
+  }, [hotel?._id]);
+
+  useEffect(() => {
+    const upsert = (order) => setOrders((current) => persistOrders(mergeOrders(current, [order])));
+    const update = (order) => {
+      if (order.status === "cancelled") {
+        setOrders((current) => persistOrders(
+          current.filter((item) => orderKey(item) !== orderKey(order))
+        ));
+        return;
+      }
+      upsert(order);
+    };
+    socket.on("newOrder", upsert);
+    socket.on("kitchenOrderUpdated", update);
+    return () => {
+      socket.off("newOrder", upsert);
+      socket.off("kitchenOrderUpdated", update);
+    };
+  }, [persistOrders]);
+
   const toggleOrdering = async () => {
     if (!hotel || updatingOrdering) return;
-
     const nextValue = hotel.orderingEnabled === false;
-    const confirmed = window.confirm(
-      nextValue
-        ? "Allow customers to place new orders now?"
-        : "Pause customer ordering for the whole restaurant? Customers can still view the menu."
-    );
-    if (!confirmed) return;
-
+    if (!window.confirm(nextValue
+      ? "Allow customers to place new orders now?"
+      : "Pause customer ordering? Customers can still view the menu.")) return;
+    setUpdatingOrdering(true);
     try {
-      setUpdatingOrdering(true);
-      await api.patch("/hotel/profile", {
-        orderingEnabled: nextValue,
-      });
-      setHotel((prev) => ({ ...prev, orderingEnabled: nextValue }));
-      localStorage.setItem(
-        getScopedStorageKey(HOTEL_CACHE_KEY),
-        JSON.stringify({ ...hotel, orderingEnabled: nextValue })
-      );
+      await api.patch("/hotel/profile", { orderingEnabled: nextValue });
+      const nextHotel = { ...hotel, orderingEnabled: nextValue };
+      setHotel(nextHotel);
+      localStorage.setItem(getScopedStorageKey(HOTEL_CACHE_KEY), JSON.stringify(nextHotel));
     } catch (error) {
-      console.error("Ordering toggle failed", error);
-      alert(error?.response?.data?.message || "Could not update customer ordering.");
+      window.alert(error?.response?.data?.message || "Could not update customer ordering.");
     } finally {
       setUpdatingOrdering(false);
     }
   };
 
-  if (loading && !hotel) {
-    return (
-      <div className="flex min-h-screen items-center justify-center font-bold">
-        Loading workspace...
-      </div>
-    );
-  }
+  const addVisibleOrder = useCallback((order) => {
+    if (!order) return;
+    setOrders((current) => persistOrders(mergeOrders(current, [order])));
+    setActiveTab("orders");
+  }, [persistOrders]);
 
-  const primaryColor = hotel?.theme?.primary || "#f97316";
+  if (loading && !hotel) return <div className="ops-loading">Loading waiter workspace…</div>;
 
   return (
-    <main className="min-h-screen bg-gray-50 p-3 sm:p-5">
-      <div className="mx-auto max-w-7xl">
-        <div className="mb-4 flex flex-wrap gap-1 rounded-2xl border bg-white p-1 shadow-sm">
-          {[
-            ["orders", "Orders"],
-            ["take", "Take Order"],
-          ].map(([value, label]) => (
-            <button
-              key={value}
-              type="button"
-              onClick={() => setActiveTab(value)}
-              className={`flex-1 rounded-xl px-4 py-3 text-sm font-bold transition ${
-                activeTab === value
-                  ? "text-white"
-                  : "text-gray-600 hover:bg-gray-100"
-              }`}
-              style={activeTab === value ? { background: primaryColor } : undefined}
-            >
-              {label}
-            </button>
-          ))}
-          <button
-            type="button"
-            onClick={toggleOrdering}
-            disabled={updatingOrdering}
-            className={`rounded-xl px-3 py-3 text-xs font-bold transition disabled:opacity-60 ${
-              hotel?.orderingEnabled === false
-                ? "bg-red-50 text-red-700"
-                : "bg-green-50 text-green-700"
-            }`}
-            title="Pause or allow customer ordering"
-          >
-            {updatingOrdering
-              ? "Updating..."
-              : hotel?.orderingEnabled === false
-                ? "Ordering off"
-                : "Ordering on"}
-          </button>
+    <main className="ops-workspace ops-waiter-workspace">
+      <header className="ops-waiter-tabs">
+        <div role="tablist" aria-label="Waiter workspace">
+          <button type="button" role="tab" aria-selected={activeTab === "orders"} className={activeTab === "orders" ? "is-active" : ""} onClick={() => setActiveTab("orders")}>Orders</button>
+          <button type="button" role="tab" aria-selected={activeTab === "take"} className={activeTab === "take" ? "is-active" : ""} onClick={() => setActiveTab("take")}>Take Order</button>
         </div>
+        <span className={`ops-connection-dot ${isOnline ? "is-online" : "is-offline"}`} title={isOnline ? "Online" : "Offline · work is saved"} aria-label={isOnline ? "Online" : "Offline"} />
+        <button type="button" className="ops-icon-button" aria-label="More waiter options" onClick={() => setMenuOpen(true)}><FiMoreVertical /></button>
+      </header>
 
-        {!isOnline && (
-          <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700">
-            Offline — showing the latest saved orders. New waiter orders will sync automatically.
-          </div>
-        )}
+      {menuOpen && (
+        <div className="ops-sheet-backdrop" onClick={() => setMenuOpen(false)}>
+          <aside className="ops-tools-sheet" onClick={(event) => event.stopPropagation()}>
+            <div className="ops-tools-sheet__brand"><strong>{hotel?.name || "Restaurant"}</strong><span>Waiter workspace</span></div>
+            <button type="button" onClick={() => navigate("/kitchen")}>Kitchen workspace</button>
+            <button type="button" onClick={toggleOrdering} disabled={updatingOrdering}><FiPower /> {hotel?.orderingEnabled === false ? "Turn customer ordering on" : "Pause customer ordering"}</button>
+            <button type="button" className="ops-sheet-cancel" onClick={() => setMenuOpen(false)}><FiX /> Close</button>
+          </aside>
+        </div>
+      )}
 
-        {activeTab === "take" ? (
-          <StaffOrder hotel={hotel} />
-        ) : (
-          <Orders
-            orders={orders}
-            refresh={fetchData}
-            primaryColor={primaryColor}
-          />
-        )}
+      <div className="ops-waiter-content">
+        <div hidden={activeTab !== "take"}>
+          <StaffOrder hotel={hotel} onOrderCreated={addVisibleOrder} />
+        </div>
+        <div hidden={activeTab !== "orders"}>
+          <Orders orders={orders} refresh={fetchData} onOrdersChange={setOrders} />
+        </div>
       </div>
     </main>
   );

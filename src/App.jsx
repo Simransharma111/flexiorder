@@ -25,7 +25,7 @@ const ChangePassword = lazy(() => import("./pages/ChangePassword"));
 const StaffWorkspace = lazy(() => import("./pages/StaffWorkspace"));
 
 const RouteFallback = () => (
-  <div className="flex min-h-screen items-center justify-center bg-slate-950 px-4 text-center text-sm font-semibold text-white">
+  <div className="flex min-h-screen items-center justify-center bg-[#f6f8f7] px-4 text-center text-sm font-semibold text-[#55625d]">
     Loading FlexiOrder…
   </div>
 );

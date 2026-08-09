@@ -1,118 +1,51 @@
+import { useCallback, useRef, useState } from "react";
+import { FiMinus, FiPlus, FiX } from "react-icons/fi";
 import { getDishPricing } from "../../utils/pricing";
+import useDialogFocus from "../../hooks/useDialogFocus";
 
-export default function SimpleMenuSection({
-  categories,
-  dishes,
-  activeCategory,
-  setActiveCategory,
-  getCartQuantity,
-  addToCart,
-  orderingEnabled = true,
-}) {
-  const filteredDishes =
-    activeCategory === "All"
-      ? dishes
-      : dishes.filter((dish) => {
-          const category =
-            typeof dish.category === "object"
-              ? dish.category?.name
-              : dish.category;
-          return category === activeCategory;
-        });
+function CategoryPicker({ categories, activeCategory, setActiveCategory }) {
+  const [open, setOpen] = useState(false);
+  const dialogRef = useRef(null);
+  const closePicker = useCallback(() => setOpen(false), []);
+  useDialogFocus(open, dialogRef, closePicker);
+  const visible = categories.slice(0, 4);
+  return <>
+    <div className="guest-category-bar">
+      {visible.map((item) => <button type="button" key={item} className={activeCategory === item ? "is-active" : ""} onClick={() => setActiveCategory(item)}>{item}</button>)}
+      {categories.length > 4 && <button type="button" className="guest-category-more" onClick={() => setOpen(true)}>More ›</button>}
+    </div>
+    {open && <div className="ops-sheet-backdrop" onClick={closePicker}>
+      <section ref={dialogRef} tabIndex={-1} className="ops-action-sheet" role="dialog" aria-modal="true" aria-label="Menu categories" onClick={(event) => event.stopPropagation()}>
+        <div className="guest-category-picker__head"><h2>Categories</h2><button type="button" className="ops-icon-button" aria-label="Close categories" onClick={closePicker}><FiX /></button></div>
+        <div className="guest-category-picker">{categories.map((item) => <button type="button" key={item} className={activeCategory === item ? "is-active" : ""} onClick={() => { setActiveCategory(item); closePicker(); }}>{item}</button>)}</div>
+      </section>
+    </div>}
+  </>;
+}
 
+export default function SimpleMenuSection({ categories, dishes, activeCategory, setActiveCategory, getCartQuantity, addToCart, decreaseQuantity, increaseQuantity, orderingEnabled = true }) {
+  const filtered = activeCategory === "All" ? dishes : dishes.filter((dish) => (typeof dish.category === "object" ? dish.category?.name : dish.category) === activeCategory);
   return (
-    <section className="mx-auto mt-6 max-w-3xl px-4">
-      <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
-        {categories.map((category) => (
-          <button
-            key={category}
-            type="button"
-            onClick={() => setActiveCategory(category)}
-            className={`whitespace-nowrap rounded-full px-4 py-2 text-sm font-semibold ${
-              activeCategory === category
-                ? "bg-orange-500 text-white"
-                : "border border-gray-200 bg-white text-gray-600"
-            }`}
-          >
-            {category}
-          </button>
-        ))}
-        {categories.length > 5 && (
-          <span className="sticky right-0 shrink-0 self-center bg-gray-50 px-2 text-xs font-semibold text-gray-500">
-            More ›
-          </span>
-        )}
-      </div>
-
-      <div className="mt-4 divide-y divide-gray-200 rounded-2xl border border-gray-200 bg-white">
-        {filteredDishes.map((dish) => {
+    <section className="guest-menu-section guest-simple-menu">
+      <CategoryPicker categories={categories} activeCategory={activeCategory} setActiveCategory={setActiveCategory} />
+      <div className="guest-simple-list">
+        {filtered.map((dish) => {
           const quantity = getCartQuantity(dish._id);
-          const isVeg = dish.foodType === "veg";
+          const foodType = String(dish.foodType || "").toLowerCase().replace(/[\s_-]/g, "");
+          const isNonVeg = ["nonveg", "nonvegetarian"].includes(foodType);
+          const knownType = isNonVeg || ["veg", "vegetarian"].includes(foodType);
           const { basePrice, finalPrice, hasDiscount } = getDishPricing(dish);
-
-          return (
-            <button
-              key={dish._id}
-              type="button"
-              disabled={!orderingEnabled}
-              onClick={() => addToCart(dish)}
-              className="flex w-full items-center gap-3 px-4 py-4 text-left first:rounded-t-2xl last:rounded-b-2xl hover:bg-gray-50 disabled:cursor-default"
-            >
-              <span
-                aria-label={isVeg ? "Vegetarian" : "Non-vegetarian"}
-                className={`h-3 w-3 shrink-0 rounded-full ${
-                  isVeg ? "bg-green-600" : "bg-red-600"
-                }`}
-              />
-
-              <span className="min-w-0 flex-1">
-                <span className="block truncate font-semibold text-gray-900">
-                  {dish.name}
-                </span>
-                {dish.prepTime && (
-                  <span className="mt-1 block text-xs text-gray-400">
-                    {dish.prepTime} min
-                  </span>
-                )}
-                {isVeg && dish.containsEgg && (
-                  <span className="mt-1 block text-[11px] font-semibold text-amber-600">
-                    Contains egg
-                  </span>
-                )}
-                {dish.spiceLevel && (
-                  <span className="mt-1 block text-[11px] font-semibold text-red-500">
-                    {dish.spiceLevel === "mild" && "🌶️"}
-                    {dish.spiceLevel === "medium" && "🌶️🌶️"}
-                    {dish.spiceLevel === "hot" && "🌶️🌶️🌶️"}
-                  </span>
-                )}
-              </span>
-
-              <span className="shrink-0 font-semibold text-gray-900">
-                {hasDiscount && (
-                  <span className="mr-1 text-xs text-gray-400 line-through">
-                    ₹{basePrice.toFixed(0)}
-                  </span>
-                )}
-                <span className={hasDiscount ? "text-green-600" : ""}>
-                  ₹{finalPrice.toFixed(0)}
-                </span>
-              </span>
-
-              {orderingEnabled && quantity > 0 && (
-                <span className="min-w-7 rounded-full bg-orange-100 px-2 py-1 text-center text-xs font-bold text-orange-700">
-                  {quantity}
-                </span>
-              )}
+          return <div className="guest-simple-row" key={dish._id}>
+            <button type="button" disabled={!orderingEnabled} className="guest-simple-row__main" onClick={() => orderingEnabled && addToCart(dish)} aria-label={orderingEnabled ? `Add ${dish.name}` : dish.name}>
+              <span className={`food-mark ${isNonVeg ? "is-nonveg" : knownType ? "is-veg" : "is-unknown"}`} aria-label={isNonVeg ? "Non-vegetarian" : knownType ? "Vegetarian" : "Dietary type not specified"} />
+              <span className="guest-simple-row__name"><strong>{dish.name}</strong><small>{dish.containsEgg && !isNonVeg ? "Contains egg · " : ""}{dish.spiceLevel ? `${dish.spiceLevel} spice` : dish.prepTime ? `${dish.prepTime} min` : ""}</small></span>
+              <span className="guest-menu-price">{hasDiscount && <del>₹{basePrice.toFixed(0)}</del>}<b>₹{finalPrice.toFixed(0)}</b></span>
+              {orderingEnabled && !quantity && <span className="guest-add-label">Add</span>}
             </button>
-          );
+            {orderingEnabled && quantity > 0 && <div className="guest-qty"><button type="button" aria-label={`Remove one ${dish.name}`} onClick={() => decreaseQuantity(dish._id)}><FiMinus /></button><b>{quantity}</b><button type="button" aria-label={`Add one ${dish.name}`} onClick={() => increaseQuantity(dish._id)}><FiPlus /></button></div>}
+          </div>;
         })}
-
-        {filteredDishes.length === 0 && (
-          <p className="px-4 py-8 text-center text-sm text-gray-500">
-            No dishes available
-          </p>
-        )}
+        {!filtered.length && <p className="ops-empty-row">No dishes available</p>}
       </div>
     </section>
   );

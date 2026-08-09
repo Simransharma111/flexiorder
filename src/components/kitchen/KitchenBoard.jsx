@@ -1,574 +1,129 @@
-import { useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import OperationalOrderCard from "../orders/OperationalOrderCard";
+import { groupOrdersByLocation, nextOrderStatus } from "../../utils/orderModel";
+import useDialogFocus from "../../hooks/useDialogFocus";
+
+const LANE_META = [
+  { key: "new", title: "🔥 NEW", empty: "No new orders" },
+  { key: "preparing", title: "🔵 PREPARING", empty: "Nothing preparing" },
+  { key: "ready", title: "🟢 READY", empty: "Nothing ready" },
+];
 
 export default function KitchenBoard({
-
   newOrders = [],
   preparingOrders = [],
   readyOrders = [],
   pausedOrders = [],
-
   updateStatus,
-  getLocation,
-  getWaitingMinutes,
-
+  surface = "kitchen",
 }) {
+  const [actionGroup, setActionGroup] = useState(null);
+  const [reason, setReason] = useState("");
+  const sheetRef = useRef(null);
 
+  const lanes = useMemo(() => ({
+    new: groupOrdersByLocation(newOrders),
+    preparing: groupOrdersByLocation(preparingOrders),
+    ready: groupOrdersByLocation(readyOrders),
+  }), [newOrders, preparingOrders, readyOrders]);
 
-const [pauseOrder,setPauseOrder] = useState(null);
-const [reason,setReason] = useState("");
-const pressTimer = useRef(null);
-const longPressTriggered = useRef(false);
-const boardRef = useRef(null);
-const [activeColumn,setActiveColumn] = useState(0);
+  const updateGroup = async (orders, status, pauseReason = null) => {
+    for (const order of orders) {
+      await updateStatus(order._id, status, pauseReason);
+    }
+  };
 
-const handleBoardScroll=(event)=>{
-  const width=event.currentTarget.clientWidth || 1;
-  setActiveColumn(Math.round(event.currentTarget.scrollLeft / width));
-};
+  const primaryAction = async (_lead, orders) => {
+    for (const order of orders) {
+      if (order.pendingSync) continue;
+      const next = nextOrderStatus(order.status, surface);
+      if (next) await updateStatus(order._id, next, null);
+    }
+  };
 
+  const closeActions = useCallback(() => {
+    setActionGroup(null);
+    setReason("");
+  }, []);
 
+  const runAction = async (status) => {
+    if (!actionGroup || actionGroup.orders.some((order) => order.pendingSync)) return;
+    await updateGroup(actionGroup.orders, status, reason.trim() || null);
+    closeActions();
+  };
 
-const handlePause = ()=>{
-if(!pauseOrder) return;
+  useDialogFocus(Boolean(actionGroup), sheetRef, closeActions);
 
-updateStatus(
-pauseOrder._id,
-"paused",
-reason.trim() || null
-);
+  useEffect(() => {
+    if (!actionGroup) return;
+    const currentOrders = [...newOrders, ...preparingOrders, ...readyOrders, ...pausedOrders];
+    const isCurrent = actionGroup.orders.every((selected) => currentOrders.some(
+      (order) => order._id === selected._id && order.status === selected.status
+    ));
+    if (!isCurrent) closeActions();
+  }, [actionGroup, closeActions, newOrders, pausedOrders, preparingOrders, readyOrders]);
 
-setPauseOrder(null);
-setReason("");
+  return (
+    <section className={`ops-board ops-board--${surface}`} aria-label={`${surface} active orders`}>
+      {LANE_META.map((lane) => (
+        <section className={`ops-lane ops-lane--${lane.key}`} key={lane.key}>
+          <header className="ops-lane__head">
+            <h2>{lane.title}</h2>
+            <span className={`ops-lane__count${lane.key === "new" && lanes.new.length ? " is-live" : ""}`}>
+              {lanes[lane.key].length}
+            </span>
+          </header>
+          <div className="ops-lane__cards">
+            {lanes[lane.key].map((group) => (
+              <OperationalOrderCard
+                key={group.key}
+                group={group}
+                surface={surface}
+                compact={lane.key !== "new"}
+                onPrimary={(lane.key === "ready" && surface === "kitchen") || group.orders.every((order) => order.status === "delivered") ? undefined : primaryAction}
+                onOptions={(_lead, orders) => setActionGroup({ ...group, orders })}
+              />
+            ))}
+            {!lanes[lane.key].length && <p className="ops-lane__empty">{lane.empty}</p>}
+          </div>
+        </section>
+      ))}
 
-};
+      {pausedOrders.length > 0 && (
+        <div className="ops-paused-groups" aria-label="Paused orders">
+          {groupOrdersByLocation(pausedOrders).map((group) => (
+            <button type="button" className="ops-paused-strip" key={group.key} onClick={() => setActionGroup(group)}>
+              {group.location} · {group.orders.length} paused · Review
+            </button>
+          ))}
+        </div>
+      )}
 
-const handleCancel = ()=>{
-  if(!pauseOrder) return;
-  updateStatus(
-    pauseOrder._id,
-    "cancelled",
-    reason.trim() || null
+      {actionGroup && (
+        <div className="ops-sheet-backdrop" role="presentation" onClick={closeActions}>
+          <section ref={sheetRef} tabIndex={-1} className="ops-action-sheet" role="dialog" aria-modal="true" aria-label={`Actions for ${actionGroup.location}`} onClick={(event) => event.stopPropagation()}>
+            <div>
+              <h2>{actionGroup.location}</h2>
+              <p>Choose an action for {actionGroup.orders.length > 1 ? "these orders" : "this order"}.</p>
+            </div>
+            {actionGroup.orders.some((order) => order.pendingSync) ? (
+              <p>This order is saved on this device. Actions unlock after it syncs.</p>
+            ) : <><textarea value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Reason or note (optional)" />
+            <div className="ops-action-sheet__actions">
+              {actionGroup.orders[0]?.status === "paused" ? (
+                <button type="button" onClick={() => runAction("preparing")}>Resume preparing</button>
+              ) : (
+                <button type="button" onClick={() => runAction("paused")}>Pause</button>
+              )}
+              {surface === "waiter" && actionGroup.orders[0]?.status !== "delivered" && (
+                <button type="button" onClick={() => runAction("delivered")}>Mark delivered</button>
+              )}
+              <button type="button" className="is-danger" onClick={() => runAction("cancelled")}>Cancel order</button>
+            </div></>}
+            <button type="button" className="ops-sheet-cancel" onClick={closeActions}>Close</button>
+          </section>
+        </div>
+      )}
+    </section>
   );
-  setPauseOrder(null);
-  setReason("");
-};
-
-
-
-
-
-const columns=[
-
-{
-title:"🔥 NEW",
-orders:newOrders,
-color:"text-red-400"
-},
-
-{
-title:"👨‍🍳 PREPARING",
-orders:preparingOrders,
-color:"text-yellow-400"
-},
-
-{
-title:"✅ READY",
-orders:readyOrders,
-color:"text-green-400"
-},
-
-{
-title:"⏸ PAUSED",
-orders:pausedOrders,
-color:"text-orange-400"
-}
-
-];
-
-
-
-
-
-const nextStatus=(status)=>{
-
-
-switch(status){
-
-case "pending":
-return "accepted";
-
-case "accepted":
-return "preparing";
-
-case "preparing":
-return "ready";
-
-case "ready":
-return "delivered";
-
-case "paused":
-return "preparing";
-
-default:
-return null;
-
-}
-
-};
-
-const startPress=(order)=>{
-  longPressTriggered.current=false;
-  clearTimeout(pressTimer.current);
-  pressTimer.current=setTimeout(()=>{
-    longPressTriggered.current=true;
-    setPauseOrder(order);
-  },550);
-};
-
-const endPress=()=>clearTimeout(pressTimer.current);
-
-const handleCardClick=(order)=>{
-  if(longPressTriggered.current){
-    longPressTriggered.current=false;
-    return;
-  }
-
-  const status=nextStatus(order.status);
-  if(status) updateStatus(order._id,status);
-};
-
-
-
-
-
-
-return (
-
-<div
-ref={boardRef}
-onScroll={handleBoardScroll}
-className="
-flex
-overflow-x-auto
-snap-x
-snap-mandatory
-lg:grid
-lg:grid-cols-2
-2xl:grid-cols-4
-gap-3
-bg-slate-950
-p-3
-min-h-screen
-text-white
-"
->
-
-
-
-{
-columns.map(col=>(
-
-
-<div
-key={col.title}
-className="
-bg-slate-900
-rounded-xl
-border
-border-slate-800
-overflow-hidden
-min-w-full
-snap-center
-lg:min-w-0
-"
->
-
-
-
-{/* HEADER */}
-
-<div
-className={`
-px-3
-py-2
-font-black
-text-lg
-border-b
-border-slate-800
-${col.color}
-`}
->
-
-{col.title}
-
-<span
-className="
-ml-2
-bg-slate-800
-text-white
-rounded-full
-px-2
-py-0.5
-text-xs
-"
->
-{col.orders.length}
-</span>
-
-</div>
-
-
-
-
-
-
-
-
-{/* LIST */}
-
-
-<div
-className="
-p-2
-space-y-2
-max-h-[calc(100vh-160px)]
-overflow-y-auto
-"
->
-
-
-{
-col.orders.length===0 ?
-
-
-<div
-className="
-text-center
-text-slate-500
-text-sm
-py-5
-"
->
-No orders
-</div>
-
-
-:
-
-
-col.orders.map(order=>{
-
-
-return (
-
-<div
-
-key={order._id}
-
-className="
-bg-slate-950
-border
-border-slate-800
-rounded-lg
-p-2
-cursor-pointer
-select-none
-active:scale-[0.99]
-"
-onClick={()=>handleCardClick(order)}
-role="button"
-tabIndex={0}
-aria-label={`${getLocation(order)}. ${order.items?.length || 0} items. Tap to advance status; long press for options.`}
-onKeyDown={(event)=>{
-  if(event.key==="Enter" || event.key===" "){
-    event.preventDefault();
-    handleCardClick(order);
-  }
-}}
-onPointerDown={()=>startPress(order)}
-onPointerUp={endPress}
-onPointerLeave={endPress}
-onContextMenu={(event)=>{
-  event.preventDefault();
-  setPauseOrder(order);
-}}
-title="Tap to advance · Long press for options"
->
-
-
-
-<div
-className="
-flex
-justify-between
-"
->
-
-
-<div>
-
-<p className="font-bold text-sm">
-
-{getLocation(order)}
-
-</p>
-
-<p className="text-[10px] text-slate-500">
-  Order #{order._id?.slice(-5) || "local"}
-</p>
-
-
-</div>
-
-
-
-<p
-
-className={
-
-getWaitingMinutes(order.createdAt)>15
-
-?
-
-"text-red-400 text-xs font-bold"
-
-:
-
-"text-green-400 text-xs"
-
-}
-
->
-
-⏱ {getWaitingMinutes(order.createdAt)}m
-
-</p>
-
-
-</div>
-
-
-
-
-
-
-
-
-<div
-className="
-mt-2
-"
->
-
-{
-order.items?.slice(0,2)
-.map((item,index)=>(
-
-
-<p
-key={index}
-className="
-text-xs
-text-slate-300
-truncate
-"
->
-
-{item.name} × {item.quantity}
-
-</p>
-
-
-))
-}
-
-
-{
-order.items?.length>2 &&
-
-<p className="text-[10px] text-slate-500">
-
-+{order.items.length-2} more
-
-</p>
-
-}
-
-</div>
-
-
-
-
-
-
-
-
-</div>
-
-)
-
-
-})
-
-}
-
-
-
-</div>
-
-
-
-</div>
-
-
-))
-
-}
-
-<div className="flex justify-center gap-1.5 bg-slate-950 pb-3 lg:hidden">
-  {columns.map((column,index)=>(
-    <span
-      key={column.title}
-      className={`h-1.5 rounded-full transition-all ${
-        index === activeColumn ? "w-5 bg-white" : "w-1.5 bg-slate-600"
-      }`}
-    />
-  ))}
-</div>
-
-
-
-
-
-
-
-
-
-{
-pauseOrder &&
-
-<div
-className="
-fixed
-inset-0
-bg-black/60
-flex
-items-center
-justify-center
-z-50
-"
->
-
-
-<div
-className="
-bg-white
-text-black
-rounded-xl
-p-5
-w-80
-"
->
-
-
-<h2 className="font-bold">
-Order actions
-</h2>
-
-
-<textarea
-
-className="
-border
-rounded-lg
-w-full
-mt-3
-p-2
-"
-
-placeholder="Reason (optional)"
-
-value={reason}
-
-onChange={
-e=>setReason(e.target.value)
-}
-
-/>
-
-
-
-<div
-className="
-flex
-gap-2
-mt-3
-"
->
-
-
-<button
-
-onClick={()=>{
-setPauseOrder(null);
-setReason("");
-}}
-
-className="
-flex-1
-bg-gray-200
-rounded-lg
-py-2
-"
->
-Close
-</button>
-
-
-
-<button
-
-onClick={handlePause}
-
-className="
-flex-1
-bg-orange-500
-text-white
-rounded-lg
-py-2
-"
->
-Pause
-</button>
-
-<button
-onClick={handleCancel}
-className="
-flex-1
-bg-red-500
-text-white
-rounded-lg
-py-2
-"
->
-Cancel order
-</button>
-
-
-</div>
-
-
-</div>
-
-
-</div>
-
-}
-
-
-</div>
-
-);
-
-
 }

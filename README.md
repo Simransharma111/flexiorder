@@ -46,6 +46,30 @@ npm run build
 
 Run the full client gate with `npm run check`.
 
+For release-level local verification, run `npm run test:ci`. It executes linting,
+unit tests, a production build, and the complete Playwright suite while failing
+on flaky tests. `npm run audit:ci` checks the dependency tree for high or
+critical vulnerabilities.
+
+## Continuous integration
+
+GitHub Actions runs the quality pipeline on pull requests and pushes to `main`.
+It includes:
+
+- lint, unit tests, production build, and dependency audit
+- Playwright tests split across two parallel shards
+- ten-repeat burn-in on pull requests and every Sunday
+- JUnit output and failure traces, screenshots, and videos
+- a merged HTML report retained as a workflow artifact
+
+GitHub's normal Actions notifications report failures; no repository secrets are
+required. After the first successful run, protect `main` and require the
+`Lint, Unit Tests & Build` and both `E2E Tests` checks before merging.
+
+See [docs/ci.md](docs/ci.md) for operation and troubleshooting details and
+[docs/ci-secrets-checklist.md](docs/ci-secrets-checklist.md) for the secrets
+policy.
+
 ## Offline behavior
 
 The application caches the last successfully loaded menu, table, staff-order and kitchen-order data. Staff caches and queues are scoped to the signed-in account. Waiter-created orders receive a `clientOrderId`; kitchen mutations receive a `clientMutationId`, and both IDs are sent during replay. Pending work retries automatically when connectivity returns, remains visible until accepted by the API, and stops automatic retries after repeated or terminal failures so staff can retry it deliberately.

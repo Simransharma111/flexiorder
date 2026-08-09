@@ -1,12 +1,16 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  getKitchenUpdatesEligibleForHandled,
   getPendingKitchenUpdates,
+  markKitchenUpdatesHandled,
   queueKitchenUpdate,
   reconcileKitchenUpdateSync,
   recordKitchenUpdateFailure,
 } from "./offlineKitchenUpdates";
 import {
   getPendingStaffOrders,
+  getStaffOrdersEligibleForHandled,
+  markStaffOrdersHandled,
   queueStaffOrder,
   reconcileStaffOrderSync,
   recordStaffOrderFailure,
@@ -25,6 +29,10 @@ const createStorage = () => {
 describe("offline queues", () => {
   beforeEach(() => {
     vi.stubGlobal("localStorage", createStorage());
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
   });
 
   it("assigns an id and retry metadata to offline staff orders", () => {
@@ -85,5 +93,33 @@ describe("offline queues", () => {
       JSON.stringify({ invalid: true })
     );
     expect(getPendingStaffOrders()).toEqual([]);
+  });
+
+  it("batch-clears only ambiguous work marked as already handled", () => {
+    const staff = queueStaffOrder({ tableId: "table-1", items: [] });
+    const staffFailure = recordStaffOrderFailure({ ...staff, attemptCount: 7 }, new Error("connection lost"));
+    reconcileStaffOrderSync([staff], [staffFailure]);
+    expect(markStaffOrdersHandled()).toEqual([expect.objectContaining({ alreadyHandled: true, requiresAttention: false })]);
+
+    queueKitchenUpdate({ orderId: "order-1", status: "ready" });
+    const kitchen = getPendingKitchenUpdates()[0];
+    const kitchenFailure = recordKitchenUpdateFailure({ ...kitchen, attemptCount: 7 }, new Error("connection lost"));
+    reconcileKitchenUpdateSync([kitchen], [kitchenFailure]);
+    expect(markKitchenUpdatesHandled()).toEqual([expect.objectContaining({ alreadyHandled: true, requiresAttention: false, status: "delivered" })]);
+  });
+
+  it("does not mark rejected mutations as already handled", () => {
+    const staff = queueStaffOrder({ tableId: "table-1", items: [] });
+    const rejectedStaff = recordStaffOrderFailure(staff, { response: { status: 400 } });
+    reconcileStaffOrderSync([staff], [rejectedStaff]);
+    expect(getStaffOrdersEligibleForHandled()).toHaveLength(0);
+    expect(markStaffOrdersHandled()[0].requiresAttention).toBe(true);
+
+    queueKitchenUpdate({ orderId: "order-1", status: "ready" });
+    const kitchen = getPendingKitchenUpdates()[0];
+    const rejectedKitchen = recordKitchenUpdateFailure(kitchen, { response: { status: 409 } });
+    reconcileKitchenUpdateSync([kitchen], [rejectedKitchen]);
+    expect(getKitchenUpdatesEligibleForHandled()).toHaveLength(0);
+    expect(markKitchenUpdatesHandled()[0]).toMatchObject({ status: "ready", requiresAttention: true });
   });
 });

@@ -319,18 +319,6 @@ hotel?.theme?.primary ||
 activeTheme.primary;
 
 
-const resolvedSecondary =
-hotel?.theme?.secondary ||
-activeTheme.secondary;
-
-
-const resolvedText =
-hotel?.theme?.text ||
-activeTheme.text;
-
-
-
-
 if(!hotel){
 
 return (
@@ -359,23 +347,7 @@ Loading...
 return(
 
 
-<div
-
-className="
-min-h-screen
-p-5
-md:p-10
-"
-
-style={{
-
-background: resolvedSecondary,
-
-color: resolvedText
-
-}}
-
->
+<div className="owner-settings-compact">
 
 
 
@@ -409,7 +381,7 @@ coverPreview ||
 
 className="
 w-full
-h-72
+h-32 md:h-40
 object-cover
 rounded-3xl
 border border-white/20
@@ -511,8 +483,8 @@ logoPreview ||
 
 
 className="
-w-36
-h-36
+w-20
+h-20
 rounded-full
 border-4
 border-white
@@ -582,7 +554,7 @@ URL.createObjectURL(file)
 
 
 <h1 className="
-text-3xl
+text-xl
 font-bold
 mt-5
 ">

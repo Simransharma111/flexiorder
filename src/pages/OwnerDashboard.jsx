@@ -35,6 +35,8 @@ import QRInventory from "./QRInventoryPage";
 import OwnerHotelSettings from "./OwnerHotelSettings";
 
 import HOTEL_THEMES from "../constants/hotelThemes";
+import { mergeOrders, reconcileAuthoritativeOrders } from "../utils/orderModel";
+import { getPendingKitchenUpdates } from "../utils/offlineKitchenUpdates";
 import { clearAuthSession } from "../utils/session";
 
 
@@ -43,7 +45,7 @@ const NAV_ITEMS = [
 
 {
 key:"home",
-label:"Dashboard",
+label:"Today",
 icon:FiBarChart2
 },
 
@@ -60,14 +62,14 @@ icon:FiPackage
 },
 
 {
+key:"settings",
+label:"Settings",
+icon:FiSettings
+},
+{
 key:"staff",
 label:"Staff",
 icon:FiUsers
-},
-{
-key:"staffOrder",
-label:"Staff Order",
-icon:FiShoppingBag
 },
 
 {
@@ -89,9 +91,9 @@ icon:FiBox
 },
 
 {
-key:"settings",
-label:"Settings",
-icon:FiSettings
+key:"staffOrder",
+label:"Take Order",
+icon:FiShoppingBag
 }
 
 ];
@@ -137,7 +139,7 @@ const res=await api.get(
 );
 
 setHotel(
-res.data.hotel
+res.data?.hotel || res.data
 );
 
 
@@ -173,8 +175,8 @@ setLoadingOrders(true);
 const res = await api.get("/kitchen/orders?type=kitchen");
 
 
-setOrders(
-res.data.orders || []
+setOrders((previous) =>
+reconcileAuthoritativeOrders(previous, res.data?.orders || res.data || [], getPendingKitchenUpdates())
 );
 
 
@@ -236,10 +238,7 @@ hotel._id
 const newOrderHandler=(order)=>{
 
 
-setOrders(prev=>[
-order,
-...prev
-]);
+setOrders((previous) => mergeOrders(previous, [order]));
 
 
 setNewOrderCount(
@@ -327,20 +326,9 @@ theme.primary;
 
 
 
-const secondaryColor =
-hotel?.theme?.secondary ||
-theme.secondary;
-
-
-
 const accentColor =
 hotel?.theme?.accent ||
 theme.accent;
-
-
-
-const themeText =
-theme.text || "#fff";
 
 
 
@@ -458,16 +446,7 @@ fetchOrders();
 
 return (
 
-<div
-
-className="min-h-screen"
-
-style={{
-background:secondaryColor,
-color:themeText
-}}
-
->
+<div className="owner-shell">
 
 
 {/* MOBILE SIDEBAR */}
@@ -477,12 +456,7 @@ sidebarOpen &&
 
 <div
 
-className="
-fixed inset-0
-z-50
-bg-black/50
-md:hidden
-"
+className="owner-mobile-drawer"
 
 onClick={()=>
 setSidebarOpen(false)
@@ -492,14 +466,7 @@ setSidebarOpen(false)
 
 <div
 
-className="
-w-[270px]
-h-full
-"
-
-style={{
-background:secondaryColor
-}}
+className="owner-mobile-drawer__panel"
 
 onClick={
 e=>e.stopPropagation()
@@ -543,12 +510,7 @@ stats={stats}
 
 <aside
 
-className="
-hidden md:block
-fixed
-h-screen
-w-[250px]
-"
+className="owner-desktop-rail"
 
 >
 
@@ -580,10 +542,7 @@ stats={stats}
 
 <div
 
-className="
-w-full
-md:ml-[250px]
-"
+className="owner-main"
 
 >
 
@@ -593,6 +552,8 @@ md:ml-[250px]
 hotel={hotel}
 
 activeTab={activeTab}
+
+navItems={NAV_ITEMS}
 
 newOrderCount={newOrderCount}
 
@@ -613,10 +574,7 @@ loading={loadingOrders}
 
 <main
 
-className="
-p-4
-md:p-6
-"
+className="owner-content"
 
 >
 
@@ -650,6 +608,8 @@ activeTab==="orders" &&
 orders={orders}
 
 refresh={fetchOrders}
+
+onOrdersChange={setOrders}
 
 loading={loadingOrders}
 

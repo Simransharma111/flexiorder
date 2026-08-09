@@ -28,6 +28,8 @@ import {
   FiChevronRight,
 } from "react-icons/fi";
 
+const enabledFlag = (value) => value === true || value === 1 ||
+  String(value || "").toLowerCase() === "true";
 
 export default function GuestMenuPage(){
 
@@ -79,6 +81,8 @@ window.removeEventListener("offline",handleOffline);
 const [search,setSearch]=useState("");
 
 const [foodFilter,setFoodFilter]=useState("all");
+
+const [hideEggDishes,setHideEggDishes]=useState(false);
 
 const [activeCategory,setActiveCategory]=useState("All");
 
@@ -444,6 +448,11 @@ const foodMatch =
 foodFilter==="all" ||
 dish.foodType===foodFilter;
 
+const eggMatch =
+foodFilter !== "veg" ||
+!hideEggDishes ||
+!dish.containsEgg;
+
 
 
 const searchMatch =
@@ -473,6 +482,7 @@ String(tag)
 return (
 categoryMatch &&
 foodMatch &&
+eggMatch &&
 searchMatch
 );
 
@@ -485,6 +495,7 @@ searchMatch
 dishes,
 search,
 foodFilter,
+hideEggDishes,
 activeCategory
 ]);
 
@@ -846,6 +857,12 @@ Number(item.quantity || 0)
 0
 );
 
+const rawGstRate = Number(hotel?.gstPercentage ?? hotel?.gstRate ?? hotel?.gst?.percentage ?? 0);
+const gstRate = Number.isFinite(rawGstRate) && rawGstRate > 0 ? rawGstRate : 0;
+const gstEnabled = enabledFlag(hotel?.gstEnabled ?? hotel?.enableGST ?? hotel?.gst?.enabled) && gstRate > 0;
+const cartFinalTotal = cartTotal + (gstEnabled ? cartTotal * gstRate / 100 : 0);
+const vegOnly = Boolean(hotel?.vegOnly || hotel?.restaurantType === "veg" || hotel?.foodType === "veg");
+
 
 
 
@@ -1069,6 +1086,8 @@ orders={activeOrders}
 
 loading={orderLoading}
 
+table={table}
+
 />
 
 {!orderingEnabled && (
@@ -1101,154 +1120,11 @@ loading={orderLoading}
 {/* QUICK ACTIONS */}
 
 
-{orderingEnabled && <section className="
-max-w-6xl 
-mx-auto 
-px-4 
-mt-5
-">
-
-
-<div className="
-grid 
-grid-cols-2 
-gap-3
-">
-
-
-<button
-
-onClick={openSchedule}
-
-className="
-bg-white 
-border 
-border-gray-200 
-rounded-xl 
-p-4 
-flex 
-items-center 
-gap-3 
-text-left
-"
-
->
-
-
-<div className="
-w-10 
-h-10 
-rounded-lg 
-bg-orange-50 
-text-orange-600 
-flex 
-items-center 
-justify-center
-">
-
-<FiCalendar/>
-
-</div>
-
-
-<div>
-
-<p className="
-font-bold 
-text-sm
-">
-
-Schedule
-
-</p>
-
-
-<p className="
-text-xs 
-text-gray-500
-">
-
-Order later
-
-</p>
-
-
-</div>
-
-
-</button>
-
-
-
-
-<button
-
-onClick={openCart}
-
-className="
-bg-white 
-border 
-border-gray-200 
-rounded-xl 
-p-4 
-flex 
-items-center 
-gap-3 
-text-left
-"
-
->
-
-
-<div className="
-w-10 
-h-10 
-rounded-lg 
-bg-orange-50 
-text-orange-600 
-flex 
-items-center 
-justify-center
-">
-
-<FiShoppingBag/>
-
-</div>
-
-
-<div>
-
-<p className="
-font-bold 
-text-sm
-">
-
-Cart
-
-</p>
-
-
-<p className="
-text-xs 
-text-gray-500
-">
-
-{cartCount} items
-
-</p>
-
-
-</div>
-
-
-</button>
-
-
-
-</div>
-
-
-</section>}
+{orderingEnabled && (
+  <div className="guest-secondary-actions">
+    <button type="button" onClick={openSchedule}><FiCalendar /> Schedule order</button>
+  </div>
+)}
 
 
 
@@ -1319,90 +1195,16 @@ outline-none
 {/* FOOD FILTER */}
 
 
-<section className="
-max-w-6xl 
-mx-auto 
-px-4 
-mt-4
-">
-
-
-<div className="
-flex 
-gap-2 
-overflow-x-auto
-">
-
-
-{
-
-[
-{
-id:"all",
-label:"All"
-},
-
-{
-id:"veg",
-label:"🟢 Veg"
-},
-
-{
-id:"nonveg",
-label:"🔴 Non Veg"
-}
-
-].map(
-(item)=>(
-
-
-<button
-
-key={item.id}
-
-onClick={()=>
-setFoodFilter(item.id)
-}
-
-className={`
-px-4
-py-2
-rounded-full
-text-sm
-font-semibold
-whitespace-nowrap
-${
-foodFilter===item.id
-
-?
-
-"bg-orange-500 text-white"
-
-:
-
-"bg-white border text-gray-600"
-
-}
-`}
-
->
-
-{item.label}
-
-</button>
-
-
-)
-
-)
-
-}
-
-
-</div>
-
-
-</section>
+{!vegOnly && (
+  <section className="guest-food-filters" aria-label="Dietary filters">
+    <div>
+      {[{ id: "all", label: "All" }, { id: "veg", label: "Veg" }, { id: "nonveg", label: "Non-Veg" }].map((item) => (
+        <button type="button" key={item.id} onClick={() => { setFoodFilter(item.id); if (item.id !== "veg") setHideEggDishes(false); }} className={foodFilter === item.id ? "is-active" : ""}>{item.label}</button>
+      ))}
+    </div>
+    {foodFilter === "veg" && <label><input type="checkbox" checked={hideEggDishes} onChange={(event) => setHideEggDishes(event.target.checked)} /> Hide egg dishes</label>}
+  </section>
+)}
 
 
 
@@ -1564,6 +1366,10 @@ getCartQuantity={getCartQuantity}
 
 addToCart={addToCart}
 
+decreaseQuantity={decreaseQuantity}
+
+increaseQuantity={increaseQuantity}
+
 orderingEnabled={orderingEnabled}
 
 />
@@ -1664,7 +1470,7 @@ text-xs
 
 <p>
 
-₹{cartTotal.toFixed(2)}
+₹{cartFinalTotal.toFixed(2)}
 
 </p>
 
