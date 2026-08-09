@@ -5,39 +5,41 @@ import {
   FaTrash,
   FaPlus,
   FaUser,
+  FaEnvelope,
+  FaPhone,
+  FaMapMarkerAlt,
+  FaPowerOff,
 } from "react-icons/fa";
 
 import api from "../api/axios";
 import { useNavigate } from "react-router-dom";
 
 export default function SuperAdminDashboard() {
+
   const navigate = useNavigate();
 
-  // STATES
-  // =========================
+  const [hotels, setHotels] = useState([]);
 
-  const [hotels, setHotels] =
-    useState([]);
+  const [loading, setLoading] = useState(false);
 
-  const [loading, setLoading] =
-    useState(false);
+  const [actionLoading, setActionLoading] =
+    useState(null);
 
   const [showModal, setShowModal] =
     useState(false);
 
-  const [formData, setFormData] =
-    useState({
-      hotelName: "",
-      address: "",
-      phone: "",
-      ownerName: "",
-      ownerEmail: "",
-      ownerPassword: "",
-    });
+  const [formData, setFormData] = useState({
+    hotelName: "",
+    address: "",
+    phone: "",
+    ownerName: "",
+    ownerEmail: "",
+    ownerPassword: "",
+  });
 
-  // =========================
+  // =====================================================
   // FETCH HOTELS
-  // =========================
+  // =====================================================
 
   useEffect(() => {
     fetchHotels();
@@ -47,78 +49,71 @@ export default function SuperAdminDashboard() {
 
     try {
 
-      const token =
-        localStorage.getItem("token");
-
       const res = await api.get(
-        "/admin/hotels",
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
+        "/admin/hotels"
       );
 
-      setHotels(res.data);
+      setHotels(
+        Array.isArray(res.data)
+          ? res.data
+          : []
+      );
 
     } catch (err) {
 
-      console.log(err);
-
-      alert(
-        err.response?.data ||
-          "Failed to fetch hotels"
+      console.log(
+        "FETCH HOTELS ERROR:",
+        err
       );
 
+      alert(
+        err.response?.data?.message ||
+        "Failed to fetch hotels"
+      );
     }
   };
 
-  // =========================
+  // =====================================================
   // CREATE HOTEL
-  // =========================
+  // =====================================================
 
   const createHotel = async () => {
+
+    if (
+      !formData.hotelName.trim() ||
+      !formData.ownerName.trim() ||
+      !formData.ownerEmail.trim() ||
+      !formData.ownerPassword.trim()
+    ) {
+
+      alert(
+        "Please fill all required fields"
+      );
+
+      return;
+    }
 
     try {
 
       setLoading(true);
 
-      const token =
-        localStorage.getItem("token");
-
-      const payload = {
-        hotelName:
-          formData.hotelName,
-        address:
-          formData.address,
-        phone:
-          formData.phone,
-        ownerName:
-          formData.ownerName,
-        ownerEmail:
-          formData.ownerEmail,
-        ownerPassword:
-          formData.ownerPassword,
-      };
-
       const res = await api.post(
         "/admin/create-hotel",
-        payload,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
+        formData
       );
 
-      // ADD NEW HOTEL TO UI
+      if (res.data?.hotel) {
 
-      setHotels((prev) => [
-        res.data.hotel,
-        ...prev,
-      ]);
+        setHotels((prev) => [
+          res.data.hotel,
+          ...prev,
+        ]);
 
-      // RESET FORM
+      } else {
+
+        await fetchHotels();
+
+      }
 
       setFormData({
         hotelName: "",
@@ -137,47 +132,154 @@ export default function SuperAdminDashboard() {
 
     } catch (err) {
 
-      console.log(err);
+      console.log(
+        "CREATE HOTEL ERROR:",
+        err
+      );
 
       alert(
-        err.response?.data ||
-          "Failed to create hotel"
+        err.response?.data?.message ||
+        "Failed to create hotel"
       );
 
     } finally {
 
       setLoading(false);
-
     }
   };
 
-  // =========================
-  // DELETE HOTEL
-  // =========================
+  // =====================================================
+  // ACTIVATE
+  // =====================================================
 
-  const deleteHotel = async (
-    id
-  ) => {
-
-    const confirmDelete =
-      window.confirm(
-        "Delete this hotel?"
-      );
-
-    if (!confirmDelete) return;
+  const activateHotel = async (id) => {
 
     try {
 
-      const token =
-        localStorage.getItem("token");
+      setActionLoading(id);
+
+      const res = await api.put(
+        `/admin/hotels/${id}/activate`
+      );
+
+      const updatedHotel =
+        res.data?.hotel;
+
+      if (updatedHotel) {
+
+        setHotels((prev) =>
+          prev.map((hotel) =>
+            hotel._id === id
+              ? updatedHotel
+              : hotel
+          )
+        );
+
+      } else {
+
+        await fetchHotels();
+
+      }
+
+    } catch (err) {
+
+      console.log(
+        "ACTIVATE ERROR:",
+        err
+      );
+
+      alert(
+        err.response?.data?.message ||
+        "Failed to activate hotel"
+      );
+
+    } finally {
+
+      setActionLoading(null);
+    }
+  };
+
+  // =====================================================
+  // DEACTIVATE
+  // =====================================================
+
+  const deactivateHotel = async (id) => {
+
+    const confirmDeactivate =
+      window.confirm(
+        "Deactivate this hotel? The owner will also lose access."
+      );
+
+    if (!confirmDeactivate) {
+      return;
+    }
+
+    try {
+
+      setActionLoading(id);
+
+      const res = await api.put(
+        `/admin/hotels/${id}/deactivate`
+      );
+
+      const updatedHotel =
+        res.data?.hotel;
+
+      if (updatedHotel) {
+
+        setHotels((prev) =>
+          prev.map((hotel) =>
+            hotel._id === id
+              ? updatedHotel
+              : hotel
+          )
+        );
+
+      } else {
+
+        await fetchHotels();
+
+      }
+
+    } catch (err) {
+
+      console.log(
+        "DEACTIVATE ERROR:",
+        err
+      );
+
+      alert(
+        err.response?.data?.message ||
+        "Failed to deactivate hotel"
+      );
+
+    } finally {
+
+      setActionLoading(null);
+    }
+  };
+
+  // =====================================================
+  // DELETE
+  // =====================================================
+
+  const deleteHotel = async (id) => {
+
+    const confirmDelete =
+      window.confirm(
+        "PERMANENTLY DELETE this hotel and its owner? This cannot be undone."
+      );
+
+    if (!confirmDelete) {
+      return;
+    }
+
+    try {
+
+      setActionLoading(id);
 
       await api.delete(
-        `/admin/hotels/${id}`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
+        `/admin/hotels/${id}`
       );
 
       setHotels((prev) =>
@@ -193,44 +295,80 @@ export default function SuperAdminDashboard() {
 
     } catch (err) {
 
-      console.log(err);
-
-      alert(
-        err.response?.data ||
-          "Failed to delete hotel"
+      console.log(
+        "DELETE ERROR:",
+        err
       );
 
+      alert(
+        err.response?.data?.message ||
+        "Failed to delete hotel"
+      );
+
+    } finally {
+
+      setActionLoading(null);
     }
   };
+
+  // =====================================================
+  // LOGOUT
+  // =====================================================
+
   const handleLogout = () => {
 
-  const confirmLogout =
-    window.confirm(
-      "Do you want to logout?"
-    );
+    const confirmLogout =
+      window.confirm(
+        "Do you want to logout?"
+      );
 
-  if (!confirmLogout) return;
+    if (!confirmLogout) {
+      return;
+    }
 
-  localStorage.removeItem("token");
+    localStorage.removeItem("token");
+    localStorage.removeItem("user");
+    localStorage.removeItem("role");
 
-  localStorage.removeItem("user");
+    navigate("/");
+  };
 
-  localStorage.removeItem("role");
+  // =====================================================
+  // STATS
+  // =====================================================
 
-  navigate("/");
-};
+  const totalHotels =
+    hotels.length;
+
+  const activeHotels =
+    hotels.filter(
+      (hotel) =>
+        hotel.isActive !== false
+    ).length;
+
+  const inactiveHotels =
+    hotels.filter(
+      (hotel) =>
+        hotel.isActive === false
+    ).length;
+
+  // =====================================================
+  // UI
+  // =====================================================
 
   return (
 
-    <div className="min-h-screen bg-[#0F172A] text-white p-6">
+    <div className="min-h-screen bg-[#0F172A] text-white p-4 md:p-6">
 
-      {/* HEADER */}
+      {/* =================================================
+          HEADER
+      ================================================= */}
 
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-5 mb-10">
+      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-5 mb-8">
 
         <div>
 
-          <h1 className="text-4xl font-bold">
+          <h1 className="text-3xl md:text-4xl font-bold">
             Super Admin Dashboard
           </h1>
 
@@ -242,301 +380,474 @@ export default function SuperAdminDashboard() {
 
         <div className="flex gap-3 flex-wrap">
 
-  <button
-    onClick={() =>
-      setShowModal(true)
-    }
-    className="bg-orange-500 hover:bg-orange-600 transition px-6 py-3 rounded-2xl font-semibold flex items-center gap-3"
-  >
-    <FaPlus />
+          <button
+            onClick={() =>
+              setShowModal(true)
+            }
+            className="bg-orange-500 hover:bg-orange-600 transition px-5 py-3 rounded-xl font-semibold flex items-center gap-2"
+          >
 
-    Create Hotel
-  </button>
+            <FaPlus />
 
-  <button
-    onClick={handleLogout}
-    className="bg-red-600 hover:bg-red-700 transition px-6 py-3 rounded-2xl font-semibold"
-  >
-    Logout
-  </button>
+            Create Hotel
 
-</div>
+          </button>
 
-      </div>
-
-      {/* STATS */}
-
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
-
-        <div className="bg-white/5 border border-white/10 rounded-3xl p-6">
-
-          <h2 className="text-gray-400 text-lg">
-            Total Hotels
-          </h2>
-
-          <h1 className="text-5xl font-bold mt-4">
-            {hotels.length}
-          </h1>
+          <button
+            onClick={handleLogout}
+            className="bg-red-600 hover:bg-red-700 transition px-5 py-3 rounded-xl font-semibold"
+          >
+            Logout
+          </button>
 
         </div>
 
       </div>
 
-      {/* HOTELS */}
+      {/* =================================================
+          STATS
+      ================================================= */}
 
-      <div className="bg-white/5 border border-white/10 rounded-3xl p-6">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
 
-        <h2 className="text-3xl font-bold mb-8">
-          Hotels
-        </h2>
+        <div className="bg-white/5 border border-white/10 rounded-2xl p-5">
 
-        {
-          hotels.length === 0 ? (
+          <p className="text-gray-400">
+            Total Hotels
+          </p>
 
-            <div className="text-center py-20 text-gray-400">
-              No hotels found
-            </div>
+          <h2 className="text-4xl font-bold mt-2">
+            {totalHotels}
+          </h2>
 
-          ) : (
+        </div>
 
-            <div className="space-y-5">
+        <div className="bg-green-500/10 border border-green-500/20 rounded-2xl p-5">
 
-              {
-                hotels.map((hotel) => (
+          <p className="text-green-400">
+            Active Hotels
+          </p>
 
-                  <div
-                    key={hotel._id}
-                    className="bg-white/5 border border-white/10 rounded-2xl p-5 flex flex-col xl:flex-row xl:items-center xl:justify-between gap-5"
-                  >
+          <h2 className="text-4xl font-bold mt-2 text-green-400">
+            {activeHotels}
+          </h2>
 
-                    {/* LEFT */}
+        </div>
 
-                    <div>
+        <div className="bg-red-500/10 border border-red-500/20 rounded-2xl p-5">
 
-                      <div className="flex items-center gap-3">
+          <p className="text-red-400">
+            Inactive Hotels
+          </p>
 
-                        <FaHotel className="text-orange-400 text-2xl" />
+          <h2 className="text-4xl font-bold mt-2 text-red-400">
+            {inactiveHotels}
+          </h2>
 
-                        <h2 className="text-2xl font-bold">
-                          {hotel.name}
-                        </h2>
+        </div>
+
+      </div>
+
+      {/* =================================================
+          HOTELS
+      ================================================= */}
+
+      <div className="bg-white/5 border border-white/10 rounded-2xl p-4 md:p-6">
+
+        <div className="flex items-center justify-between mb-6">
+
+          <div>
+
+            <h2 className="text-2xl md:text-3xl font-bold">
+              Hotels
+            </h2>
+
+            <p className="text-gray-400 mt-1">
+              Manage hotel accounts and access
+            </p>
+
+          </div>
+
+        </div>
+
+        {hotels.length === 0 ? (
+
+          <div className="text-center py-20 text-gray-400">
+
+            <FaHotel className="mx-auto text-5xl mb-4 opacity-40" />
+
+            No hotels found
+
+          </div>
+
+        ) : (
+
+          <div className="space-y-4">
+
+            {hotels.map((hotel) => {
+
+              const isActive =
+                hotel.isActive !== false;
+
+              const owner =
+                hotel.owner;
+
+              const isLoading =
+                actionLoading === hotel._id;
+
+              return (
+
+                <div
+                  key={hotel._id}
+                  className={`border rounded-2xl p-5 transition ${
+                    isActive
+                      ? "bg-white/5 border-white/10"
+                      : "bg-red-500/5 border-red-500/20"
+                  }`}
+                >
+
+                  {/* TOP */}
+
+                  <div className="flex flex-col xl:flex-row xl:items-start xl:justify-between gap-5">
+
+                    {/* HOTEL INFO */}
+
+                    <div className="flex-1">
+
+                      <div className="flex items-start gap-3">
+
+                        <div className="bg-orange-500/10 p-3 rounded-xl">
+
+                          <FaHotel className="text-orange-400 text-xl" />
+
+                        </div>
+
+                        <div>
+
+                          <h3 className="text-xl md:text-2xl font-bold">
+
+                            {hotel.name}
+
+                          </h3>
+
+                          <p className="text-xs text-gray-500 mt-1">
+
+                            ID: {hotel._id}
+
+                          </p>
+
+                        </div>
 
                       </div>
 
-                      <p className="text-gray-400 mt-3">
-                        {hotel.address}
-                      </p>
+                      {/* HOTEL DETAILS */}
 
-                      <p className="text-gray-400 mt-1">
-                        {hotel.phone}
-                      </p>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-5">
 
-                      {/* OWNER */}
+                        <div className="flex items-center gap-2 text-gray-300">
 
-                      {
-                        hotel.owner && (
-                          <div className="flex items-center gap-2 mt-3 text-gray-300">
+                          <FaMapMarkerAlt className="text-gray-500" />
 
-                            <FaUser />
+                          <span>
+                            {hotel.address || "No address"}
+                          </span>
 
-                            <span>
-                              {
-                                hotel.owner
-                                  ?.name
-                              }
-                            </span>
+                        </div>
+
+                        <div className="flex items-center gap-2 text-gray-300">
+
+                          <FaPhone className="text-gray-500" />
+
+                          <span>
+                            {hotel.phone || "No phone"}
+                          </span>
+
+                        </div>
+
+                      </div>
+
+                      {/* OWNER DETAILS */}
+
+                      {owner && (
+
+                        <div className="mt-5 bg-black/20 border border-white/5 rounded-xl p-4">
+
+                          <p className="text-xs uppercase tracking-wider text-gray-500 mb-3">
+                            Owner Details
+                          </p>
+
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+
+                            <div className="flex items-center gap-2">
+
+                              <FaUser className="text-orange-400" />
+
+                              <span>
+                                {owner.name || "No name"}
+                              </span>
+
+                            </div>
+
+                            <div className="flex items-center gap-2">
+
+                              <FaEnvelope className="text-orange-400" />
+
+                              <span className="break-all">
+                                {owner.email || "No email"}
+                              </span>
+
+                            </div>
 
                           </div>
-                        )
-                      }
+
+                        </div>
+
+                      )}
 
                     </div>
 
-                    {/* RIGHT */}
+                    {/* STATUS */}
 
-                    <div className="flex items-center gap-4">
+                    <div className="flex flex-col items-start xl:items-end gap-3">
 
                       <span
-                        className={`px-4 py-2 rounded-full text-sm ${
-                          hotel.isActive
+                        className={`px-4 py-2 rounded-full text-sm font-semibold ${
+                          isActive
                             ? "bg-green-500/20 text-green-400"
                             : "bg-red-500/20 text-red-400"
                         }`}
                       >
-                        {
-                          hotel.isActive
-                            ? "Active"
-                            : "Inactive"
-                        }
-                      </span>
 
-                      <button
-                        onClick={() =>
-                          deleteHotel(
-                            hotel._id
-                          )
-                        }
-                        className="bg-red-500 hover:bg-red-600 transition p-3 rounded-xl"
-                      >
-                        <FaTrash />
-                      </button>
+                        {isActive
+                          ? "● Active"
+                          : "● Inactive"}
+
+                      </span>
 
                     </div>
 
                   </div>
-                ))
-              }
 
-            </div>
+                  {/* ACTIONS */}
 
-          )
-        }
+                  <div className="flex flex-wrap gap-3 mt-5 pt-5 border-t border-white/10">
+
+                    {isActive ? (
+
+                      <button
+                        disabled={isLoading}
+                        onClick={() =>
+                          deactivateHotel(
+                            hotel._id
+                          )
+                        }
+                        className="bg-yellow-500/10 hover:bg-yellow-500/20 text-yellow-400 border border-yellow-500/20 px-4 py-2.5 rounded-xl font-semibold flex items-center gap-2 disabled:opacity-50"
+                      >
+
+                        <FaPowerOff />
+
+                        {isLoading
+                          ? "Please wait..."
+                          : "Deactivate"}
+
+                      </button>
+
+                    ) : (
+
+                      <button
+                        disabled={isLoading}
+                        onClick={() =>
+                          activateHotel(
+                            hotel._id
+                          )
+                        }
+                        className="bg-green-500/10 hover:bg-green-500/20 text-green-400 border border-green-500/20 px-4 py-2.5 rounded-xl font-semibold flex items-center gap-2 disabled:opacity-50"
+                      >
+
+                        <FaPowerOff />
+
+                        {isLoading
+                          ? "Please wait..."
+                          : "Activate"}
+
+                      </button>
+
+                    )}
+
+                    {/* DELETE */}
+
+                    <button
+                      disabled={isLoading}
+                      onClick={() =>
+                        deleteHotel(
+                          hotel._id
+                        )
+                      }
+                      className="bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 px-4 py-2.5 rounded-xl font-semibold flex items-center gap-2 disabled:opacity-50"
+                    >
+
+                      <FaTrash />
+
+                      Delete
+
+                    </button>
+
+                  </div>
+
+                </div>
+
+              );
+
+            })}
+
+          </div>
+
+        )}
 
       </div>
 
-      {/* MODAL */}
+      {/* =================================================
+          CREATE HOTEL MODAL
+      ================================================= */}
 
-      {
-        showModal && (
+      {showModal && (
 
-          <div className="fixed inset-0 bg-black/70 z-50 flex justify-center items-center p-4">
+        <div className="fixed inset-0 bg-black/70 z-50 flex justify-center items-center p-4 overflow-y-auto">
 
-            <div className="bg-[#111827] border border-white/10 rounded-3xl w-full max-w-xl p-6">
+          <div className="bg-[#111827] border border-white/10 rounded-3xl w-full max-w-xl p-6 my-8">
 
-              <h2 className="text-3xl font-bold mb-6">
-                Create Hotel
-              </h2>
+            <h2 className="text-2xl md:text-3xl font-bold mb-6">
+              Create Hotel
+            </h2>
 
-              {/* HOTEL NAME */}
+            {/* HOTEL NAME */}
 
-              <input
-                type="text"
-                placeholder="Hotel Name"
-                value={formData.hotelName}
-                onChange={(e) =>
-                  setFormData({
-                    ...formData,
-                    hotelName:
-                      e.target.value,
-                  })
+            <input
+              type="text"
+              placeholder="Hotel Name *"
+              value={formData.hotelName}
+              onChange={(e) =>
+                setFormData({
+                  ...formData,
+                  hotelName:
+                    e.target.value,
+                })
+              }
+              className="w-full mb-4 bg-white/10 border border-white/10 rounded-xl px-4 py-3 outline-none"
+            />
+
+            {/* ADDRESS */}
+
+            <input
+              type="text"
+              placeholder="Address"
+              value={formData.address}
+              onChange={(e) =>
+                setFormData({
+                  ...formData,
+                  address:
+                    e.target.value,
+                })
+              }
+              className="w-full mb-4 bg-white/10 border border-white/10 rounded-xl px-4 py-3 outline-none"
+            />
+
+            {/* PHONE */}
+
+            <input
+              type="text"
+              placeholder="Hotel Phone"
+              value={formData.phone}
+              onChange={(e) =>
+                setFormData({
+                  ...formData,
+                  phone:
+                    e.target.value,
+                })
+              }
+              className="w-full mb-4 bg-white/10 border border-white/10 rounded-xl px-4 py-3 outline-none"
+            />
+
+            {/* OWNER NAME */}
+
+            <input
+              type="text"
+              placeholder="Owner Name *"
+              value={formData.ownerName}
+              onChange={(e) =>
+                setFormData({
+                  ...formData,
+                  ownerName:
+                    e.target.value,
+                })
+              }
+              className="w-full mb-4 bg-white/10 border border-white/10 rounded-xl px-4 py-3 outline-none"
+            />
+
+            {/* OWNER EMAIL */}
+
+            <input
+              type="email"
+              placeholder="Owner Email *"
+              value={formData.ownerEmail}
+              onChange={(e) =>
+                setFormData({
+                  ...formData,
+                  ownerEmail:
+                    e.target.value,
+                })
+              }
+              className="w-full mb-4 bg-white/10 border border-white/10 rounded-xl px-4 py-3 outline-none"
+            />
+
+            {/* PASSWORD */}
+
+            <input
+              type="password"
+              placeholder="Owner Password *"
+              value={formData.ownerPassword}
+              onChange={(e) =>
+                setFormData({
+                  ...formData,
+                  ownerPassword:
+                    e.target.value,
+                })
+              }
+              className="w-full mb-6 bg-white/10 border border-white/10 rounded-xl px-4 py-3 outline-none"
+            />
+
+            {/* BUTTONS */}
+
+            <div className="flex gap-3">
+
+              <button
+                onClick={() =>
+                  setShowModal(false)
                 }
-                className="w-full mb-4 bg-white/10 border border-white/10 rounded-2xl px-4 py-3 outline-none"
-              />
+                className="flex-1 bg-white/10 hover:bg-white/20 py-3 rounded-xl"
+              >
+                Cancel
+              </button>
 
-              {/* ADDRESS */}
+              <button
+                onClick={createHotel}
+                disabled={loading}
+                className="flex-1 bg-orange-500 hover:bg-orange-600 py-3 rounded-xl font-semibold disabled:opacity-50"
+              >
 
-              <input
-                type="text"
-                placeholder="Address"
-                value={formData.address}
-                onChange={(e) =>
-                  setFormData({
-                    ...formData,
-                    address:
-                      e.target.value,
-                  })
-                }
-                className="w-full mb-4 bg-white/10 border border-white/10 rounded-2xl px-4 py-3 outline-none"
-              />
+                {loading
+                  ? "Creating..."
+                  : "Create Hotel"}
 
-              {/* PHONE */}
-
-              <input
-                type="text"
-                placeholder="Phone"
-                value={formData.phone}
-                onChange={(e) =>
-                  setFormData({
-                    ...formData,
-                    phone:
-                      e.target.value,
-                  })
-                }
-                className="w-full mb-4 bg-white/10 border border-white/10 rounded-2xl px-4 py-3 outline-none"
-              />
-
-              {/* OWNER NAME */}
-
-              <input
-                type="text"
-                placeholder="Owner Name"
-                value={formData.ownerName}
-                onChange={(e) =>
-                  setFormData({
-                    ...formData,
-                    ownerName:
-                      e.target.value,
-                  })
-                }
-                className="w-full mb-4 bg-white/10 border border-white/10 rounded-2xl px-4 py-3 outline-none"
-              />
-
-              {/* OWNER EMAIL */}
-
-              <input
-                type="email"
-                placeholder="Owner Email"
-                value={formData.ownerEmail}
-                onChange={(e) =>
-                  setFormData({
-                    ...formData,
-                    ownerEmail:
-                      e.target.value,
-                  })
-                }
-                className="w-full mb-4 bg-white/10 border border-white/10 rounded-2xl px-4 py-3 outline-none"
-              />
-
-              {/* OWNER PASSWORD */}
-
-              <input
-                type="password"
-                placeholder="Owner Password"
-                value={formData.ownerPassword}
-                onChange={(e) =>
-                  setFormData({
-                    ...formData,
-                    ownerPassword:
-                      e.target.value,
-                  })
-                }
-                className="w-full mb-6 bg-white/10 border border-white/10 rounded-2xl px-4 py-3 outline-none"
-              />
-
-              {/* BUTTONS */}
-
-              <div className="flex gap-4">
-
-                <button
-                  onClick={() =>
-                    setShowModal(false)
-                  }
-                  className="flex-1 bg-white/10 py-3 rounded-2xl"
-                >
-                  Cancel
-                </button>
-
-                <button
-                  onClick={
-                    createHotel
-                  }
-                  disabled={loading}
-                  className="flex-1 bg-orange-500 hover:bg-orange-600 py-3 rounded-2xl font-semibold"
-                >
-                  {
-                    loading
-                      ? "Creating..."
-                      : "Create Hotel"
-                  }
-                </button>
-
-              </div>
+              </button>
 
             </div>
 
           </div>
-        )
-      }
+
+        </div>
+
+      )}
 
     </div>
   );

@@ -32,6 +32,10 @@ import { isMobileApp } from "./utils/platform";
 import Orders from "./components/ownerdashboard/Orders";
 import StaffOrder from "./pages/StaffOrder";
 import Splash from "./pages/Splash";
+
+import ForgotPasswordPage from "./pages/ForgotPasswordPage";
+import ResetPasswordPage from "./pages/ResetPasswordPage";
+
 export default function App() {
 
   const mobile = isMobileApp();
@@ -202,6 +206,14 @@ element={
         <Route
           path="/change-password"
           element={<ChangePassword />}
+        />
+        <Route
+          path="/forgot-password"
+          element={<ForgotPasswordPage />}
+        />
+        <Route
+          path="/reset-password/:token"
+          element={<ResetPasswordPage />}
         />
 
       </Routes>
