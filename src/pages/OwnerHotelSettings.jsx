@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import api from "../api/axios";
 import {
   FaPen,
@@ -8,11 +9,20 @@ import {
 
 import { HOTEL_THEME_CHOICES } from "../constants/hotelThemes";
 import { getHotelThemeStyle, resolveHotelTheme } from "../utils/hotelTheme";
+import {
+  APP_LEVELS,
+  appLevelAllows,
+  hydrateHotelFeatures,
+  normalizeFeatureSettings,
+  persistFeatureSettings,
+} from "../utils/featureSettings";
 
 
 
 
 export default function OwnerHotelSettings({ onHotelChange }){
+
+const navigate=useNavigate();
 
 
 const [hotel,setHotel]=useState(null);
@@ -47,7 +57,7 @@ const res=await api.get(
 );
 
 
-const data=res.data.hotel;
+const data=hydrateHotelFeatures(res.data?.hotel || res.data);
 
 
 setHotel(data);
@@ -88,15 +98,33 @@ useEffect(()=>{
 const updateField=(field,value)=>{
 
 
-setHotel(prev=>({
-
-...prev,
-
-[field]:value
-
-}));
+setHotel((previous) => {
+  const next = { ...previous, [field]: value };
+  onHotelChange?.(next);
+  return next;
+});
 
 
+};
+
+const updateFeatureSetting=(field,value)=>{
+  setHotel((previous) => {
+    const featureSettings = normalizeFeatureSettings({
+      ...previous.featureSettings,
+      [field]: value,
+    });
+    const next = { ...previous, featureSettings };
+    onHotelChange?.(next);
+    return next;
+  });
+};
+
+const updateStaffCapability=(capability,value)=>{
+  const current = normalizeFeatureSettings(hotel?.featureSettings);
+  updateFeatureSetting("staffCapabilities", {
+    ...current.staffCapabilities,
+    [capability]: value,
+  });
 };
 
 
@@ -116,6 +144,8 @@ try{
 
 setLoading(true);
 
+const featureSettings = normalizeFeatureSettings(hotel.featureSettings);
+
 
 await api.patch(
   "/hotel/profile",
@@ -131,8 +161,14 @@ await api.patch(
     orderingEnabled: hotel.orderingEnabled !== false,
     gstEnabled: Boolean(hotel.gstEnabled),
     gstPercentage: Number(hotel.gstPercentage || 0),
+    appLevel: featureSettings.appLevel,
+    publicDisplayEnabled: featureSettings.publicDisplayEnabled,
+    staffCapabilities: featureSettings.staffCapabilities,
+    featureSettings,
   }
 );
+
+persistFeatureSettings(hotel, featureSettings);
 
 
 alert(
@@ -158,6 +194,28 @@ setLoading(false);
 }
 
 
+};
+
+const saveAppSettings=async()=>{
+  const featureSettings = persistFeatureSettings(
+    hotel,
+    normalizeFeatureSettings(hotel.featureSettings)
+  );
+  try {
+    setLoading(true);
+    await api.patch("/hotel/profile", {
+      appLevel: featureSettings.appLevel,
+      publicDisplayEnabled: featureSettings.publicDisplayEnabled,
+      staffCapabilities: featureSettings.staffCapabilities,
+      featureSettings,
+    });
+    alert("App settings saved");
+  } catch (error) {
+    console.warn("Cloud feature settings update failed", error);
+    alert("App settings saved on this device. Cloud update will require backend support.");
+  } finally {
+    setLoading(false);
+  }
 };
 
 
@@ -296,6 +354,7 @@ const changeTheme=(theme)=>{
 
 const resolvedTheme = resolveHotelTheme(hotel);
 const resolvedPrimary = resolvedTheme.brand;
+const featureSettings = normalizeFeatureSettings(hotel?.featureSettings);
 
 
 if(!hotel){
@@ -563,6 +622,66 @@ mt-5
 {/* =====================================================
  PROFILE FORM
 ===================================================== */}
+
+<section className="bg-white/10 border border-white/20 rounded-3xl p-6">
+  <h2 className="text-2xl font-bold mb-2">App level</h2>
+  <p className="text-sm opacity-70 mb-5">Choose how many controls your restaurant needs.</p>
+  <div className="grid gap-3 sm:grid-cols-3">
+    {APP_LEVELS.map((level) => (
+      <button
+        type="button"
+        key={level.id}
+        onClick={() => updateFeatureSetting("appLevel", level.id)}
+        className={`rounded-xl border-2 p-4 text-left ${
+          featureSettings.appLevel === level.id
+            ? "border-orange-400 bg-orange-500/10"
+            : "border-white/10 bg-black/10"
+        }`}
+      >
+        <strong>{level.label}</strong>
+        <span className="mt-1 block text-xs opacity-70">{level.description}</span>
+      </button>
+    ))}
+  </div>
+
+  {appLevelAllows(featureSettings.appLevel, "basic") && (
+    <div className="mt-5 border-t border-white/10 pt-4">
+      <h3 className="font-bold">Staff access</h3>
+      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+        {[
+          ["editMenu", "Edit menu"],
+          ["changeOrdering", "Pause customer ordering"],
+          ["switchWorkspaces", "Switch Waiter and Kitchen"],
+          ["usePublicDisplay", "Open public display"],
+        ].map(([capability, label]) => (
+          <label key={capability} className="flex min-h-12 items-center justify-between gap-3 rounded-xl border border-white/10 px-3">
+            <span>{label}</span>
+            <input
+              type="checkbox"
+              checked={featureSettings.staffCapabilities[capability] !== false}
+              onChange={(event) => updateStaffCapability(capability, event.target.checked)}
+            />
+          </label>
+        ))}
+      </div>
+      <label className="mt-3 flex min-h-12 items-center justify-between gap-3 rounded-xl border border-white/10 px-3">
+        <span>Public order display</span>
+        <input
+          type="checkbox"
+          checked={featureSettings.publicDisplayEnabled}
+          onChange={(event) => updateFeatureSetting("publicDisplayEnabled", event.target.checked)}
+        />
+      </label>
+      {featureSettings.publicDisplayEnabled && (
+        <button type="button" className="mt-3 rounded-xl border border-white/20 px-4 py-3 font-bold" onClick={() => navigate("/display")}>Open public display</button>
+      )}
+    </div>
+  )}
+
+  <button type="button" disabled={loading} onClick={saveAppSettings} className="mt-5 rounded-xl bg-white px-5 py-3 font-bold text-black">
+    <FaSave /> Save app settings
+  </button>
+</section>
 
 
 

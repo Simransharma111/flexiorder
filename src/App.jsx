@@ -23,6 +23,8 @@ const SuperAdminDashboard = lazy(() => import("./pages/SuperAdminDashboard"));
 const QRInventoryPage = lazy(() => import("./pages/QRInventoryPage"));
 const ChangePassword = lazy(() => import("./pages/ChangePassword"));
 const StaffWorkspace = lazy(() => import("./pages/StaffWorkspace"));
+const StaffMenuPage = lazy(() => import("./pages/StaffMenuPage"));
+const PublicOrderDisplay = lazy(() => import("./pages/PublicOrderDisplay"));
 
 const RouteFallback = () => (
   <div className="flex min-h-screen items-center justify-center bg-[#f6f8f7] px-4 text-center text-sm font-semibold text-[#55625d]">
@@ -135,6 +137,22 @@ export default function App() {
               allowedRoles={RESTAURANT_ROLES}
             >
               <KitchenDashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/staff/menu"
+          element={
+            <ProtectedRoute allowedRoles={RESTAURANT_ROLES}>
+              <StaffMenuPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/display"
+          element={
+            <ProtectedRoute allowedRoles={RESTAURANT_ROLES}>
+              <PublicOrderDisplay />
             </ProtectedRoute>
           }
         />

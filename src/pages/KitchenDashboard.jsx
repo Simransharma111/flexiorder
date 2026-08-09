@@ -8,6 +8,7 @@ import { clearAuthSession, readStoredSession } from "../utils/session";
 import { getScopedStorageKey } from "../utils/storageScope";
 import {
   mergeOrders,
+  matchesOrderId,
   orderKey,
   orderLocation,
   reconcileAuthoritativeOrders,
@@ -24,6 +25,11 @@ import {
   retryKitchenUpdatesNeedingAttention,
 } from "../utils/offlineKitchenUpdates";
 import { getHotelThemeStyle } from "../utils/hotelTheme";
+import {
+  canUseStaffCapability,
+  getFeatureSettings,
+  hydrateHotelFeatures,
+} from "../utils/featureSettings";
 
 const CACHE_KEY = "flexiorder_kitchen_active_orders";
 
@@ -38,7 +44,6 @@ export default function KitchenDashboard() {
   const [pendingSyncCount, setPendingSyncCount] = useState(getPendingKitchenUpdates().length);
   const [attentionCount, setAttentionCount] = useState(getKitchenUpdatesNeedingAttention().length);
   const syncInFlight = useRef(false);
-  const deliveredTimers = useRef(new Map());
   const currentRole = readStoredSession().user?.role;
 
   const cacheOrders = (next) => {
@@ -49,7 +54,7 @@ export default function KitchenDashboard() {
   const fetchHotel = useCallback(async () => {
     try {
       const response = await api.get("/hotel/me");
-      setHotel(response.data?.hotel || response.data);
+      setHotel(hydrateHotelFeatures(response.data?.hotel || response.data));
     } catch (error) {
       console.warn("Kitchen hotel fetch failed", error);
     }
@@ -76,15 +81,6 @@ export default function KitchenDashboard() {
     }
   }, []);
 
-  const removeDeliveredLater = useCallback((id) => {
-    window.clearTimeout(deliveredTimers.current.get(id));
-    const timer = window.setTimeout(() => {
-      setOrders((current) => current.filter((order) => orderKey(order) !== id || order.status !== "delivered"));
-      deliveredTimers.current.delete(id);
-    }, 10000);
-    deliveredTimers.current.set(id, timer);
-  }, []);
-
   const syncPending = useCallback(async () => {
     if (syncInFlight.current || !navigator.onLine) return;
     const snapshot = getPendingKitchenUpdates().filter((item) => !item.requiresAttention);
@@ -100,7 +96,11 @@ export default function KitchenDashboard() {
             clientMutationId: update.clientMutationId,
           });
           if (response.data?.order) {
-            setOrders((current) => cacheOrders(replaceOrderAuthoritatively(current, response.data.order)));
+            setOrders((current) => cacheOrders(
+              ["delivered", "cancelled"].includes(response.data.order.status)
+                ? current.filter((order) => !matchesOrderId(order, update.orderId))
+                : replaceOrderAuthoritatively(current, response.data.order)
+            ));
           }
         } catch (error) {
           failed.push(recordKitchenUpdateFailure(update, error));
@@ -135,8 +135,11 @@ export default function KitchenDashboard() {
         setOrders((current) => cacheOrders(current.filter((item) => orderKey(item) !== orderKey(order))));
         return;
       }
-      setOrders((current) => cacheOrders(replaceOrderAuthoritatively(current, order)));
-      if (order.status === "delivered") removeDeliveredLater(orderKey(order));
+      setOrders((current) => cacheOrders(
+        order.status === "delivered"
+          ? current.filter((item) => orderKey(item) !== orderKey(order))
+          : replaceOrderAuthoritatively(current, order)
+      ));
     };
     socket.on("newOrder", onNewOrder);
     socket.on("kitchenOrderUpdated", onOrderUpdate);
@@ -144,10 +147,9 @@ export default function KitchenDashboard() {
       socket.off("newOrder", onNewOrder);
       socket.off("kitchenOrderUpdated", onOrderUpdate);
     };
-  }, [removeDeliveredLater]);
+  }, []);
 
   useEffect(() => {
-    const timers = deliveredTimers.current;
     const online = () => {
       setIsOnline(true);
       syncPending();
@@ -161,7 +163,6 @@ export default function KitchenDashboard() {
       window.removeEventListener("online", online);
       window.removeEventListener("offline", offline);
       window.clearInterval(retry);
-      timers.forEach((timer) => window.clearTimeout(timer));
     };
   }, [syncPending]);
 
@@ -174,7 +175,11 @@ export default function KitchenDashboard() {
       previousOrder = current.find((order) => order._id === orderId) || null;
       return cacheOrders(mergeOrders(current, [optimistic]));
     });
-    if (status === "delivered") removeDeliveredLater(orderId);
+    if (status === "delivered") {
+      setOrders((current) => cacheOrders(
+        current.filter((order) => !matchesOrderId(order, orderId))
+      ));
+    }
 
     if (!navigator.onLine) {
       queueKitchenUpdate({ orderId, status, pauseReason, clientMutationId });
@@ -184,7 +189,11 @@ export default function KitchenDashboard() {
     try {
       const response = await api.put(`/kitchen/orders/${orderId}`, { status, pauseReason, clientMutationId });
       if (response.data?.order) {
-        setOrders((current) => cacheOrders(replaceOrderAuthoritatively(current, response.data.order)));
+        setOrders((current) => cacheOrders(
+          ["delivered", "cancelled"].includes(response.data.order.status)
+            ? current.filter((order) => !matchesOrderId(order, orderId))
+            : replaceOrderAuthoritatively(current, response.data.order)
+        ));
       }
     } catch (error) {
       if (!error?.response || error.response.status >= 500) {
@@ -223,6 +232,11 @@ export default function KitchenDashboard() {
     navigate("/login");
   };
 
+  const featureSettings = getFeatureSettings(hotel);
+  const canSwitch = canUseStaffCapability(hotel, "switchWorkspaces", currentRole);
+  const canUseDisplay = featureSettings.publicDisplayEnabled &&
+    canUseStaffCapability(hotel, "usePublicDisplay", currentRole);
+
   if (loading && !orders.length) return <div className="ops-loading">Loading kitchen…</div>;
 
   return (
@@ -239,10 +253,11 @@ export default function KitchenDashboard() {
             </div>
             <label className="ops-search"><FiSearch /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search table or dish" /></label>
             <button type="button" onClick={fetchOrders}><FiRefreshCw /> Refresh</button>
-            <button type="button" onClick={() => navigate("/owner/order")}>Waiter workspace</button>
+            {canSwitch && <button type="button" onClick={() => navigate("/owner/order")}>Waiter workspace</button>}
             {["owner", "superadmin"].includes(currentRole) && (
               <button type="button" onClick={() => navigate("/owner/dashboard")}>Manage restaurant</button>
             )}
+            {canUseDisplay && <button type="button" onClick={() => navigate("/display")}>Public order display</button>}
             <button type="button" onClick={logout}><FiLogOut /> Sign out</button>
             <button type="button" className="ops-sheet-cancel" onClick={() => setToolsOpen(false)}>Close</button>
           </aside>

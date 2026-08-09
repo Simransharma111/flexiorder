@@ -6,10 +6,15 @@ import socket from "../socket";
 import StaffOrder from "./StaffOrder";
 import Orders from "../components/ownerdashboard/Orders";
 import { getScopedStorageKey } from "../utils/storageScope";
-import { mergeOrders, orderKey, reconcileAuthoritativeOrders } from "../utils/orderModel";
+import { mergeOrders, reconcileAuthoritativeOrders } from "../utils/orderModel";
 import { getPendingKitchenUpdates } from "../utils/offlineKitchenUpdates";
 import { getHotelThemeStyle } from "../utils/hotelTheme";
 import { clearAuthSession, readStoredSession } from "../utils/session";
+import {
+  canUseStaffCapability,
+  getFeatureSettings,
+  hydrateHotelFeatures,
+} from "../utils/featureSettings";
 
 const HOTEL_CACHE_KEY = "flexiorder_staff_hotel";
 const ORDERS_CACHE_KEY = "flexiorder_staff_orders";
@@ -36,7 +41,7 @@ export default function StaffWorkspace() {
         api.get("/hotel/me"),
         api.get("/kitchen/orders?type=kitchen"),
       ]);
-      const nextHotel = hotelResponse.data?.hotel || hotelResponse.data;
+      const nextHotel = hydrateHotelFeatures(hotelResponse.data?.hotel || hotelResponse.data);
       const nextOrders = ordersResponse.data?.orders || ordersResponse.data || [];
       setHotel(nextHotel);
       setOrders((current) => persistOrders(
@@ -78,15 +83,7 @@ export default function StaffWorkspace() {
 
   useEffect(() => {
     const upsert = (order) => setOrders((current) => persistOrders(mergeOrders(current, [order])));
-    const update = (order) => {
-      if (order.status === "cancelled") {
-        setOrders((current) => persistOrders(
-          current.filter((item) => orderKey(item) !== orderKey(order))
-        ));
-        return;
-      }
-      upsert(order);
-    };
+    const update = (order) => upsert(order);
     socket.on("newOrder", upsert);
     socket.on("kitchenOrderUpdated", update);
     return () => {
@@ -126,6 +123,13 @@ export default function StaffWorkspace() {
     navigate("/login");
   };
 
+  const featureSettings = getFeatureSettings(hotel);
+  const canSwitch = canUseStaffCapability(hotel, "switchWorkspaces", currentRole);
+  const canEditMenu = canUseStaffCapability(hotel, "editMenu", currentRole);
+  const canChangeOrdering = canUseStaffCapability(hotel, "changeOrdering", currentRole);
+  const canUseDisplay = featureSettings.publicDisplayEnabled &&
+    canUseStaffCapability(hotel, "usePublicDisplay", currentRole);
+
   if (loading && !hotel) return <div className="ops-loading">Loading waiter workspace…</div>;
 
   return (
@@ -143,11 +147,13 @@ export default function StaffWorkspace() {
         <div className="ops-sheet-backdrop" onClick={() => setMenuOpen(false)}>
           <aside className="ops-tools-sheet" onClick={(event) => event.stopPropagation()}>
             <div className="ops-tools-sheet__brand"><strong>{hotel?.name || "Restaurant"}</strong><span>Waiter workspace</span></div>
-            <button type="button" onClick={() => navigate("/kitchen")}>Kitchen workspace</button>
+            {canSwitch && <button type="button" onClick={() => navigate("/kitchen")}>Kitchen workspace</button>}
             {["owner", "superadmin"].includes(currentRole) && (
               <button type="button" onClick={() => navigate("/owner/dashboard")}>Manage restaurant</button>
             )}
-            <button type="button" onClick={toggleOrdering} disabled={updatingOrdering}><FiPower /> {hotel?.orderingEnabled === false ? "Turn customer ordering on" : "Pause customer ordering"}</button>
+            {canEditMenu && <button type="button" onClick={() => navigate("/staff/menu")}>Edit menu</button>}
+            {canUseDisplay && <button type="button" onClick={() => navigate("/display")}>Public order display</button>}
+            {canChangeOrdering && <button type="button" onClick={toggleOrdering} disabled={updatingOrdering}><FiPower /> {hotel?.orderingEnabled === false ? "Turn customer ordering on" : "Pause customer ordering"}</button>}
             <button type="button" onClick={logout}><FiLogOut /> Sign out</button>
             <button type="button" className="ops-sheet-cancel" onClick={() => setMenuOpen(false)}><FiX /> Close</button>
           </aside>

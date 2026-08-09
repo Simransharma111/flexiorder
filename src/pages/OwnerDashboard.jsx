@@ -6,7 +6,6 @@ import {
 
 import {
   FiBarChart2,
-  FiBox,
   FiPackage,
   FiSettings,
   FiShoppingBag,
@@ -29,9 +28,6 @@ import OwnerMenuManager from "../components/OwnerMenuManager";
 import TableQRManager from "../components/TableQRManager";
 import AnalyticsDashboard from "../components/AnalyticsDashboard";
 import StaffManager from "../components/StaffManager";
-import StaffOrder from "./StaffOrder";
-
-import QRInventory from "./QRInventoryPage";
 import OwnerHotelSettings from "./OwnerHotelSettings";
 
 import HOTEL_THEMES from "../constants/hotelThemes";
@@ -39,6 +35,7 @@ import { mergeOrders, reconcileAuthoritativeOrders } from "../utils/orderModel";
 import { getPendingKitchenUpdates } from "../utils/offlineKitchenUpdates";
 import { clearAuthSession } from "../utils/session";
 import { getHotelThemeStyle } from "../utils/hotelTheme";
+import { appLevelAllows, getFeatureSettings, hydrateHotelFeatures } from "../utils/featureSettings";
 
 
 
@@ -47,54 +44,49 @@ const NAV_ITEMS = [
 {
 key:"home",
 label:"Today",
-icon:FiBarChart2
-},
-
-{
-key:"orders",
-label:"Orders",
-icon:FiShoppingBag
+icon:FiBarChart2,
+minimumLevel:"simple"
 },
 
 {
 key:"menu",
 label:"Menu",
-icon:FiPackage
+icon:FiPackage,
+minimumLevel:"simple"
+},
+
+{
+key:"orders",
+label:"History",
+icon:FiShoppingBag,
+minimumLevel:"simple"
 },
 
 {
 key:"settings",
 label:"Settings",
-icon:FiSettings
+icon:FiSettings,
+minimumLevel:"simple"
 },
 {
 key:"staff",
 label:"Staff",
-icon:FiUsers
+icon:FiUsers,
+minimumLevel:"basic"
 },
 
 {
 key:"tables",
 label:"QR Tables",
-icon:FiTable
+icon:FiTable,
+minimumLevel:"simple"
 },
 
 {
 key:"analytics",
 label:"Analytics",
-icon:FiBarChart2
-},
-
-{
-key:"inventory",
-label:"Inventory",
-icon:FiBox
-},
-
-{
-key:"staffOrder",
-label:"Take Order",
-icon:FiShoppingBag
+icon:FiBarChart2,
+minimumLevel:"basic"
 }
 
 ];
@@ -139,9 +131,7 @@ const res=await api.get(
 "/hotel/me"
 );
 
-setHotel(
-res.data?.hotel || res.data
-);
+setHotel(hydrateHotelFeatures(res.data?.hotel || res.data));
 
 
 }
@@ -422,6 +412,11 @@ setNewOrderCount(0);
 
 };
 
+const featureSettings = getFeatureSettings(hotel);
+const navItems = NAV_ITEMS.filter((item) =>
+  appLevelAllows(featureSettings.appLevel, item.minimumLevel)
+);
+
 
 
 
@@ -482,7 +477,7 @@ hotel={hotel}
 
 activeTab={activeTab}
 
-navItems={NAV_ITEMS}
+navItems={navItems}
 
 onNavigate={changeTab}
 
@@ -522,7 +517,7 @@ hotel={hotel}
 
 activeTab={activeTab}
 
-navItems={NAV_ITEMS}
+navItems={navItems}
 
 onNavigate={changeTab}
 
@@ -555,7 +550,7 @@ hotel={hotel}
 
 activeTab={activeTab}
 
-navItems={NAV_ITEMS}
+navItems={navItems}
 
 newOrderCount={newOrderCount}
 
@@ -636,6 +631,8 @@ refreshKey={refreshKey}
 
 setRefreshKey={setRefreshKey}
 
+advancedEnabled={featureSettings.appLevel === "advanced"}
+
 />
 
 }
@@ -652,18 +649,6 @@ activeTab==="staff" &&
 <StaffManager/>
 
 }
-
-{
-activeTab==="staffOrder" && hotel &&
-
-<StaffOrder
-hotel={hotel}
-/>
-
-}
-
-
-
 
 {
 activeTab==="tables" &&
@@ -693,22 +678,6 @@ activeTab==="analytics" &&
 
 
 
-
-
-
-
-{
-activeTab==="inventory" &&
-
-<QRInventory
-
-refreshKey={refreshKey}
-
-setRefreshKey={setRefreshKey}
-
-/>
-
-}
 
 
 

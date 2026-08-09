@@ -120,3 +120,64 @@ test("kitchen queues a status change offline and replays it with a mutation id",
     clientMutationId: queued[0].clientMutationId,
   });
 });
+
+test("delivered leaves active orders immediately and history exposes full details", async ({ page }) => {
+  await installSession(page, "staff");
+  const readyOrder = kitchenOrder({
+    status: "ready",
+    subtotal: 300,
+    discountAmount: 30,
+    gstRate: 5,
+    gstAmount: 13.5,
+    totalAmount: 283.5,
+    readyAt: new Date().toISOString(),
+  });
+  await mockStaffWorkspace(page, [readyOrder]);
+  await page.route("**/kitchen/orders/order-00008", async (route) => {
+    const body = route.request().postDataJSON();
+    return fulfillJson(route, {
+      order: { ...readyOrder, status: body.status, deliveredAt: new Date().toISOString() },
+    });
+  });
+
+  await page.goto("/owner/order");
+  await page.getByRole("button", { name: /^Deliver Table 8 order/ }).click();
+  await expect(page.getByRole("button", { name: /^Deliver Table 8 order/ })).toHaveCount(0);
+
+  await page.getByRole("tab", { name: "History" }).click();
+  await expect(page.getByRole("button", { name: "More options for Table 8" })).toBeVisible();
+  await page.getByRole("button", { name: "More options for Table 8" }).click();
+  await page.getByRole("button", { name: "View full details" }).click();
+  await expect(page.getByRole("dialog", { name: "Order details for Table 8" })).toBeVisible();
+  await expect(page.getByText("₹283.50")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Timing" })).toBeVisible();
+});
+
+test("Simple mode keeps workspace switching but hides optional staff controls", async ({ page }) => {
+  await installSession(page, "staff");
+  const simpleHotel = {
+    ...hotel,
+    featureSettings: {
+      appLevel: "simple",
+      staffCapabilities: {
+        editMenu: true,
+        changeOrdering: true,
+        switchWorkspaces: true,
+        usePublicDisplay: true,
+      },
+    },
+  };
+  await page.route("**/hotel/me", (route) => fulfillJson(route, simpleHotel));
+  await page.route("**/kitchen/orders?type=kitchen", (route) => fulfillJson(route, { orders: [] }));
+  await page.route("**/menu/hotel-1", (route) => fulfillJson(route, []));
+  await page.route("**/table", (route) => fulfillJson(route, { tables: [] }));
+
+  await page.goto("/owner/order");
+  await page.getByRole("button", { name: "More waiter options" }).click();
+  await expect(page.getByRole("button", { name: "Kitchen workspace" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Edit menu" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /customer ordering/ })).toHaveCount(0);
+
+  await page.goto("/staff/menu");
+  await expect(page.getByText("Menu editing is not enabled for staff.")).toBeVisible();
+});

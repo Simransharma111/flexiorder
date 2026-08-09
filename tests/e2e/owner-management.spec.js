@@ -46,7 +46,9 @@ test("owner theme selection applies immediately and survives reload", async ({ p
   await openOwnerTab(page, "Settings");
   await page.getByRole("button", { name: /Lavender Hues/ }).click();
   await expect(page.locator(".owner-shell")).toHaveCSS("--primary", "#a78bfa");
+  const savedDialog = page.waitForEvent("dialog");
   await page.getByRole("button", { name: "Save Branding" }).click();
+  await (await savedDialog).accept();
 
   await page.reload();
   await expect(page.locator(".owner-shell")).toHaveCSS("--primary", "#a78bfa");
@@ -83,10 +85,24 @@ test("owner can inspect completed order history", async ({ page }) => {
   }));
 
   await page.goto("/owner/dashboard");
-  await openOwnerTab(page, "Orders");
-  await expect(page.locator(".owner-header strong")).toHaveText("Orders");
+  await openOwnerTab(page, "History");
+  await expect(page.locator(".owner-header strong")).toHaveText("History");
   await page.getByRole("tab", { name: "History" }).click();
   await expect(page.getByText("Table 8", { exact: true })).toBeVisible();
+});
+
+test("Simple app level hides optional owner controls immediately", async ({ page }) => {
+  await page.goto("/owner/dashboard");
+  await openOwnerTab(page, "Settings");
+  await page.getByRole("button", { name: /^Simple Orders/ }).click();
+
+  await expect(page.getByText("Staff access", { exact: true })).toHaveCount(0);
+  if ((page.viewportSize()?.width || 0) < 768) {
+    await page.getByRole("button", { name: "Open owner menu" }).click();
+  }
+  await expect(page.getByRole("button", { name: "Staff", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Analytics", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "QR Tables", exact: true })).toBeVisible();
 });
 
 test("owner can type and save a custom dish category", async ({ page }) => {

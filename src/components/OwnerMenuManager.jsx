@@ -27,7 +27,7 @@ const DEFAULT_CATEGORIES = [
   "Breakfast",
 ];
 
-export default function OwnerMenuManager() {
+export default function OwnerMenuManager({ advancedEnabled = false }) {
   const [dishes, setDishes] = useState([]);
   const [editingId, setEditingId] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -589,6 +589,8 @@ export default function OwnerMenuManager() {
         </div>
 
         <div className="flex flex-wrap gap-2">
+          {advancedEnabled && (
+            <>
           <label className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-700 transition hover:bg-gray-50">
             <FiUpload />
             {importing ? "Importing..." : "Import menu"}
@@ -603,6 +605,8 @@ export default function OwnerMenuManager() {
             <FiDownload />
             Export menu
           </button>
+            </>
+          )}
           <button
             type="button"
             onClick={() => {

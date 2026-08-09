@@ -28,6 +28,12 @@ export const nextOrderStatus = (status, surface = "kitchen") => {
 export const orderKey = (order) =>
   order?.clientOrderId || order?._id || order?.localId || "";
 
+export const matchesOrderId = (order, id) => Boolean(
+  id && [order?._id, order?.clientOrderId, order?.localId].some(
+    (candidate) => candidate && String(candidate) === String(id)
+  )
+);
+
 const normalizedOrderType = (order) => String(
   order?.orderType || order?.type || order?.serviceType || ""
 ).toLowerCase().replace(/[\s_-]/g, "");

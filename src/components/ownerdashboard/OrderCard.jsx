@@ -1,5 +1,6 @@
-import { useRef } from "react";
-import { FiClock } from "react-icons/fi";
+import { useEffect, useRef } from "react";
+import { FiClock, FiMoreVertical } from "react-icons/fi";
+import { orderLocation } from "../../utils/orderModel";
 
 
 export default function OrderCard({
@@ -21,23 +22,15 @@ const startPress=()=>{
 
 const endPress=()=>window.clearTimeout(pressTimer.current);
 
+useEffect(() => () => window.clearTimeout(pressTimer.current), []);
 
-const location =
-order.orderType==="takeaway"
-?
-"Takeaway"
-:
-order.locationType==="room"
-?
-`Room ${order.locationNumber || order.roomNumber || "-"}`
-:
-`Table ${order.locationNumber || order.roomNumber || "-"}`;
+const location = orderLocation(order);
 
 
 
 const items =
-order.items
-?.slice(0,2)
+(Array.isArray(order.items) ? order.items : [])
+.slice(0,2)
 .map(
 item=>`${item.name} x${item.quantity}`
 )
@@ -57,7 +50,7 @@ const orderTime = order.createdAt
 
 return (
 
-<div
+<article
 
 className="
 rounded-xl
@@ -77,14 +70,6 @@ borderColor:`${primaryColor}40`
 onPointerDown={startPress}
 onPointerUp={endPress}
 onPointerLeave={endPress}
-role={onLongPress ? "button" : undefined}
-tabIndex={onLongPress ? 0 : undefined}
-onKeyDown={(event)=>{
-  if(onLongPress && (event.key==="Enter" || event.key===" ")){
-    event.preventDefault();
-    onLongPress(order);
-  }
-}}
 onContextMenu={(event)=>{
   if(!onLongPress) return;
   event.preventDefault();
@@ -168,6 +153,21 @@ opacity-70
 
 </span>
 
+{onLongPress && (
+  <button
+    type="button"
+    className="ops-history-more"
+    aria-label={`More options for ${location}`}
+    onPointerDown={(event) => event.stopPropagation()}
+    onClick={(event) => {
+      event.stopPropagation();
+      onLongPress(order);
+    }}
+  >
+    <FiMoreVertical />
+  </button>
+)}
+
 
 </div>
 
@@ -243,7 +243,7 @@ background:primaryColor
 
 
 
-</div>
+</article>
 
 );
 
