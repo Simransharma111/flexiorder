@@ -23,6 +23,16 @@ allprojects {
         google()
         mavenCentral()
     }
+    // Force Java 17 compatibility on every module.
+    // Capacitor 8 auto-generates files targeting VERSION_21, but the installed
+    // JDK is openjdk-17. This override runs after each module is evaluated so
+    // it is not reset by `cap sync`.
+    afterEvaluate { project ->
+        if (project.hasProperty('android')) {
+            project.android.compileOptions.sourceCompatibility = JavaVersion.VERSION_17
+            project.android.compileOptions.targetCompatibility = JavaVersion.VERSION_17
+        }
+    }
 }
 
 task clean(type: Delete) {
