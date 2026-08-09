@@ -23,6 +23,7 @@ import { getDishPricing } from "../utils/pricing";
 import { sortDishesForDisplay } from "../utils/menuOrdering";
 import { getHotelThemeStyle } from "../utils/hotelTheme";
 import { buildCategoryList, categoryKey } from "../utils/menuCategories";
+import { useConnectivity } from "../context/ConnectivityContext";
 
 import {
   FiSearch,
@@ -42,6 +43,7 @@ const {
 
 
 const navigate = useNavigate();
+const { isOnline } = useConnectivity();
 
 
 // =====================================================
@@ -51,11 +53,11 @@ const navigate = useNavigate();
 const [hotel,setHotel]=useState(null);
 
 const hostOrderingEnabled = hotel?.orderingEnabled !== false;
-const [isOnline,setIsOnline]=useState(navigator.onLine);
 const orderingEnabled = hostOrderingEnabled && isOnline;
 const simpleMenu =
   hotel?.menuMode === "simple" ||
-  hotel?.menuDisplayMode === "simple";
+  hotel?.menuDisplayMode === "simple" ||
+  hotel?.simpleMenu === true;
 
 const [table,setTable]=useState(null);
 
@@ -64,18 +66,6 @@ const [dishes,setDishes]=useState([]);
 const [loading,setLoading]=useState(true);
 
 const [error,setError]=useState("");
-
-useEffect(()=>{
-const handleOnline=()=>setIsOnline(true);
-const handleOffline=()=>setIsOnline(false);
-window.addEventListener("online",handleOnline);
-window.addEventListener("offline",handleOffline);
-return()=>{
-window.removeEventListener("online",handleOnline);
-window.removeEventListener("offline",handleOffline);
-};
-},[]);
-
 
 // =====================================================
 // FILTERS
@@ -618,11 +608,13 @@ return item?.quantity || 0;
 
 const addToCart=(dish)=>{
 
+  // Never allow cart mutations when ordering is disabled.
+  if(!orderingEnabled) return;
 
-if(
-dish.isAvailable===false
-)
-return;
+  if(
+    dish.isAvailable===false
+  )
+    return;
 
 const {
   basePrice,
@@ -1071,6 +1063,14 @@ table={table}
       {!isOnline
         ? "You are offline. The saved menu is available to view; ordering will return when connected."
         : "Ordering is currently unavailable. You can still view the menu."}
+    </p>
+  </div>
+)}
+
+{gstEnabled && gstRate > 0 && (
+  <div className="mx-auto mt-3 max-w-6xl px-4">
+    <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-center text-xs text-amber-700">
+      All prices are exclusive of {gstRate}% GST · Tax will be added at checkout
     </p>
   </div>
 )}

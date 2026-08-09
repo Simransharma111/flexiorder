@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getHotelThemeStyle, resolveHotelTheme } from "./hotelTheme";
+import { contrastRatio, getHotelThemeStyle, resolveHotelTheme } from "./hotelTheme";
 
 describe("hotel theme", () => {
   it("uses the preset accent as the interactive color", () => {
@@ -43,5 +43,31 @@ describe("hotel theme", () => {
   it("chooses the higher-contrast foreground for light accents", () => {
     const style = getHotelThemeStyle({ theme: { id: "skywave" } });
     expect(style["--theme-on-primary"]).toBe("#17201d");
+  });
+
+  it.each([
+    "sunrise_bliss",
+    "mint_glow",
+    "skywave",
+    "lavender_hues",
+    "midnight_moss",
+    "velvet_sunset",
+    "sage_ritual",
+  ])("keeps semantic text readable for %s", (id) => {
+    const style = getHotelThemeStyle({ theme: { id } });
+    expect(contrastRatio(style["--ops-ink"], style["--ops-card"])).toBeGreaterThanOrEqual(4.5);
+    expect(contrastRatio(style["--ops-ink"], style["--ops-canvas"])).toBeGreaterThanOrEqual(4.5);
+    expect(contrastRatio(style["--ops-muted"], style["--ops-card"])).toBeGreaterThanOrEqual(4.5);
+    expect(contrastRatio(style["--theme-on-primary"], style["--primary"])).toBeGreaterThanOrEqual(4.5);
+    expect(contrastRatio(style["--primary-ink"], style["--ops-card"])).toBeGreaterThanOrEqual(4.5);
+    expect(contrastRatio(style["--theme-chart-series"], style["--ops-card"])).toBeGreaterThanOrEqual(3);
+  });
+
+  it("sanitizes a malformed low-contrast custom palette", () => {
+    const style = getHotelThemeStyle({
+      theme: { primary: "#ffffff", secondary: "#fefefe", brand: "#fffffe", text: "#ffffff" },
+    });
+    expect(contrastRatio(style["--ops-ink"], style["--ops-card"])).toBeGreaterThanOrEqual(4.5);
+    expect(contrastRatio(style["--theme-on-primary"], style["--primary"])).toBeGreaterThanOrEqual(4.5);
   });
 });

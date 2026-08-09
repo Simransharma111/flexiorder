@@ -10,17 +10,26 @@ import {
   getStaffOrdersNeedingAttention,
   markStaffOrdersHandled,
   queueStaffOrder,
-  reconcileStaffOrderSync,
-  recordStaffOrderFailure,
   retryStaffOrdersNeedingAttention,
 } from "../utils/offlineOrders";
-import { queueKitchenUpdate } from "../utils/offlineKitchenUpdates";
+import {
+  MENU_CHANGED_EVENT,
+  readMenuCache,
+  reconcileMenuFromServer,
+} from "../utils/offlineMenu";
+import { getRestaurantId } from "../utils/storageScope";
+import { useConnectivity } from "../context/ConnectivityContext";
+import { useSync } from "../context/SyncContext";
+import { SYNC_STATE_EVENT } from "../utils/syncQueues";
 
 const tableLabel = (table) => table?.type === "room"
   ? `Room ${table.tableNumber || table.locationNumber}`
   : `Table ${table.tableNumber || table.locationNumber}`;
 
 export default function StaffOrder({ hotel, onOrderCreated }) {
+  const restaurantId = getRestaurantId(hotel);
+  const { isOnline } = useConnectivity();
+  const { syncNow } = useSync();
   const [menu, setMenu] = useState([]);
   const [tables, setTables] = useState([]);
   const [selectedTable, setSelectedTable] = useState(null);
@@ -36,10 +45,8 @@ export default function StaffOrder({ hotel, onOrderCreated }) {
   const [placing, setPlacing] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
-  const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [pendingSyncCount, setPendingSyncCount] = useState(getPendingStaffOrders().length);
   const [attentionCount, setAttentionCount] = useState(getStaffOrdersNeedingAttention().length);
-  const syncInFlight = useRef(false);
   const placingInFlight = useRef(false);
 
   const refreshQueueCounts = useCallback(() => {
@@ -47,91 +54,66 @@ export default function StaffOrder({ hotel, onOrderCreated }) {
     setAttentionCount(getStaffOrdersNeedingAttention().length);
   }, []);
 
-  const syncPendingOrders = useCallback(async () => {
-    if (syncInFlight.current || !navigator.onLine) return;
-    const snapshot = getPendingStaffOrders().filter((item) => !item.requiresAttention);
-    if (!snapshot.length) return;
-    syncInFlight.current = true;
-    try {
-      const failed = [];
-      for (const queued of snapshot) {
-        try {
-          const response = await api.post("/orders", queued.payload);
-          const syncedOrder = response.data?.order || response.data;
-          if (syncedOrder?._id) {
-            onOrderCreated?.({
-              ...syncedOrder,
-              clientOrderId: queued.clientOrderId,
-              pendingSync: false,
-            });
-          }
-          if (queued.alreadyHandled && syncedOrder?._id) {
-            try {
-              await api.put(`/kitchen/orders/${syncedOrder._id}`, { status: "delivered" });
-            } catch {
-              queueKitchenUpdate({ orderId: syncedOrder._id, status: "delivered", alreadyHandled: true });
-            }
-          }
-        } catch (syncError) {
-          failed.push(recordStaffOrderFailure(queued, syncError));
-        }
-      }
-      const remaining = reconcileStaffOrderSync(snapshot, failed);
-      setPendingSyncCount(remaining.length);
-      setAttentionCount(getStaffOrdersNeedingAttention().length);
-    } finally {
-      syncInFlight.current = false;
-    }
-  }, [onOrderCreated]);
-
   useEffect(() => {
-    if (!hotel?._id) return;
+    if (!restaurantId) return;
     const fetchData = async () => {
-      const menuKey = `staff_menu_${hotel._id}`;
-      const tableKey = `staff_tables_${hotel._id}`;
-      try {
-        const [menuResponse, tableResponse] = await Promise.all([
-          api.get(`/menu/${hotel._id}`),
+      const tableKey = `staff_tables_${restaurantId}`;
+      setMenu(readMenuCache(restaurantId));
+      const [menuResult, tableResult] = await Promise.allSettled([
+          api.get(`/menu/${restaurantId}`),
           api.get("/table"),
-        ]);
-        const nextMenu = menuResponse.data?.dishes || menuResponse.data?.menu || menuResponse.data || [];
-        const nextTables = tableResponse.data?.tables || tableResponse.data || [];
-        setMenu(Array.isArray(nextMenu) ? nextMenu : []);
-        setTables(Array.isArray(nextTables) ? nextTables : []);
-        localStorage.setItem(menuKey, JSON.stringify(nextMenu));
-        localStorage.setItem(tableKey, JSON.stringify(nextTables));
-      } catch (fetchError) {
-        console.warn("Staff order data fetch failed", fetchError);
+      ]);
+
+      if (menuResult.status === "fulfilled") {
         try {
-          const cachedMenu = JSON.parse(localStorage.getItem(menuKey) || "[]");
+          setMenu(reconcileMenuFromServer(restaurantId, menuResult.value.data));
+        } catch (menuError) {
+          console.warn("Staff menu response was invalid", menuError);
+          setMenu(readMenuCache(restaurantId));
+        }
+      } else {
+        console.warn("Staff menu fetch failed", menuResult.reason);
+        setMenu(readMenuCache(restaurantId));
+      }
+
+      if (tableResult.status === "fulfilled") {
+        const nextTables = tableResult.value.data?.tables || tableResult.value.data || [];
+        if (Array.isArray(nextTables)) {
+          setTables(nextTables);
+          localStorage.setItem(tableKey, JSON.stringify(nextTables));
+        }
+      } else {
+        console.warn("Staff table fetch failed", tableResult.reason);
+        try {
           const cachedTables = JSON.parse(localStorage.getItem(tableKey) || "[]");
-          setMenu(Array.isArray(cachedMenu) ? cachedMenu : []);
           setTables(Array.isArray(cachedTables) ? cachedTables : []);
         } catch (cacheError) {
-          console.warn("Staff order cache failed", cacheError);
+          console.warn("Staff table cache failed", cacheError);
         }
       }
     };
     fetchData();
-  }, [hotel?._id]);
+  }, [restaurantId]);
 
   useEffect(() => {
-    const online = () => {
-      setIsOnline(true);
-      syncPendingOrders();
+    const handleMenuChanged = (event) => {
+      if (!event?.detail?.restaurantId || event.detail.restaurantId === restaurantId) {
+        setMenu(readMenuCache(restaurantId));
+      }
     };
-    const offline = () => setIsOnline(false);
-    window.addEventListener("online", online);
-    window.addEventListener("offline", offline);
+    const handleSync = (event) => {
+      if (event.detail?.kind !== "staff-orders") return;
+      event.detail.syncedOrders?.forEach((order) => onOrderCreated?.(order));
+      refreshQueueCounts();
+    };
+    window.addEventListener(MENU_CHANGED_EVENT, handleMenuChanged);
+    window.addEventListener(SYNC_STATE_EVENT, handleSync);
     refreshQueueCounts();
-    syncPendingOrders();
-    const interval = window.setInterval(syncPendingOrders, 15000);
     return () => {
-      window.removeEventListener("online", online);
-      window.removeEventListener("offline", offline);
-      window.clearInterval(interval);
+      window.removeEventListener(MENU_CHANGED_EVENT, handleMenuChanged);
+      window.removeEventListener(SYNC_STATE_EVENT, handleSync);
     };
-  }, [refreshQueueCounts, syncPendingOrders]);
+  }, [onOrderCreated, refreshQueueCounts, restaurantId]);
 
   const categories = useMemo(
     () => buildCategoryList(menu.filter((dish) => dish.isAvailable !== false)),
@@ -194,7 +176,10 @@ export default function StaffOrder({ hotel, onOrderCreated }) {
       setError("Add at least one dish.");
       return;
     }
+    const clientOrderId = globalThis.crypto?.randomUUID?.() ||
+      `order-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     const payload = {
+      clientOrderId,
       tableId: orderType === "takeaway" ? null : selectedTable._id,
       orderType,
       guestName: guestName.trim() || "Guest",
@@ -210,14 +195,15 @@ export default function StaffOrder({ hotel, onOrderCreated }) {
       locationNumber: selectedTable?.tableNumber || selectedTable?.locationNumber,
       guestName: payload.guestName,
       items: cart.map((item) => ({ ...item })),
-      pendingSync: !navigator.onLine,
+      pendingSync: !isOnline,
+      clientOrderId,
     };
 
     setError("");
     placingInFlight.current = true;
     setPlacing(true);
     try {
-      if (!navigator.onLine) {
+      if (!isOnline) {
         const queued = queueStaffOrder(payload);
         onOrderCreated?.({ ...localShape, _id: queued.clientOrderId, clientOrderId: queued.clientOrderId });
         refreshQueueCounts();
@@ -268,7 +254,7 @@ export default function StaffOrder({ hotel, onOrderCreated }) {
               <button type="button" onClick={() => {
                 retryStaffOrdersNeedingAttention();
                 refreshQueueCounts();
-                syncPendingOrders();
+                syncNow();
               }}>Retry</button>
             </>
           )}

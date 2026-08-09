@@ -166,6 +166,17 @@ export default function PublicOrderDisplay() {
 
   return (
     <main className="public-order-display" style={getHotelThemeStyle(hotel)}>
+      {/* Persistent fullscreen button — always visible, top-right corner */}
+      <button
+        type="button"
+        className="public-display-fullscreen-btn"
+        onClick={toggleFullscreen}
+        aria-label={isFullscreen ? "Exit full screen" : "Enter full screen"}
+        title={isFullscreen ? "Exit full screen (F11)" : "Full screen"}
+      >
+        {isFullscreen ? <FiMinimize /> : <FiMaximize />}
+      </button>
+
       <button type="button" className="public-display-edge" aria-label="Open display options" onClick={() => setToolsOpen(true)}>•••</button>
       <div className="public-display-board">
         <section className="public-display-lane is-preparing">

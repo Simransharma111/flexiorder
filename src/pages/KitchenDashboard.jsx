@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { FiLogOut, FiRefreshCw, FiSearch } from "react-icons/fi";
+import { flushSync } from "react-dom";
+import { FiLogOut, FiMoreVertical, FiRefreshCw, FiSearch } from "react-icons/fi";
 import { useNavigate } from "react-router-dom";
 import api from "../api/axios";
 import socket from "../socket";
+import { triggerLocalOrderNotification } from "../utils/fcmPush";
 import KitchenBoard from "../components/kitchen/KitchenBoard";
 import { clearAuthSession, readStoredSession } from "../utils/session";
-import { getScopedStorageKey } from "../utils/storageScope";
+import { getScopedStorageKey, rememberRestaurantId } from "../utils/storageScope";
 import {
   mergeOrders,
   matchesOrderId,
@@ -17,11 +19,10 @@ import {
 import {
   getKitchenUpdatesNeedingAttention,
   getKitchenUpdatesEligibleForHandled,
+  getKitchenUpdateErrors,
   getPendingKitchenUpdates,
   markKitchenUpdatesHandled,
   queueKitchenUpdate,
-  reconcileKitchenUpdateSync,
-  recordKitchenUpdateFailure,
   retryKitchenUpdatesNeedingAttention,
 } from "../utils/offlineKitchenUpdates";
 import { getHotelThemeStyle } from "../utils/hotelTheme";
@@ -30,20 +31,59 @@ import {
   getFeatureSettings,
   hydrateHotelFeatures,
 } from "../utils/featureSettings";
+import { useConnectivity } from "../context/ConnectivityContext";
+import { useSync } from "../context/SyncContext";
+import { SYNC_STATE_EVENT } from "../utils/syncQueues";
 
 const CACHE_KEY = "flexiorder_kitchen_active_orders";
 
 export default function KitchenDashboard() {
   const navigate = useNavigate();
+  const { isOnline, status: connectionStatus, label: connectionLabel } = useConnectivity();
+  const { syncNow } = useSync();
   const [hotel, setHotel] = useState(null);
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState("");
   const [toolsOpen, setToolsOpen] = useState(false);
-  const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [pendingSyncCount, setPendingSyncCount] = useState(getPendingKitchenUpdates().length);
   const [attentionCount, setAttentionCount] = useState(getKitchenUpdatesNeedingAttention().length);
-  const syncInFlight = useRef(false);
+  const [errorBanner, setErrorBanner] = useState(null);
+  const [errorBannerTimer, setErrorBannerTimer] = useState(null);
+  // IDs that have been in READY state for 20+ seconds and should be hidden.
+  const [hiddenReadyIds, setHiddenReadyIds] = useState(new Set());
+  // orderId → timer handle — persists across re-renders so timers never restart.
+  const readyAutoHideTimers = useRef({});
+
+  const showErrorBanner = useCallback((message) => {
+    setErrorBanner(message);
+    setErrorBannerTimer((prev) => {
+      if (prev) clearTimeout(prev);
+      return window.setTimeout(() => setErrorBanner(null), 8000);
+    });
+  }, []);
+
+  useEffect(() => () => { if (errorBannerTimer) clearTimeout(errorBannerTimer); }, [errorBannerTimer]);
+
+  // Auto-hide ready orders after 20 seconds to reduce kitchen clutter.
+  useEffect(() => {
+    orders.filter((o) => o.status === "ready").forEach((order) => {
+      if (readyAutoHideTimers.current[order._id]) return; // timer already running
+      const readyAt = new Date(order.readyAt || order.updatedAt || 0).getTime();
+      const delay = Math.max(0, 20000 - (Date.now() - readyAt));
+      readyAutoHideTimers.current[order._id] = window.setTimeout(() => {
+        setHiddenReadyIds((prev) => new Set([...prev, order._id]));
+        delete readyAutoHideTimers.current[order._id];
+      }, delay);
+    });
+  }, [orders]);
+
+  // Cleanup any pending timers on unmount.
+  useEffect(() => () => {
+    Object.values(readyAutoHideTimers.current).forEach((t) => clearTimeout(t));
+  }, []);
+
   const currentRole = readStoredSession().user?.role;
 
   const cacheOrders = (next) => {
@@ -54,7 +94,9 @@ export default function KitchenDashboard() {
   const fetchHotel = useCallback(async () => {
     try {
       const response = await api.get("/hotel/me");
-      setHotel(hydrateHotelFeatures(response.data?.hotel || response.data));
+      const nextHotel = hydrateHotelFeatures(response.data?.hotel || response.data);
+      rememberRestaurantId(nextHotel);
+      setHotel(nextHotel);
     } catch (error) {
       console.warn("Kitchen hotel fetch failed", error);
     }
@@ -81,39 +123,6 @@ export default function KitchenDashboard() {
     }
   }, []);
 
-  const syncPending = useCallback(async () => {
-    if (syncInFlight.current || !navigator.onLine) return;
-    const snapshot = getPendingKitchenUpdates().filter((item) => !item.requiresAttention);
-    if (!snapshot.length) return;
-    syncInFlight.current = true;
-    try {
-      const failed = [];
-      for (const update of snapshot) {
-        try {
-          const response = await api.put(`/kitchen/orders/${update.orderId}`, {
-            status: update.status,
-            pauseReason: update.pauseReason || null,
-            clientMutationId: update.clientMutationId,
-          });
-          if (response.data?.order) {
-            setOrders((current) => cacheOrders(
-              ["delivered", "cancelled"].includes(response.data.order.status)
-                ? current.filter((order) => !matchesOrderId(order, update.orderId))
-                : replaceOrderAuthoritatively(current, response.data.order)
-            ));
-          }
-        } catch (error) {
-          failed.push(recordKitchenUpdateFailure(update, error));
-        }
-      }
-      const remaining = reconcileKitchenUpdateSync(snapshot, failed);
-      setPendingSyncCount(remaining.length);
-      setAttentionCount(getKitchenUpdatesNeedingAttention().length);
-    } finally {
-      syncInFlight.current = false;
-    }
-  }, []);
-
   useEffect(() => {
     fetchHotel();
     fetchOrders();
@@ -124,11 +133,10 @@ export default function KitchenDashboard() {
   useEffect(() => {
     if (hotel?._id) socket.emit("joinHotel", hotel._id);
   }, [hotel?._id]);
-
   useEffect(() => {
     const onNewOrder = (order) => {
       setOrders((current) => cacheOrders(mergeOrders(current, [order])));
-      new Audio("/orders_received.mp3").play().catch(() => {});
+      triggerLocalOrderNotification(order);
     };
     const onOrderUpdate = (order) => {
       if (order.status === "cancelled") {
@@ -150,38 +158,58 @@ export default function KitchenDashboard() {
   }, []);
 
   useEffect(() => {
-    const online = () => {
-      setIsOnline(true);
-      syncPending();
+    const handleSync = (event) => {
+      if (event.detail?.kind !== "kitchen-updates") return;
+      event.detail.syncedOrders?.forEach((order) => {
+        setOrders((current) => cacheOrders(
+          ["delivered", "cancelled"].includes(order.status)
+            ? current.filter((item) => !matchesOrderId(item, order._id))
+            : replaceOrderAuthoritatively(current, order)
+        ));
+      });
+      setPendingSyncCount(getPendingKitchenUpdates().length);
+      setAttentionCount(getKitchenUpdatesNeedingAttention().length);
     };
-    const offline = () => setIsOnline(false);
-    window.addEventListener("online", online);
-    window.addEventListener("offline", offline);
-    syncPending();
-    const retry = window.setInterval(syncPending, 15000);
-    return () => {
-      window.removeEventListener("online", online);
-      window.removeEventListener("offline", offline);
-      window.clearInterval(retry);
-    };
-  }, [syncPending]);
+    window.addEventListener(SYNC_STATE_EVENT, handleSync);
+    return () => window.removeEventListener(SYNC_STATE_EVENT, handleSync);
+  }, []);
 
   const updateStatus = async (orderId, status, pauseReason = null) => {
     let previousOrder = null;
     const clientMutationId = globalThis.crypto?.randomUUID?.() ||
       `mutation-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     const optimistic = { _id: orderId, status, pauseReason, updatedAt: new Date().toISOString() };
-    setOrders((current) => {
-      previousOrder = current.find((order) => order._id === orderId) || null;
-      return cacheOrders(mergeOrders(current, [optimistic]));
+
+    // Apply the optimistic update synchronously so React flushes a repaint
+    // before the network round-trip — eliminates perceived tap lag.
+    flushSync(() => {
+      setOrders((current) => {
+        previousOrder = current.find((order) => order._id === orderId) || null;
+        return cacheOrders(mergeOrders(current, [optimistic]));
+      });
     });
-    if (status === "delivered") {
-      setOrders((current) => cacheOrders(
-        current.filter((order) => !matchesOrderId(order, orderId))
-      ));
+
+    if (status !== "ready") {
+      if (readyAutoHideTimers.current[orderId]) {
+        clearTimeout(readyAutoHideTimers.current[orderId]);
+        delete readyAutoHideTimers.current[orderId];
+      }
+      setHiddenReadyIds((prev) => {
+        const next = new Set(prev);
+        next.delete(orderId);
+        return next;
+      });
     }
 
-    if (!navigator.onLine) {
+    if (status === "delivered") {
+      flushSync(() => {
+        setOrders((current) => cacheOrders(
+          current.filter((order) => !matchesOrderId(order, orderId))
+        ));
+      });
+    }
+
+    if (!isOnline) {
       queueKitchenUpdate({ orderId, status, pauseReason, clientMutationId });
       setPendingSyncCount(getPendingKitchenUpdates().length);
       return;
@@ -203,7 +231,7 @@ export default function KitchenDashboard() {
         if (previousOrder) {
           setOrders((current) => cacheOrders(replaceOrderAuthoritatively(current, previousOrder)));
         }
-        window.alert(error.response?.data?.message || "Could not update order.");
+        showErrorBanner(error.response?.data?.message || "Could not update order.");
         fetchOrders();
       }
     }
@@ -219,10 +247,21 @@ export default function KitchenDashboard() {
     );
   }, [orders, search]);
 
+  const refreshNow = async () => {
+    if (refreshing) return;
+    setRefreshing(true);
+    try {
+      await Promise.all([fetchHotel(), fetchOrders()]);
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   const lanes = {
     newOrders: filtered.filter((order) => order.status === "pending"),
     preparingOrders: filtered.filter((order) => ["accepted", "preparing"].includes(order.status)),
-    readyOrders: filtered.filter((order) => order.status === "ready"),
+    // Exclude orders that have been in ready state for 20+ seconds.
+    readyOrders: filtered.filter((order) => order.status === "ready" && !hiddenReadyIds.has(order._id)),
     pausedOrders: filtered.filter((order) => order.status === "paused"),
   };
 
@@ -241,18 +280,20 @@ export default function KitchenDashboard() {
 
   return (
     <main className="ops-workspace ops-kitchen-workspace" style={getHotelThemeStyle(hotel)}>
-      <button type="button" className="ops-edge-trigger" aria-label="Open kitchen tools" onClick={() => setToolsOpen(true)}>•••</button>
-      <span className={`ops-connection-dot ${isOnline ? "is-online" : "is-offline"}`} title={isOnline ? "Online" : "Offline"} aria-label={isOnline ? "Online" : "Offline"} />
+      <div className="ops-corner-actions">
+        <span className={`ops-connection-dot is-${connectionStatus}`} title={connectionLabel} aria-label={connectionLabel} />
+        <button type="button" className="ops-icon-button" aria-label="Refresh kitchen" onClick={refreshNow} disabled={refreshing}><FiRefreshCw className={refreshing ? "animate-spin" : ""} /></button>
+        <button type="button" className="ops-icon-button" aria-label="More kitchen options" onClick={() => setToolsOpen(true)}><FiMoreVertical /></button>
+      </div>
 
       {toolsOpen && (
         <div className="ops-sheet-backdrop" onClick={() => setToolsOpen(false)}>
           <aside className="ops-tools-sheet" onClick={(event) => event.stopPropagation()}>
             <div className="ops-tools-sheet__brand">
               <strong>{hotel?.name || "Kitchen"}</strong>
-              <span>{isOnline ? "Online" : "Offline · changes saved here"}</span>
+              <span>{connectionLabel === "Offline" ? "Offline · changes saved here" : connectionLabel}</span>
             </div>
             <label className="ops-search"><FiSearch /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search table or dish" /></label>
-            <button type="button" onClick={fetchOrders}><FiRefreshCw /> Refresh</button>
             {canSwitch && <button type="button" onClick={() => navigate("/owner/order")}>Waiter workspace</button>}
             {["owner", "superadmin"].includes(currentRole) && (
               <button type="button" onClick={() => navigate("/owner/dashboard")}>Manage restaurant</button>
@@ -264,11 +305,21 @@ export default function KitchenDashboard() {
         </div>
       )}
 
+      {errorBanner && (
+        <div className="ops-sync-strip needs-attention" role="alert">
+          <span>{errorBanner}</span>
+          <button type="button" onClick={() => setErrorBanner(null)}>Dismiss</button>
+        </div>
+      )}
+
       {(pendingSyncCount > 0 || attentionCount > 0) && (
         <div className={`ops-sync-strip${attentionCount ? " needs-attention" : ""}`}>
           <span>{attentionCount ? `${attentionCount} need attention` : `${pendingSyncCount} syncing`}</span>
           {attentionCount > 0 && (
             <>
+              {getKitchenUpdateErrors().map(({ orderId, error }) => (
+                <span key={orderId} className="ops-sync-strip__error-detail">{error}</span>
+              ))}
               {getKitchenUpdatesEligibleForHandled().length > 0 && <button type="button" onClick={() => {
                 const pending = markKitchenUpdatesHandled();
                 setPendingSyncCount(pending.length);
@@ -278,7 +329,7 @@ export default function KitchenDashboard() {
                 const pending = retryKitchenUpdatesNeedingAttention();
                 setPendingSyncCount(pending.length);
                 setAttentionCount(0);
-                syncPending();
+                syncNow();
               }}>Retry</button>
             </>
           )}

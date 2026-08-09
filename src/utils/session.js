@@ -1,3 +1,5 @@
+import { getRestaurantId } from "./storageScope";
+
 export const AUTH_CLEARED_EVENT = "flexiorder:auth-cleared";
 
 const safeGetItem = (key) => {
@@ -53,6 +55,7 @@ export const clearAuthSession = ({ notify = true } = {}) => {
   safeRemoveItem("token");
   safeRemoveItem("user");
   safeRemoveItem("role");
+  safeRemoveItem("flexiorder_active_restaurant");
 
   if (notify && typeof window !== "undefined") {
     window.dispatchEvent(new Event(AUTH_CLEARED_EVENT));
@@ -73,7 +76,10 @@ export const readStoredSession = () => {
   const token = safeGetItem("token");
   const storedUser = safeGetItem("user");
 
-  if (!token || !storedUser || isTokenExpired(token)) {
+  // Do NOT check client-side expiry here — the server returns 401 when a
+  // token is truly invalid. Proactively logging users out on expiry causes
+  // disruption for shift workers who close and reopen the app.
+  if (!token || !storedUser) {
     clearAuthSession({ notify: false });
     return { token: null, user: null };
   }
@@ -87,9 +93,17 @@ export const readStoredSession = () => {
 };
 
 export const saveAuthSession = (user, token) => {
+  if (!user || !token) return false;
   const tokenSaved = safeSetItem("token", token);
   const userSaved = safeSetItem("user", JSON.stringify(user));
-  return tokenSaved && userSaved;
+  const roleSaved = user.role ? safeSetItem("role", user.role) : true;
+  const restaurantId = getRestaurantId(user);
+  let restaurantSaved = true;
+  if (restaurantId) restaurantSaved = safeSetItem("flexiorder_active_restaurant", restaurantId);
+  else safeRemoveItem("flexiorder_active_restaurant");
+  if (tokenSaved && userSaved && roleSaved && restaurantSaved) return true;
+  clearAuthSession({ notify: false });
+  return false;
 };
 
 export const getStoredAuthToken = () => safeGetItem("token");

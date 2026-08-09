@@ -14,6 +14,7 @@ const STATUS_LABEL = {
   preparing: "Preparing",
   ready: "Ready",
   paused: "Paused",
+  delivered: "Delivered",
   history: "Completed",
 };
 
@@ -77,6 +78,11 @@ export default function OperationalOrderCard({
         ? "Deliver"
         : "Ready for pickup";
 
+  const calculatedTotal = items.reduce(
+    (sum, item) => sum + Number(item.price || item.finalPrice || 0) * Number(item.quantity || 1),
+    0
+  );
+
   return (
     <article
       className={`ops-order-card ops-order-card--${lane}${delayed ? " is-delayed" : ""}${updated ? " is-updated" : ""}${compact ? " is-compact" : ""}`}
@@ -106,10 +112,15 @@ export default function OperationalOrderCard({
       <div className="ops-order-card__head">
         <div className="ops-order-card__identity">
           <strong>{location}</strong>
+          {lead.guestName && lead.guestName !== "Guest" && (
+            <span className="ops-order-card__guest-label">{lead.guestName}</span>
+          )}
           {orders.length > 1 && <span>{orders.length} orders</span>}
         </div>
         <div className="ops-order-card__signals">
-          <span className="ops-order-card__status">{STATUS_LABEL[lane]}</span>
+          <span className="ops-order-card__status">
+            {STATUS_LABEL[lane]} {interactive && " →"}
+          </span>
           {waitingToSync && <span className="ops-order-card__updated">Syncing</span>}
           {updated && <span className="ops-order-card__updated">Updated</span>}
           {onOptions && (
@@ -132,6 +143,7 @@ export default function OperationalOrderCard({
       <div className="ops-order-card__meta">
         <span><FiClock /> {waitingMinutes(oldest)} min</span>
         <span>{items.reduce((sum, item) => sum + Number(item.quantity || 0), 0)} items</span>
+        {calculatedTotal > 0 && <span className="ops-order-card__price-badge">₹{calculatedTotal}</span>}
         {delayed && <span className="ops-order-card__delay"><FiAlertTriangle /> Delayed</span>}
       </div>
 
@@ -148,9 +160,11 @@ export default function OperationalOrderCard({
       {compact && lane !== "new" && (
         <p className="ops-order-card__summary">
           {itemCount({ items })} items
-          {lane === "ready"
-            ? surface === "waiter" ? " · Tap to deliver" : " · Ready for pickup"
-            : waitingToSync ? " · Waiting to sync" : " · Tap to finish"}
+          {lane === "delivered"
+            ? " · Delivered"
+            : lane === "ready"
+              ? surface === "waiter" ? " · Tap to deliver" : " · Ready for pickup"
+              : waitingToSync ? " · Waiting to sync" : " · Tap to finish"}
         </p>
       )}
 
@@ -160,6 +174,7 @@ export default function OperationalOrderCard({
           <span>{note}</span>
         </div>
       ))}
+
     </article>
   );
 }

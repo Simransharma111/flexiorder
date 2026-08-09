@@ -25,12 +25,16 @@ const isAmbiguousFailure = (error) => !error?.response ||
 
 const needsAttention = (item, error) => {
   const status = Number(error?.response?.status || 0);
-  const terminalClientError = status >= 400 && status < 500 && ![408, 429].includes(status);
-  const queuedForTwoMinutes = Date.now() - new Date(item.queuedAt || 0).getTime() >= 120000;
-  return terminalClientError || Number(item.attemptCount || 0) + 1 >= 8 || queuedForTwoMinutes;
+  // Only terminal client errors (4xx, excluding transient 408/429) need user action.
+  // Network failures, 5xx, and timeouts are retried silently forever.
+  return status >= 400 && status < 500 && ![408, 429].includes(status);
 };
 
 export const getPendingKitchenUpdates = () => readQueue();
+export const getKitchenUpdateErrors = () =>
+  readQueue()
+    .filter((item) => item.requiresAttention && item.lastError)
+    .map((item) => ({ orderId: item.orderId, error: item.lastError }));
 export const getKitchenUpdatesNeedingAttention = () => (
   readQueue().filter((item) => item.requiresAttention)
 );
@@ -43,6 +47,7 @@ export const retryKitchenUpdatesNeedingAttention = () => {
     ...item,
     requiresAttention: false,
     attemptCount: 0,
+    nextAttemptAt: null,
     lastError: null,
   } : item);
   writeQueue(next);
@@ -56,6 +61,7 @@ export const markKitchenUpdatesHandled = () => {
     alreadyHandled: true,
     requiresAttention: false,
     attemptCount: 0,
+    nextAttemptAt: null,
     lastError: null,
     updatedAt: new Date().toISOString(),
   } : item);
@@ -80,6 +86,7 @@ export const queueKitchenUpdate = (update) => {
       updatedAt: new Date().toISOString(),
       attemptCount: Number(update.attemptCount || 0),
       lastAttemptAt: update.lastAttemptAt || null,
+      nextAttemptAt: update.nextAttemptAt || null,
       lastError: update.lastError || null,
     }]);
     return;
@@ -119,6 +126,12 @@ export const recordKitchenUpdateFailure = (update, error) => ({
   ...update,
   attemptCount: Number(update.attemptCount || 0) + 1,
   lastAttemptAt: new Date().toISOString(),
+  nextAttemptAt: needsAttention(update, error)
+    ? null
+    : new Date(Date.now() + Math.min(
+      120000,
+      1000 * (2 ** Math.min(Number(update.attemptCount || 0) + 1, 7))
+    )).toISOString(),
   lastError: errorMessage(error),
   ambiguousOutcome: isAmbiguousFailure(error),
   requiresAttention: needsAttention(update, error),

@@ -5,6 +5,7 @@ import "./App.css";
 //back button handler
 import BackButtonHandler from "./components/BackButtonHandler";
 import AppErrorBoundary from "./components/AppErrorBoundary";
+import HomeRedirect from "./components/HomeRedirect";
 
 // Protected Route
 import ProtectedRoute from "./components/ProtectedRoute"; 
@@ -46,17 +47,17 @@ export default function App() {
         {/* Directly open Auth Page */}
        <Route
   path="/"
-  element={<LandingPage />}
+  element={<HomeRedirect><LandingPage /></HomeRedirect>}
 />
 
         <Route
           path="/login"
-          element={<AuthPage mode="login" />}
+          element={<HomeRedirect><AuthPage mode="login" /></HomeRedirect>}
         />
 
         <Route
           path="/register"
-          element={<AuthPage mode="register" />}
+          element={<HomeRedirect><AuthPage mode="register" /></HomeRedirect>}
         />
 
         {/* Guest QR Menu */}

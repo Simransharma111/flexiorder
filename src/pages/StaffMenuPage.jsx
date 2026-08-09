@@ -6,7 +6,7 @@ import OwnerMenuManager from "../components/OwnerMenuManager";
 import { canUseStaffCapability, hydrateHotelFeatures } from "../utils/featureSettings";
 import { getHotelThemeStyle } from "../utils/hotelTheme";
 import { clearAuthSession, readStoredSession } from "../utils/session";
-import { getScopedStorageKey } from "../utils/storageScope";
+import { getScopedStorageKey, rememberRestaurantId } from "../utils/storageScope";
 
 const HOTEL_CACHE_KEY = "flexiorder_staff_hotel";
 
@@ -20,6 +20,7 @@ export default function StaffMenuPage() {
     api.get("/hotel/me")
       .then((response) => {
         const nextHotel = hydrateHotelFeatures(response.data?.hotel || response.data);
+        rememberRestaurantId(nextHotel);
         setHotel(nextHotel);
         try {
           localStorage.setItem(getScopedStorageKey(HOTEL_CACHE_KEY), JSON.stringify(nextHotel));
@@ -70,7 +71,7 @@ export default function StaffMenuPage() {
         </div>
       )}
 
-      <div className="staff-menu-content"><OwnerMenuManager advancedEnabled={false} /></div>
+      <div className="staff-menu-content"><OwnerMenuManager advancedEnabled={false} restaurant={hotel} /></div>
     </main>
   );
 }

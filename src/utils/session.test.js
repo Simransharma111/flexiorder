@@ -53,10 +53,13 @@ describe("session utilities", () => {
     localStorage.setItem("cart_qr-1", "saved-cart");
     saveAuthSession({ role: "staff" }, "opaque-token");
     expect(readStoredSession().user).toEqual({ role: "staff" });
+    expect(localStorage.getItem("role")).toBe("staff");
+    expect(readStoredSession()).toEqual({ token: "opaque-token", user: { role: "staff" } });
 
     clearAuthSession({ notify: false });
     expect(localStorage.getItem("token")).toBeNull();
     expect(localStorage.getItem("user")).toBeNull();
+    expect(localStorage.getItem("role")).toBeNull();
     expect(localStorage.getItem("cart_qr-1")).toBe("saved-cart");
   });
 

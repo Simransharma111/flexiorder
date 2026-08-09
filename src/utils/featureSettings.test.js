@@ -5,6 +5,8 @@ import {
   getFeatureSettings,
   normalizeFeatureSettings,
   persistFeatureSettings,
+  featureEnabled,
+  getFeaturesForLevel,
 } from "./featureSettings";
 
 const storage = () => {
@@ -49,5 +51,16 @@ describe("feature settings", () => {
   it("orders progressive levels", () => {
     expect(appLevelAllows("simple", "basic")).toBe(false);
     expect(appLevelAllows("advanced", "basic")).toBe(true);
+  });
+
+  it("makes Advanced a strict superset with several real tools", () => {
+    const simple = getFeaturesForLevel("simple").map(({ id }) => id);
+    const basic = getFeaturesForLevel("basic").map(({ id }) => id);
+    const advanced = getFeaturesForLevel("advanced").map(({ id }) => id);
+    expect(simple.every((id) => basic.includes(id))).toBe(true);
+    expect(basic.every((id) => advanced.includes(id))).toBe(true);
+    expect(getFeaturesForLevel("advanced", { inherited: false })).toHaveLength(5);
+    expect(featureEnabled("advanced", "analyticsExport")).toBe(true);
+    expect(featureEnabled("basic", "analyticsExport")).toBe(false);
   });
 });

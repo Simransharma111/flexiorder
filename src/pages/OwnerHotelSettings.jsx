@@ -12,6 +12,7 @@ import { getHotelThemeStyle, resolveHotelTheme } from "../utils/hotelTheme";
 import {
   APP_LEVELS,
   appLevelAllows,
+  getFeaturesForLevel,
   hydrateHotelFeatures,
   normalizeFeatureSettings,
   persistFeatureSettings,
@@ -57,8 +58,14 @@ const res=await api.get(
 );
 
 
-const data=hydrateHotelFeatures(res.data?.hotel || res.data);
+let data=hydrateHotelFeatures(res.data?.hotel || res.data);
 
+if (data) {
+  const gstEnabled = Boolean(data.gstEnabled ?? data.enableGST ?? data.gst?.enabled ?? false);
+  const gstPercentage = Number(data.gstPercentage ?? data.gstRate ?? data.gst?.percentage ?? data.gst?.rate ?? 0);
+  const menuMode = data.menuMode ?? data.menuDisplayMode ?? (data.simpleMenu ? "simple" : "visual") ?? "visual";
+  data = { ...data, gstEnabled, gstPercentage, menuMode };
+}
 
 setHotel(data);
 onHotelChange?.(data);
@@ -147,7 +154,7 @@ setLoading(true);
 const featureSettings = normalizeFeatureSettings(hotel.featureSettings);
 
 
-await api.patch(
+const res = await api.patch(
   "/hotel/profile",
   {
     tagline: hotel.tagline,
@@ -160,7 +167,17 @@ await api.patch(
     whatsapp: hotel.whatsapp,
     orderingEnabled: hotel.orderingEnabled !== false,
     gstEnabled: Boolean(hotel.gstEnabled),
+    enableGST: Boolean(hotel.gstEnabled),
+    gst: {
+      enabled: Boolean(hotel.gstEnabled),
+      percentage: Number(hotel.gstPercentage || 0),
+      rate: Number(hotel.gstPercentage || 0),
+    },
     gstPercentage: Number(hotel.gstPercentage || 0),
+    gstRate: Number(hotel.gstPercentage || 0),
+    menuMode: hotel.menuMode || "visual",
+    menuDisplayMode: hotel.menuMode || "visual",
+    simpleMenu: hotel.menuMode === "simple",
     appLevel: featureSettings.appLevel,
     publicDisplayEnabled: featureSettings.publicDisplayEnabled,
     staffCapabilities: featureSettings.staffCapabilities,
@@ -168,7 +185,18 @@ await api.patch(
   }
 );
 
-persistFeatureSettings(hotel, featureSettings);
+let data = hydrateHotelFeatures(res.data?.hotel || res.data || hotel);
+if (data) {
+  const gstEnabled = Boolean(data.gstEnabled ?? data.enableGST ?? data.gst?.enabled ?? false);
+  const gstPercentage = Number(data.gstPercentage ?? data.gstRate ?? data.gst?.percentage ?? data.gst?.rate ?? 0);
+  const menuMode = data.menuMode ?? data.menuDisplayMode ?? (data.simpleMenu ? "simple" : "visual") ?? "visual";
+  data = { ...data, gstEnabled, gstPercentage, menuMode };
+}
+
+setHotel(data);
+onHotelChange?.(data);
+
+persistFeatureSettings(data, featureSettings);
 
 
 alert(
@@ -286,10 +314,20 @@ form.append(
   hotel.menuMode || "visual"
 );
 
+form.append(
+  "menuDisplayMode",
+  hotel.menuMode || "visual"
+);
+
+form.append(
+  "simpleMenu",
+  String(hotel.menuMode === "simple")
+);
 
 
 
-await api.patch(
+
+const res = await api.patch(
   "/hotel/branding",
   form,
   {
@@ -300,6 +338,16 @@ await api.patch(
 );
 
 
+let data = hydrateHotelFeatures(res.data?.hotel || res.data || hotel);
+if (data) {
+  const gstEnabled = Boolean(data.gstEnabled ?? data.enableGST ?? data.gst?.enabled ?? false);
+  const gstPercentage = Number(data.gstPercentage ?? data.gstRate ?? data.gst?.percentage ?? data.gst?.rate ?? 0);
+  const menuMode = data.menuMode ?? data.menuDisplayMode ?? (data.simpleMenu ? "simple" : "visual") ?? "visual";
+  data = { ...data, gstEnabled, gstPercentage, menuMode };
+}
+
+setHotel(data);
+onHotelChange?.(data);
 
 alert(
 "Branding updated successfully"
@@ -640,8 +688,17 @@ mt-5
       >
         <strong>{level.label}</strong>
         <span className="mt-1 block text-xs opacity-70">{level.description}</span>
+        <span className="app-level-card__count">{getFeaturesForLevel(level.id).length} included features</span>
       </button>
     ))}
+  </div>
+  <div className="app-level-feature-list" aria-live="polite">
+    <h3>{APP_LEVELS.find((level) => level.id === featureSettings.appLevel)?.label} includes</h3>
+    <div>
+      {getFeaturesForLevel(featureSettings.appLevel).map((feature) => (
+        <span key={feature.id}><span aria-hidden="true">✓</span> {feature.label}</span>
+      ))}
+    </div>
   </div>
 
   {appLevelAllows(featureSettings.appLevel, "basic") && (
@@ -858,32 +915,6 @@ text-black
 
 
 
-<button
-
-onClick={saveProfile}
-
-className="
-mt-5
-px-6
-py-3
-rounded-xl
-font-bold
-bg-white
-text-black
-flex
-gap-2
-items-center
-"
-
-
->
-
-<FaSave/>
-
-Save Profile
-
-</button>
-
 
 
 </section>
@@ -973,6 +1004,30 @@ p-6
     </div>
   )}
 </section>
+
+{/* ── Single save button covers Hotel Info + Customer Menu + GST ── */}
+<div className="flex justify-end">
+  <button
+    onClick={saveProfile}
+    disabled={loading}
+    className="
+    px-8
+    py-3
+    rounded-xl
+    font-bold
+    text-lg
+    bg-white
+    text-black
+    flex
+    gap-2
+    items-center
+    shadow-lg
+    "
+  >
+    <FaSave />
+    {loading ? "Saving…" : "Save Settings"}
+  </button>
+</div>
 
 
 

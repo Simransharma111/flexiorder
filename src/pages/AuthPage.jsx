@@ -148,10 +148,14 @@ export default function AuthPage({ mode = "login" }) {
 
 
 
-      login(
+      const sessionSaved = login(
         res.data.user,
         res.data.token
       );
+
+      if (!sessionSaved) {
+        throw new Error("FlexiOrder could not keep you signed in on this device. Free some storage and try again.");
+      }
 
 
 
@@ -221,7 +225,7 @@ export default function AuthPage({ mode = "login" }) {
         err.response?.data?.message ||
         (!err.response && err.request
           ? "Unable to reach FlexiOrder. Check your internet and try again."
-          : "Something went wrong");
+          : err.message || "Something went wrong");
 
 
       alert(
@@ -653,6 +657,7 @@ border
 border-white/10
 px-5
 py-4
+text-slate-100
 outline-none
 focus:border-blue-500
 "
@@ -686,6 +691,7 @@ border
 border-white/10
 px-5
 py-4
+text-slate-100
 outline-none
 focus:border-blue-500
 "
@@ -717,6 +723,7 @@ border
 border-white/10
 px-5
 py-4
+text-slate-100
 outline-none
 focus:border-blue-500
 "
@@ -750,6 +757,7 @@ border
 border-white/10
 px-5
 py-4
+text-slate-100
 outline-none
 focus:border-blue-500
 "

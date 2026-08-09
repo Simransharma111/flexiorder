@@ -14,15 +14,20 @@ import {
 import {
   getKitchenUpdatesNeedingAttention,
   getKitchenUpdatesEligibleForHandled,
+  getKitchenUpdateErrors,
   getPendingKitchenUpdates,
   markKitchenUpdatesHandled,
   queueKitchenUpdate,
-  reconcileKitchenUpdateSync,
-  recordKitchenUpdateFailure,
   retryKitchenUpdatesNeedingAttention,
 } from "../../utils/offlineKitchenUpdates";
+import { useConnectivity } from "../../context/ConnectivityContext";
+import { useSync } from "../../context/SyncContext";
+import { SYNC_STATE_EVENT } from "../../utils/syncQueues";
+import { flushSync } from "react-dom";
 
 export default function Orders({ orders = [], refresh, onOrdersChange }) {
+  const { isOnline } = useConnectivity();
+  const { syncNow } = useSync();
   const [activeView, setActiveView] = useState("active");
   const [search, setSearch] = useState("");
   const [historyActionOrder, setHistoryActionOrder] = useState(null);
@@ -41,7 +46,46 @@ export default function Orders({ orders = [], refresh, onOrdersChange }) {
   const [localOrders, setLocalOrders] = useState(() => mergeOrders([], orders));
   const [pendingSyncCount, setPendingSyncCount] = useState(getPendingKitchenUpdates().length);
   const [attentionCount, setAttentionCount] = useState(getKitchenUpdatesNeedingAttention().length);
-  const syncInFlight = useRef(false);
+  const [errorBanner, setErrorBanner] = useState(null);
+  const errorBannerTimerRef = useRef(null);
+  // Delivered orders accumulate for the session so History persists across polls.
+  const [sessionDeliveries, setSessionDeliveries] = useState([]);
+  // IDs currently visible in the Delivered lane (auto-hidden after 20 seconds).
+  const [visibleDeliveredIds, setVisibleDeliveredIds] = useState(new Set());
+  const deliveredAutoHideTimers = useRef({});
+
+  const showErrorBanner = useCallback((message) => {
+    setErrorBanner(message);
+    if (errorBannerTimerRef.current) clearTimeout(errorBannerTimerRef.current);
+    errorBannerTimerRef.current = window.setTimeout(() => setErrorBanner(null), 8000);
+  }, []);
+
+  useEffect(() => () => {
+    if (errorBannerTimerRef.current) clearTimeout(errorBannerTimerRef.current);
+  }, []);
+
+  // Start 20-second auto-hide timer for each new entry in sessionDeliveries.
+  useEffect(() => {
+    sessionDeliveries.forEach((order) => {
+      if (deliveredAutoHideTimers.current[order._id]) return; // already tracking
+      // Show immediately in the Delivered lane.
+      setVisibleDeliveredIds((prev) => new Set([...prev, order._id]));
+      // Hide from the Delivered lane after 20 seconds (moves to History automatically).
+      deliveredAutoHideTimers.current[order._id] = window.setTimeout(() => {
+        setVisibleDeliveredIds((prev) => {
+          const next = new Set(prev);
+          next.delete(order._id);
+          return next;
+        });
+        delete deliveredAutoHideTimers.current[order._id];
+      }, 20000);
+    });
+  }, [sessionDeliveries]);
+
+  // Cleanup timers on unmount.
+  useEffect(() => () => {
+    Object.values(deliveredAutoHideTimers.current).forEach((t) => clearTimeout(t));
+  }, []);
 
   useEffect(() => {
     setLocalOrders((current) => reconcileAuthoritativeOrders(
@@ -51,6 +95,15 @@ export default function Orders({ orders = [], refresh, onOrdersChange }) {
     ));
   }, [orders]);
 
+  const prevPendingCountRef = useRef(0);
+  useEffect(() => {
+    const pendingCount = localOrders.filter(o => o.status === "pending").length;
+    if (pendingCount > prevPendingCountRef.current) {
+      setActiveView("active");
+    }
+    prevPendingCountRef.current = pendingCount;
+  }, [localOrders]);
+
   const publishOrders = useCallback((updater) => {
     setLocalOrders((current) => {
       const next = typeof updater === "function" ? updater(current) : updater;
@@ -59,46 +112,21 @@ export default function Orders({ orders = [], refresh, onOrdersChange }) {
     });
   }, [onOrdersChange]);
 
-  const syncPendingUpdates = useCallback(async () => {
-    if (syncInFlight.current || !navigator.onLine) return;
-    const snapshot = getPendingKitchenUpdates().filter((item) => !item.requiresAttention);
-    if (!snapshot.length) return;
-    syncInFlight.current = true;
-    try {
-      const failed = [];
-      for (const update of snapshot) {
-        try {
-          const response = await api.put(`/kitchen/orders/${update.orderId}`, {
-            status: update.status,
-            pauseReason: update.pauseReason || null,
-            clientMutationId: update.clientMutationId,
-          });
-          if (response.data?.order) {
-            publishOrders((current) => replaceOrderAuthoritatively(current, response.data.order));
-          }
-        } catch (error) {
-          failed.push(recordKitchenUpdateFailure(update, error));
-        }
-      }
-      const remaining = reconcileKitchenUpdateSync(snapshot, failed);
-      setPendingSyncCount(remaining.length);
-      setAttentionCount(getKitchenUpdatesNeedingAttention().length);
-      if (failed.length !== snapshot.length) refresh?.();
-    } finally {
-      syncInFlight.current = false;
-    }
-  }, [publishOrders, refresh]);
-
   useEffect(() => {
-    const online = () => syncPendingUpdates();
-    window.addEventListener("online", online);
-    syncPendingUpdates();
-    const interval = window.setInterval(syncPendingUpdates, 15000);
-    return () => {
-      window.removeEventListener("online", online);
-      window.clearInterval(interval);
+    const handleSync = (event) => {
+      if (event.detail?.kind !== "kitchen-updates") return;
+      event.detail.syncedOrders?.forEach((order) => {
+        publishOrders((current) => replaceOrderAuthoritatively(current, order));
+      });
+      setPendingSyncCount(getPendingKitchenUpdates().length);
+      setAttentionCount(getKitchenUpdatesNeedingAttention().length);
+      if (event.detail.syncedOrders?.length) refresh?.();
     };
-  }, [syncPendingUpdates]);
+    window.addEventListener(SYNC_STATE_EVENT, handleSync);
+    return () => {
+      window.removeEventListener(SYNC_STATE_EVENT, handleSync);
+    };
+  }, [publishOrders, refresh]);
 
   const updateStatus = async (orderId, status, pauseReason = null) => {
     let previousOrder = null;
@@ -114,12 +142,37 @@ export default function Orders({ orders = [], refresh, onOrdersChange }) {
         statusChangeType: "revert",
       } : {}),
     };
-    publishOrders((current) => {
-      previousOrder = current.find((order) => order._id === orderId) || null;
-      return mergeOrders(current, [optimistic]);
+    flushSync(() => {
+      publishOrders((current) => {
+        previousOrder = current.find((order) => order._id === orderId) || null;
+        return mergeOrders(current, [optimistic]);
+      });
     });
 
-    if (!navigator.onLine) {
+    // When marking delivered, add a session snapshot immediately so the
+    // Delivered lane populates even before the API responds.
+    if (status === "delivered") {
+      const snapshot = { ...(previousOrder || {}), _id: orderId, status: "delivered",
+        deliveredAt: new Date().toISOString() };
+      setSessionDeliveries((prev) => [
+        ...prev.filter((o) => o._id !== orderId),
+        snapshot,
+      ]);
+    } else {
+      // If an order is corrected back (e.g. to "preparing"), remove it from session
+      setSessionDeliveries((prev) => prev.filter((o) => o._id !== orderId));
+      if (deliveredAutoHideTimers.current[orderId]) {
+        clearTimeout(deliveredAutoHideTimers.current[orderId]);
+        delete deliveredAutoHideTimers.current[orderId];
+      }
+      setVisibleDeliveredIds((prev) => {
+        const next = new Set(prev);
+        next.delete(orderId);
+        return next;
+      });
+    }
+
+    if (!isOnline) {
       queueKitchenUpdate({ orderId, status, pauseReason, clientMutationId });
       setPendingSyncCount(getPendingKitchenUpdates().length);
       return;
@@ -128,6 +181,13 @@ export default function Orders({ orders = [], refresh, onOrdersChange }) {
       const response = await api.put(`/kitchen/orders/${orderId}`, { status, pauseReason, clientMutationId });
       if (response.data?.order) {
         publishOrders((current) => replaceOrderAuthoritatively(current, response.data.order));
+        // Update the session delivery snapshot with the server-confirmed data.
+        if (response.data.order.status === "delivered") {
+          setSessionDeliveries((prev) => [
+            ...prev.filter((o) => o._id !== orderId),
+            response.data.order,
+          ]);
+        }
       }
       else refresh?.();
     } catch (error) {
@@ -138,24 +198,42 @@ export default function Orders({ orders = [], refresh, onOrdersChange }) {
         if (previousOrder) {
           publishOrders((current) => replaceOrderAuthoritatively(current, previousOrder));
         }
-        window.alert(error.response?.data?.message || "Could not update order.");
+        showErrorBanner(error.response?.data?.message || "Could not update order.");
         refresh?.();
       }
     }
   };
 
+  // Active board: all non-cancelled, non-delivered orders.
   const activeOrders = useMemo(() => localOrders.filter(
     (order) => !["cancelled", "delivered"].includes(order.status)
   ), [localOrders]);
+
+  // Delivered lane: only orders still within their 20-second visibility window.
+  const deliveredOrders = useMemo(() =>
+    sessionDeliveries.filter((o) => visibleDeliveredIds.has(o._id)),
+  [sessionDeliveries, visibleDeliveredIds]);
+
   const lanes = {
     newOrders: activeOrders.filter((order) => order.status === "pending"),
     preparingOrders: activeOrders.filter((order) => ["accepted", "preparing"].includes(order.status)),
     readyOrders: activeOrders.filter((order) => order.status === "ready"),
     pausedOrders: activeOrders.filter((order) => order.status === "paused"),
+    deliveredOrders,
   };
-  const historyOrders = useMemo(() => localOrders.filter(
-    (order) => ["delivered", "cancelled"].includes(order.status)
-  ), [localOrders]);
+
+  // History: delivered/cancelled from live orders + ALL session deliveries (including auto-hidden ones).
+  const historyOrders = useMemo(() => {
+    const localHistory = localOrders.filter(
+      (order) => ["delivered", "cancelled"].includes(order.status)
+    );
+    const liveIds = new Set(localHistory.map((o) => o._id));
+    // Session deliveries that were reconciled away from localOrders (auto-hidden) still show in history.
+    const sessionHistory = sessionDeliveries.filter((o) => !liveIds.has(o._id));
+    return [...localHistory, ...sessionHistory].sort(
+      (a, b) => new Date(b.deliveredAt || b.updatedAt || 0) - new Date(a.deliveredAt || a.updatedAt || 0)
+    );
+  }, [localOrders, sessionDeliveries]);
   const filteredHistory = useMemo(() => {
     const term = search.trim().toLowerCase();
     if (!term) return historyOrders;
@@ -167,9 +245,9 @@ export default function Orders({ orders = [], refresh, onOrdersChange }) {
     ].some((value) => String(value || "").toLowerCase().includes(term)));
   }, [historyOrders, search]);
 
-  const changeHistoryStatus = async (status) => {
+  const changeHistoryStatus = (status) => {
     if (!historyActionOrder) return;
-    await updateStatus(historyActionOrder._id, status);
+    updateStatus(historyActionOrder._id, status);
     setHistoryActionOrder(null);
     if (!["delivered", "cancelled"].includes(status)) setActiveView("active");
   };
@@ -188,11 +266,20 @@ export default function Orders({ orders = [], refresh, onOrdersChange }) {
         <button type="button" role="tab" aria-selected={activeView === "active"} className={activeView === "active" ? "is-active" : ""} onClick={() => setActiveView("active")}>Active</button>
         <button type="button" role="tab" aria-selected={activeView === "history"} className={activeView === "history" ? "is-active" : ""} onClick={() => setActiveView("history")}>History</button>
       </div>
+      {errorBanner && (
+        <div className="ops-sync-strip needs-attention" role="alert">
+          <span>{errorBanner}</span>
+          <button type="button" onClick={() => setErrorBanner(null)}>Dismiss</button>
+        </div>
+      )}
       {(pendingSyncCount > 0 || attentionCount > 0) && (
         <div className={`ops-sync-strip${attentionCount ? " needs-attention" : ""}`}>
           <span>{attentionCount ? `${attentionCount} need attention` : `${pendingSyncCount} syncing`}</span>
           {attentionCount > 0 && (
             <>
+              {getKitchenUpdateErrors().map(({ orderId, error }) => (
+                <span key={orderId} className="ops-sync-strip__error-detail">{error}</span>
+              ))}
               {getKitchenUpdatesEligibleForHandled().length > 0 && <button type="button" onClick={() => {
                 const pending = markKitchenUpdatesHandled();
                 setPendingSyncCount(pending.length);
@@ -202,7 +289,7 @@ export default function Orders({ orders = [], refresh, onOrdersChange }) {
                 const pending = retryKitchenUpdatesNeedingAttention();
                 setPendingSyncCount(pending.length);
                 setAttentionCount(0);
-                syncPendingUpdates();
+                syncNow();
               }}>Retry</button>
             </>
           )}
@@ -214,7 +301,12 @@ export default function Orders({ orders = [], refresh, onOrdersChange }) {
         <div className="ops-order-history">
           <label className="ops-search"><FiSearch /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search old orders" /></label>
           {filteredHistory.length ? filteredHistory.map((order) => (
-            <OrderCard key={orderKey(order)} order={order} onLongPress={openHistoryActions} />
+            <OrderCard
+              key={orderKey(order)}
+              order={order}
+              onTap={(o) => setHistoryDetailOrder(o)}
+              onLongPress={openHistoryActions}
+            />
           )) : <div className="ops-history-empty"><FiShoppingBag /><span>No history found</span></div>}
         </div>
       )}

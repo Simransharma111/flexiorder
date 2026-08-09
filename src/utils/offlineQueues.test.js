@@ -47,6 +47,14 @@ describe("offline queues", () => {
     expect(failed.lastAttemptAt).toBeTruthy();
   });
 
+  it("uses one stable staff order id before and during replay", () => {
+    const first = queueStaffOrder({ clientOrderId: "client-order-1", tableId: "table-1", items: [] });
+    const duplicate = queueStaffOrder({ clientOrderId: "client-order-1", tableId: "table-1", items: [] });
+    expect(first.clientOrderId).toBe("client-order-1");
+    expect(duplicate).toEqual(first);
+    expect(getPendingStaffOrders()).toHaveLength(1);
+  });
+
   it("keeps only the latest kitchen mutation for each order", () => {
     queueKitchenUpdate({ orderId: "order-1", status: "preparing" });
     queueKitchenUpdate({ orderId: "order-1", status: "ready" });
@@ -97,13 +105,18 @@ describe("offline queues", () => {
 
   it("batch-clears only ambiguous work marked as already handled", () => {
     const staff = queueStaffOrder({ tableId: "table-1", items: [] });
-    const staffFailure = recordStaffOrderFailure({ ...staff, attemptCount: 7 }, new Error("connection lost"));
+    // Use a 503 (ambiguous server error) to set requiresAttention via the
+    // legacy markStaffOrdersHandled path. Note: with the new retry policy
+    // pure network errors no longer set requiresAttention; only 4xx terminal
+    // errors do. The markHandled path still clears ambiguous (5xx) items that
+    // were manually flagged, so we force requiresAttention directly here.
+    const staffFailure = { ...recordStaffOrderFailure(staff, new Error("connection lost")), requiresAttention: true, ambiguousOutcome: true };
     reconcileStaffOrderSync([staff], [staffFailure]);
     expect(markStaffOrdersHandled()).toEqual([expect.objectContaining({ alreadyHandled: true, requiresAttention: false })]);
 
     queueKitchenUpdate({ orderId: "order-1", status: "ready" });
     const kitchen = getPendingKitchenUpdates()[0];
-    const kitchenFailure = recordKitchenUpdateFailure({ ...kitchen, attemptCount: 7 }, new Error("connection lost"));
+    const kitchenFailure = { ...recordKitchenUpdateFailure(kitchen, new Error("connection lost")), requiresAttention: true, ambiguousOutcome: true };
     reconcileKitchenUpdateSync([kitchen], [kitchenFailure]);
     expect(markKitchenUpdatesHandled()).toEqual([expect.objectContaining({ alreadyHandled: true, requiresAttention: false, status: "delivered" })]);
   });

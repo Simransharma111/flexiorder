@@ -9,11 +9,17 @@ const LANE_META = [
   { key: "ready", title: "🟢 READY", empty: "Nothing ready" },
 ];
 
+const WAITER_LANE_META = [
+  ...LANE_META,
+  { key: "delivered", title: "✅ DELIVERED", empty: "Nothing delivered yet" },
+];
+
 export default function KitchenBoard({
   newOrders = [],
   preparingOrders = [],
   readyOrders = [],
   pausedOrders = [],
+  deliveredOrders = [],
   updateStatus,
   surface = "kitchen",
 }) {
@@ -25,20 +31,26 @@ export default function KitchenBoard({
     new: groupOrdersByLocation(newOrders),
     preparing: groupOrdersByLocation(preparingOrders),
     ready: groupOrdersByLocation(readyOrders),
-  }), [newOrders, preparingOrders, readyOrders]);
+    delivered: groupOrdersByLocation(deliveredOrders),
+  }), [newOrders, preparingOrders, readyOrders, deliveredOrders]);
 
-  const updateGroup = async (orders, status, pauseReason = null) => {
-    for (const order of orders) {
-      await updateStatus(order._id, status, pauseReason);
-    }
+  const activeLaneMeta = surface === "waiter" ? WAITER_LANE_META : LANE_META;
+
+  const updateGroup = (orders, status, pauseReason = null) => {
+    orders.forEach((order) => {
+      updateStatus(order._id, status, pauseReason);
+    });
   };
 
-  const primaryAction = async (_lead, orders) => {
-    for (const order of orders) {
-      if (order.pendingSync) continue;
-      const next = nextOrderStatus(order.status, surface);
-      if (next) await updateStatus(order._id, next, null);
-    }
+  const primaryAction = (_lead, orders) => {
+    orders
+      .filter((order) => !order.pendingSync)
+      .forEach((order) => {
+        const next = nextOrderStatus(order.status, surface);
+        if (next) {
+          updateStatus(order._id, next, null);
+        }
+      });
   };
 
   const closeActions = useCallback(() => {
@@ -46,9 +58,9 @@ export default function KitchenBoard({
     setReason("");
   }, []);
 
-  const runAction = async (status) => {
+  const runAction = (status) => {
     if (!actionGroup || actionGroup.orders.some((order) => order.pendingSync)) return;
-    await updateGroup(actionGroup.orders, status, reason.trim() || null);
+    updateGroup(actionGroup.orders, status, reason.trim() || null);
     closeActions();
   };
 
@@ -65,26 +77,35 @@ export default function KitchenBoard({
 
   return (
     <section className={`ops-board ops-board--${surface}`} aria-label={`${surface} active orders`}>
-      {LANE_META.map((lane) => (
+      {activeLaneMeta.map((lane) => (
         <section className={`ops-lane ops-lane--${lane.key}`} key={lane.key}>
           <header className="ops-lane__head">
             <h2>{lane.title}</h2>
             <span className={`ops-lane__count${lane.key === "new" && lanes.new.length ? " is-live" : ""}`}>
-              {lanes[lane.key].length}
+              {lanes[lane.key]?.length ?? 0}
             </span>
           </header>
           <div className="ops-lane__cards">
-            {lanes[lane.key].map((group) => (
+            {(lanes[lane.key] || []).map((group) => (
               <OperationalOrderCard
                 key={group.key}
                 group={group}
                 surface={surface}
                 compact={lane.key !== "new"}
-                onPrimary={(lane.key === "ready" && surface === "kitchen") || group.orders.every((order) => order.status === "delivered") ? undefined : primaryAction}
+              onPrimary={
+                // Kitchen: suppress primary tap on ready (no further kitchen action).
+                // Waiter: ready cards deliver on tap; all other lanes advance normally.
+                // Delivered lane: no further action possible.
+                lane.key === "delivered" ||
+                (lane.key === "ready" && surface === "kitchen") ||
+                group.orders.every((order) => order.status === "delivered")
+                  ? undefined
+                  : primaryAction
+              }
                 onOptions={(_lead, orders) => setActionGroup({ ...group, orders })}
               />
             ))}
-            {!lanes[lane.key].length && <p className="ops-lane__empty">{lane.empty}</p>}
+            {!lanes[lane.key]?.length && <p className="ops-lane__empty">{lane.empty}</p>}
           </div>
         </section>
       ))}
@@ -110,15 +131,25 @@ export default function KitchenBoard({
               <p>This order is saved on this device. Actions unlock after it syncs.</p>
             ) : <><textarea value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Reason or note (optional)" />
             <div className="ops-action-sheet__actions">
-              {actionGroup.orders[0]?.status === "paused" ? (
-                <button type="button" onClick={() => runAction("preparing")}>Resume preparing</button>
+              {actionGroup.orders[0]?.status === "delivered" ? (
+                <>
+                  <button type="button" onClick={() => runAction("ready")}>Mark not delivered (Back to Ready)</button>
+                  <button type="button" onClick={() => runAction("preparing")}>Resume preparing</button>
+                  <button type="button" className="is-danger" onClick={() => runAction("cancelled")}>Cancel order</button>
+                </>
               ) : (
-                <button type="button" onClick={() => runAction("paused")}>Pause</button>
+                <>
+                  {actionGroup.orders[0]?.status === "paused" ? (
+                    <button type="button" onClick={() => runAction("preparing")}>Resume preparing</button>
+                  ) : (
+                    <button type="button" onClick={() => runAction("paused")}>Pause</button>
+                  )}
+                  {surface === "waiter" && (
+                    <button type="button" onClick={() => runAction("delivered")}>Mark delivered</button>
+                  )}
+                  <button type="button" className="is-danger" onClick={() => runAction("cancelled")}>Cancel order</button>
+                </>
               )}
-              {surface === "waiter" && actionGroup.orders[0]?.status !== "delivered" && (
-                <button type="button" onClick={() => runAction("delivered")}>Mark delivered</button>
-              )}
-              <button type="button" className="is-danger" onClick={() => runAction("cancelled")}>Cancel order</button>
             </div></>}
             <button type="button" className="ops-sheet-cancel" onClick={closeActions}>Close</button>
           </section>

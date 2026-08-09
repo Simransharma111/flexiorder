@@ -13,6 +13,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useCart } from "../context/CartContext";
 import { useEffect, useState } from "react";
 import api from "../api/axios";
+import { useConnectivity } from "../context/ConnectivityContext";
 
 const getHotelPricing = (hotel) => {
   const enabled = Boolean(
@@ -30,6 +31,7 @@ const getHotelPricing = (hotel) => {
 export default function CartPage() {
   const navigate = useNavigate();
   const { qrId } = useParams();
+  const { isOnline } = useConnectivity();
 
   const {
     cartItems,
@@ -52,6 +54,8 @@ export default function CartPage() {
   const [placingOrder, setPlacingOrder] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
+  // Track whether the host has paused QR ordering.
+  const [orderingEnabled, setOrderingEnabled] = useState(true);
 
   // =========================================================
   // SET CART SESSION
@@ -62,7 +66,10 @@ export default function CartPage() {
       setCartSession(qrId);
       api.get(`/qr/menu/${qrId}`, { skipAuth: true })
         .then((response) => {
-          const pricing = getHotelPricing(response.data?.hotel);
+          const hotel = response.data?.hotel;
+          // Respect the host's ordering toggle.
+          setOrderingEnabled(hotel?.orderingEnabled !== false);
+          const pricing = getHotelPricing(hotel);
           setGstEnabled(pricing.enabled);
           setGstRate(pricing.rate);
           const menu = response.data?.dishes || response.data?.menu || [];
@@ -90,6 +97,30 @@ export default function CartPage() {
   const hasUnavailableItems = cartItems.some((item) =>
     unavailableIds.includes(item._id)
   );
+
+  // =========================================================
+  // ORDERING DISABLED — block the cart page entirely
+  // =========================================================
+
+  if (!orderingEnabled) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6">
+        <div className="bg-white rounded-2xl p-8 text-center shadow-sm w-full max-w-md">
+          <div className="text-5xl mb-4">🚫</div>
+          <h2 className="text-xl font-bold text-gray-900">Ordering is paused</h2>
+          <p className="text-gray-500 mt-2 text-sm">
+            The restaurant has temporarily disabled customer ordering. Please ask a waiter to place the order on your behalf.
+          </p>
+          <button
+            onClick={() => navigate(`/qr/${qrId}`)}
+            className="mt-6 w-full bg-orange-500 hover:bg-orange-600 text-white py-3 rounded-xl font-bold"
+          >
+            Back to Menu
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   // =========================================================
   // MINIMUM SCHEDULE TIME
@@ -158,8 +189,13 @@ export default function CartPage() {
       return;
     }
 
-    if (!navigator.onLine) {
+    if (!isOnline) {
       setErrorMessage("You are offline. Please reconnect before placing the order.");
+      return;
+    }
+
+    if (!orderingEnabled) {
+      setErrorMessage("Customer ordering is currently disabled. Please ask a waiter to place the order.");
       return;
     }
 

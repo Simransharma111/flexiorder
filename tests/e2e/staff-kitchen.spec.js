@@ -181,3 +181,21 @@ test("Simple mode keeps workspace switching but hides optional staff controls", 
   await page.goto("/staff/menu");
   await expect(page.getByText("Menu editing is not enabled for staff.")).toBeVisible();
 });
+
+test("waiter and kitchen keep Refresh outside their right-side overflow menus", async ({ page }) => {
+  await installSession(page, "staff");
+  await mockStaffWorkspace(page);
+
+  await page.goto("/owner/order");
+  await expect(page.getByRole("button", { name: "Refresh waiter workspace" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "More waiter options" })).toBeVisible();
+  await page.getByRole("button", { name: "More waiter options" }).click();
+  await expect(page.locator(".ops-tools-sheet").getByRole("button", { name: /^Refresh/ })).toHaveCount(0);
+
+  await page.route("**/kitchen/orders", (route) => fulfillJson(route, { orders: [kitchenOrder()] }));
+  await page.goto("/kitchen");
+  await expect(page.getByRole("button", { name: "Refresh kitchen" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "More kitchen options" })).toBeVisible();
+  await page.getByRole("button", { name: "More kitchen options" }).click();
+  await expect(page.locator(".ops-tools-sheet").getByRole("button", { name: /^Refresh/ })).toHaveCount(0);
+});

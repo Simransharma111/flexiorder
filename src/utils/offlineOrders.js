@@ -25,9 +25,9 @@ const isAmbiguousFailure = (error) => !error?.response ||
 
 const needsAttention = (item, error) => {
   const status = Number(error?.response?.status || 0);
-  const terminalClientError = status >= 400 && status < 500 && ![408, 429].includes(status);
-  const queuedForTwoMinutes = Date.now() - new Date(item.queuedAt || 0).getTime() >= 120000;
-  return terminalClientError || Number(item.attemptCount || 0) + 1 >= 8 || queuedForTwoMinutes;
+  // Only terminal client errors (4xx, excluding transient 408/429) need user action.
+  // Network failures, 5xx, and timeouts are retried silently forever.
+  return status >= 400 && status < 500 && ![408, 429].includes(status);
 };
 
 export const getPendingStaffOrders = () => readQueue();
@@ -43,7 +43,9 @@ export const retryStaffOrdersNeedingAttention = () => {
     ...item,
     requiresAttention: false,
     attemptCount: 0,
+    nextAttemptAt: null,
     lastError: null,
+    updatedAt: new Date().toISOString(),
   } : item);
   writeQueue(next);
   return next;
@@ -55,7 +57,9 @@ export const markStaffOrdersHandled = () => {
     alreadyHandled: true,
     requiresAttention: false,
     attemptCount: 0,
+    nextAttemptAt: null,
     lastError: null,
+    updatedAt: new Date().toISOString(),
   } : item);
   writeQueue(next);
   return next;
@@ -63,12 +67,18 @@ export const markStaffOrdersHandled = () => {
 
 export const queueStaffOrder = (payload) => {
   const clientOrderId =
-    globalThis.crypto?.randomUUID?.() ||
+    payload?.clientOrderId || globalThis.crypto?.randomUUID?.() ||
     `offline-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+  const existing = readQueue().find((item) => item.clientOrderId === clientOrderId);
+  if (existing) return existing;
+
+  const now = new Date().toISOString();
 
   const queuedOrder = {
     clientOrderId,
-    queuedAt: new Date().toISOString(),
+    queuedAt: now,
+    updatedAt: now,
     attemptCount: 0,
     lastAttemptAt: null,
     lastError: null,
@@ -80,11 +90,17 @@ export const queueStaffOrder = (payload) => {
 };
 
 export const reconcileStaffOrderSync = (snapshot, failed) => {
-  const snapshotIds = new Set(snapshot.map((item) => item.clientOrderId));
-  const additions = readQueue().filter(
-    (item) => !snapshotIds.has(item.clientOrderId)
-  );
-  writeQueue([...failed, ...additions]);
+  const snapshotById = new Map(snapshot.map((item) => [item.clientOrderId, item]));
+  const changedDuringSync = readQueue().filter((item) => {
+    const original = snapshotById.get(item.clientOrderId);
+    return !original || original.updatedAt !== item.updatedAt ||
+      original.alreadyHandled !== item.alreadyHandled;
+  });
+  const changedIds = new Set(changedDuringSync.map((item) => item.clientOrderId));
+  writeQueue([
+    ...failed.filter((item) => !changedIds.has(item.clientOrderId)),
+    ...changedDuringSync,
+  ]);
   return readQueue();
 };
 
@@ -92,6 +108,13 @@ export const recordStaffOrderFailure = (queuedOrder, error) => ({
   ...queuedOrder,
   attemptCount: Number(queuedOrder.attemptCount || 0) + 1,
   lastAttemptAt: new Date().toISOString(),
+  updatedAt: new Date().toISOString(),
+  nextAttemptAt: needsAttention(queuedOrder, error)
+    ? null
+    : new Date(Date.now() + Math.min(
+      120000,
+      1000 * (2 ** Math.min(Number(queuedOrder.attemptCount || 0) + 1, 7))
+    )).toISOString(),
   lastError: errorMessage(error),
   ambiguousOutcome: isAmbiguousFailure(error),
   requiresAttention: needsAttention(queuedOrder, error),

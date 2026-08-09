@@ -6,6 +6,7 @@ import {
 
 import {
   FiBarChart2,
+  FiBox,
   FiPackage,
   FiSettings,
   FiShoppingBag,
@@ -17,6 +18,7 @@ import { useNavigate } from "react-router-dom";
 
 import api from "../api/axios";
 import socket from "../socket";
+import { triggerLocalOrderNotification } from "../utils/fcmPush";
 
 import Header from "../components/ownerdashboard/Header";
 import Sidebar from "../components/ownerdashboard/Sidebar";
@@ -29,14 +31,19 @@ import TableQRManager from "../components/TableQRManager";
 import AnalyticsDashboard from "../components/AnalyticsDashboard";
 import StaffManager from "../components/StaffManager";
 import OwnerHotelSettings from "./OwnerHotelSettings";
+import QRInventoryPage from "./QRInventoryPage";
 
 import HOTEL_THEMES from "../constants/hotelThemes";
 import { mergeOrders, reconcileAuthoritativeOrders } from "../utils/orderModel";
 import { getPendingKitchenUpdates } from "../utils/offlineKitchenUpdates";
 import { clearAuthSession } from "../utils/session";
 import { getHotelThemeStyle } from "../utils/hotelTheme";
-import { appLevelAllows, getFeatureSettings, hydrateHotelFeatures } from "../utils/featureSettings";
+import { featureEnabled, getFeatureSettings, hydrateHotelFeatures } from "../utils/featureSettings";
+import { getScopedStorageKey, rememberRestaurantId } from "../utils/storageScope";
+import { useConnectivity } from "../context/ConnectivityContext";
 
+const HOTEL_CACHE_KEY = "flexiorder_owner_hotel";
+const ORDERS_CACHE_KEY = "flexiorder_owner_orders";
 
 
 const NAV_ITEMS = [
@@ -45,48 +52,55 @@ const NAV_ITEMS = [
 key:"home",
 label:"Today",
 icon:FiBarChart2,
-minimumLevel:"simple"
+feature:"today"
 },
 
 {
 key:"menu",
 label:"Menu",
 icon:FiPackage,
-minimumLevel:"simple"
+feature:"menu"
 },
 
 {
 key:"orders",
 label:"History",
 icon:FiShoppingBag,
-minimumLevel:"simple"
+feature:"orderHistory"
 },
 
 {
 key:"settings",
 label:"Settings",
 icon:FiSettings,
-minimumLevel:"simple"
+feature:"settings"
 },
 {
 key:"staff",
 label:"Staff",
 icon:FiUsers,
-minimumLevel:"basic"
+feature:"staffManagement"
 },
 
 {
 key:"tables",
 label:"QR Tables",
 icon:FiTable,
-minimumLevel:"simple"
+feature:"qrTables"
 },
 
 {
 key:"analytics",
 label:"Analytics",
 icon:FiBarChart2,
-minimumLevel:"basic"
+feature:"analytics"
+},
+
+{
+key:"inventory",
+label:"QR Inventory",
+icon:FiBox,
+feature:"qrInventory"
 }
 
 ];
@@ -96,12 +110,17 @@ minimumLevel:"basic"
 export default function OwnerDashboard(){
 
 const navigate = useNavigate();
+const { status: connectionStatus, label: connectionLabel } = useConnectivity();
 
 
 
-const [hotel,setHotel]=useState(null);
+const [hotel,setHotel]=useState(()=>{
+try{return JSON.parse(localStorage.getItem(getScopedStorageKey(HOTEL_CACHE_KEY))||"null");}catch{return null;}
+});
 
-const [orders,setOrders]=useState([]);
+const [orders,setOrders]=useState(()=>{
+try{const cached=JSON.parse(localStorage.getItem(getScopedStorageKey(ORDERS_CACHE_KEY))||"[]");return Array.isArray(cached)?cached:[];}catch{return [];}
+});
 
 const [activeTab,setActiveTab]=useState("home");
 
@@ -131,7 +150,10 @@ const res=await api.get(
 "/hotel/me"
 );
 
-setHotel(hydrateHotelFeatures(res.data?.hotel || res.data));
+const nextHotel=hydrateHotelFeatures(res.data?.hotel || res.data);
+rememberRestaurantId(nextHotel);
+setHotel(nextHotel);
+localStorage.setItem(getScopedStorageKey(HOTEL_CACHE_KEY),JSON.stringify(nextHotel));
 
 
 }
@@ -141,6 +163,11 @@ console.log(
 "Hotel error",
 error
 );
+
+try{
+const cached=localStorage.getItem(getScopedStorageKey(HOTEL_CACHE_KEY));
+if(cached)setHotel(JSON.parse(cached));
+}catch(cacheError){console.warn("Owner hotel cache error",cacheError);}
 
 }
 
@@ -163,12 +190,14 @@ try{
 setLoadingOrders(true);
 
 
-const res = await api.get("/kitchen/orders?type=kitchen");
+const res = await api.get("/kitchen/orders");
 
 
-setOrders((previous) =>
-reconcileAuthoritativeOrders(previous, res.data?.orders || res.data || [], getPendingKitchenUpdates())
-);
+setOrders((previous) =>{
+const next=reconcileAuthoritativeOrders(previous, res.data?.orders || res.data || [], getPendingKitchenUpdates());
+localStorage.setItem(getScopedStorageKey(ORDERS_CACHE_KEY),JSON.stringify(next));
+return next;
+});
 
 
 }
@@ -178,6 +207,11 @@ console.log(
 "Orders error",
 error
 );
+
+try{
+const cached=JSON.parse(localStorage.getItem(getScopedStorageKey(ORDERS_CACHE_KEY))||"[]");
+if(Array.isArray(cached))setOrders((previous)=>mergeOrders(previous,cached));
+}catch(cacheError){console.warn("Owner orders cache error",cacheError);}
 
 }
 finally{
@@ -229,13 +263,18 @@ hotel._id
 const newOrderHandler=(order)=>{
 
 
-setOrders((previous) => mergeOrders(previous, [order]));
+setOrders((previous) => {
+const next=mergeOrders(previous,[order]);
+localStorage.setItem(getScopedStorageKey(ORDERS_CACHE_KEY),JSON.stringify(next));
+return next;
+});
 
 
 setNewOrderCount(
 prev=>prev+1
 );
 
+triggerLocalOrderNotification(order);
 
 };
 
@@ -414,7 +453,7 @@ setNewOrderCount(0);
 
 const featureSettings = getFeatureSettings(hotel);
 const navItems = NAV_ITEMS.filter((item) =>
-  appLevelAllows(featureSettings.appLevel, item.minimumLevel)
+  featureEnabled(featureSettings.appLevel, item.feature)
 );
 
 
@@ -561,6 +600,8 @@ setSidebarOpen(true)
 onRefresh={refresh}
 
 loading={loadingOrders}
+connectionStatus={connectionStatus}
+connectionLabel={connectionLabel}
 
 />
 
@@ -584,6 +625,10 @@ activeTab==="home" &&
 
 stats={stats}
 
+hotel={hotel}
+
+setActiveTab={setActiveTab}
+
 primaryColor={primaryColor}
 
 accentColor={accentColor}
@@ -606,7 +651,10 @@ orders={orders}
 
 refresh={fetchOrders}
 
-onOrdersChange={setOrders}
+onOrdersChange={(next)=>{
+setOrders(next);
+localStorage.setItem(getScopedStorageKey(ORDERS_CACHE_KEY),JSON.stringify(next));
+}}
 
 loading={loadingOrders}
 
@@ -631,7 +679,8 @@ refreshKey={refreshKey}
 
 setRefreshKey={setRefreshKey}
 
-advancedEnabled={featureSettings.appLevel === "advanced"}
+advancedEnabled={featureEnabled(featureSettings.appLevel, "menuImport")}
+restaurant={hotel}
 
 />
 
@@ -672,7 +721,7 @@ setRefreshKey={setRefreshKey}
 {
 activeTab==="analytics" &&
 
-<AnalyticsDashboard/>
+<AnalyticsDashboard hotel={hotel} orders={orders} advancedEnabled={featureEnabled(featureSettings.appLevel, "analyticsExport")}/>
 
 }
 
@@ -689,6 +738,13 @@ activeTab==="analytics" &&
 activeTab==="settings" &&
 
 <OwnerHotelSettings onHotelChange={setHotel}/>
+
+}
+
+{
+activeTab==="inventory" &&
+
+<QRInventoryPage />
 
 }
 

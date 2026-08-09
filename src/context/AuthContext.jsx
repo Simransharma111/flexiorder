@@ -43,8 +43,9 @@ export const AuthProvider = ({
   ) => {
 
     clearAuthSession({ notify: false });
-    saveAuthSession(userData, token);
-    setUser(userData);
+    const saved = saveAuthSession(userData, token);
+    setUser(saved ? userData : null);
+    return saved;
 
   };
 

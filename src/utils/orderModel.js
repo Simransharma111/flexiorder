@@ -13,6 +13,7 @@ export const statusLane = (status) => {
   if (["accepted", "preparing"].includes(status)) return "preparing";
   if (status === "ready") return "ready";
   if (status === "paused") return "paused";
+  if (status === "delivered") return "delivered";
   return "history";
 };
 
@@ -127,13 +128,8 @@ export const reconcileAuthoritativeOrders = (
   pendingUpdates = [],
 ) => {
   const active = Array.isArray(incoming) ? incoming : [];
-  let reconciled = mergeOrders([], active);
-
-  current.filter((order) => order?.pendingSync && !active.some(
-    (serverOrder) => sameOrder(order, serverOrder)
-  )).forEach((order) => {
-    reconciled = mergeOrders(reconciled, [order]);
-  });
+  // Merge all existing local orders with active incoming ones so historical data is never discarded.
+  let reconciled = mergeOrders(current, active);
 
   pendingUpdates.forEach((update) => {
     const local = current.find((order) => order?._id === update.orderId);

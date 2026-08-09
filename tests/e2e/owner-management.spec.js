@@ -105,6 +105,24 @@ test("Simple app level hides optional owner controls immediately", async ({ page
   await expect(page.getByRole("button", { name: "QR Tables", exact: true })).toBeVisible();
 });
 
+test("Advanced explains inherited features and exposes working menu data tools", async ({ page }) => {
+  await page.route("**/menu/hotel-1", (route) => fulfillJson(route, [{
+    _id: "dish-1", name: "Visible Curry", category: "Main Course", price: 250, isAvailable: true,
+  }]));
+  await page.goto("/owner/dashboard");
+  await openOwnerTab(page, "Settings");
+  await page.getByRole("button", { name: /^Advanced Everything/ }).click();
+  await expect(page.getByText(/Bulk menu import/)).toBeVisible();
+  await expect(page.getByText(/Daily analytics CSV export/)).toBeVisible();
+
+  await openOwnerTab(page, "Menu");
+  await expect(page.getByText("Import menu", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Export menu" })).toBeVisible();
+  await page.getByRole("button", { name: "Add Dish" }).click();
+  await expect(page.getByText("Display Sections", { exact: true })).toBeVisible();
+  await expect(page.getByText("Menu priority (optional)", { exact: true })).toBeVisible();
+});
+
 test("owner can type and save a custom dish category", async ({ page }) => {
   let submittedBody = "";
   let createdDish = null;
@@ -135,11 +153,154 @@ test("owner can type and save a custom dish category", async ({ page }) => {
   await form.getByRole("button", { name: "Add Dish" }).click();
 
   await expect(page.getByRole("button", { name: "House Specials" })).toBeVisible();
-  expect(submittedBody).toMatch(/name="category"\r?\n\r?\nHouse Specials\r?\n/);
+  await expect.poll(() => submittedBody).toMatch(/name="category"\r?\n\r?\nHouse Specials\r?\n/);
   await page.getByRole("button", { name: "House Specials" }).click();
   await expect(page.getByText("House Platter", { exact: true }).filter({ visible: true })).toHaveCount(1);
 
   await page.reload();
   await openOwnerTab(page, "Menu");
   await expect(page.getByRole("button", { name: "House Specials" })).toBeVisible();
+});
+
+test("owner reads wrapped menus with a populated restaurant id", async ({ page }) => {
+  await page.addInitScript(() => {
+    const user = JSON.parse(localStorage.getItem("user") || "null");
+    localStorage.setItem("user", JSON.stringify({
+      ...user,
+      hotelId: { _id: "hotel-1", name: "Flexi Test Kitchen" },
+    }));
+  });
+  await page.route("**/menu/hotel-1", (route) => fulfillJson(route, {
+    dishes: [{
+      _id: "dish-old",
+      name: "Old Family Curry",
+      category: { _id: "category-main", name: "Main Course" },
+      price: 320,
+      prepTime: 20,
+      foodType: "veg",
+      isAvailable: true,
+    }],
+  }));
+
+  await page.goto("/owner/dashboard");
+  await openOwnerTab(page, "Menu");
+  await expect(page.getByText("Old Family Curry", { exact: true }).filter({ visible: true })).toHaveCount(1);
+  await expect(page.getByText("No dishes found")).toHaveCount(0);
+});
+
+test("existing populated category keeps its server id when adding a dish", async ({ page }) => {
+  let submittedBody = "";
+  await page.route("**/menu/hotel-1", (route) => fulfillJson(route, {
+    dishes: [{
+      _id: "dish-reference",
+      name: "Reference Curry",
+      category: { _id: "category-main", name: "Main Course" },
+      price: 300,
+      prepTime: 20,
+      foodType: "veg",
+      isAvailable: true,
+    }],
+  }));
+  await page.route("**/menu/dish", async (route) => {
+    submittedBody = route.request().postData() || "";
+    return fulfillJson(route, {
+      dish: {
+        _id: "dish-created",
+        name: "ID Curry",
+        category: { _id: "category-main", name: "Main Course" },
+        price: 340,
+        prepTime: 18,
+        foodType: "veg",
+        isAvailable: true,
+      },
+    }, 201);
+  });
+
+  await page.goto("/owner/dashboard");
+  await openOwnerTab(page, "Menu");
+  await page.getByRole("button", { name: "Add Dish" }).click();
+  const form = page.locator("form");
+  await form.getByPlaceholder("e.g. Paneer Butter Masala").fill("ID Curry");
+  await form.getByPlaceholder("Price").fill("340");
+  await form.getByLabel("Category").fill("Main Course");
+  await form.getByPlaceholder("Minutes").fill("18");
+  await form.getByRole("button", { name: "Add Dish" }).click();
+
+  await expect.poll(() => submittedBody).toMatch(/name="category"\r?\n\r?\ncategory-main\r?\n/);
+  expect(submittedBody).toMatch(/name="categoryName"\r?\n\r?\nMain Course\r?\n/);
+});
+
+test("owner and waiter reuse the same restaurant menu cache", async ({ page }) => {
+  let menuEndpointAvailable = true;
+  const sharedDish = {
+    _id: "dish-shared",
+    name: "Shared Dal",
+    category: "Main Course",
+    price: 220,
+    prepTime: 15,
+    foodType: "veg",
+    isAvailable: true,
+  };
+  await page.route("**/menu/hotel-1", (route) => menuEndpointAvailable
+    ? fulfillJson(route, { dishes: [sharedDish] })
+    : route.abort("internetdisconnected"));
+  await page.route("**/table", (route) => fulfillJson(route, {
+    tables: [{ _id: "table-8", tableNumber: "8", type: "table" }],
+  }));
+
+  await page.goto("/owner/dashboard");
+  await openOwnerTab(page, "Menu");
+  await expect(page.getByText("Shared Dal", { exact: true }).filter({ visible: true })).toHaveCount(1);
+
+  menuEndpointAvailable = false;
+  await page.goto("/owner/order");
+  await page.getByRole("tab", { name: "Take Order" }).click();
+  await page.getByRole("button", { name: /Table 8/ }).click();
+  await expect(page.getByText("Shared Dal", { exact: true })).toBeVisible();
+});
+
+test("offline-created dish survives reload and syncs when the API returns", async ({ page }) => {
+  let apiOffline = false;
+  let syncedDish = null;
+  let successfulCreates = 0;
+
+  await page.route("**/menu/hotel-1", (route) => {
+    if (apiOffline) return route.abort("internetdisconnected");
+    return fulfillJson(route, syncedDish ? [syncedDish] : []);
+  });
+  await page.route("**/menu/dish", async (route) => {
+    if (apiOffline) return route.abort("internetdisconnected");
+    successfulCreates += 1;
+    syncedDish = {
+      _id: "dish-offline-server",
+      name: "Offline Thali",
+      category: "Main Course",
+      foodType: "veg",
+      price: 280,
+      prepTime: 18,
+      isAvailable: true,
+    };
+    return fulfillJson(route, { dish: syncedDish }, 201);
+  });
+
+  await page.goto("/owner/dashboard");
+  await openOwnerTab(page, "Menu");
+  apiOffline = true;
+  await page.getByRole("button", { name: "Add Dish" }).click();
+  const form = page.locator("form");
+  await form.getByPlaceholder("e.g. Paneer Butter Masala").fill("Offline Thali");
+  await form.getByPlaceholder("Price").fill("280");
+  await form.getByLabel("Category").fill("Main Course");
+  await form.getByPlaceholder("Minutes").fill("18");
+  await form.getByRole("button", { name: "Add Dish" }).click();
+  await expect(page.getByText("Offline Thali", { exact: true }).filter({ visible: true })).toHaveCount(1);
+
+  await page.reload();
+  await openOwnerTab(page, "Menu");
+  await expect(page.getByText("Offline Thali", { exact: true }).filter({ visible: true })).toHaveCount(1);
+
+  apiOffline = false;
+  await page.evaluate(() => window.dispatchEvent(new Event("online")));
+  await expect.poll(() => successfulCreates).toBe(1);
+  await expect(page.getByText("Waiting to sync")).toHaveCount(0);
 });

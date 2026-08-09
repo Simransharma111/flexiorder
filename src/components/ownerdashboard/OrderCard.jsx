@@ -9,7 +9,8 @@ order,
 primaryColor="#2563eb",
 onAction,
 actionLabel,
-onLongPress
+onLongPress,
+onTap,
 
 }){
 
@@ -26,6 +27,15 @@ useEffect(() => () => window.clearTimeout(pressTimer.current), []);
 
 const location = orderLocation(order);
 
+const handleClick = () => {
+  // Only fire onTap if we did NOT just trigger a long-press.
+  if (pressTimer.current) {
+    // Timer still running → it was a quick tap, not a long press.
+    window.clearTimeout(pressTimer.current);
+    pressTimer.current = null;
+    onTap?.(order);
+  }
+};
 
 
 const items =
@@ -59,6 +69,7 @@ px-3
 py-2
 bg-white
 shadow-sm
+cursor-pointer
 "
 
 style={{
@@ -70,13 +81,14 @@ borderColor:`${primaryColor}40`
 onPointerDown={startPress}
 onPointerUp={endPress}
 onPointerLeave={endPress}
+onClick={handleClick}
 onContextMenu={(event)=>{
   if(!onLongPress) return;
   event.preventDefault();
   onLongPress(order);
 }}
-title={onLongPress ? "Long press for actions" : undefined}
-aria-label={onLongPress ? `${location} history actions` : undefined}
+title={onTap ? "Tap for full details" : undefined}
+aria-label={`${location} order — tap for details`}
 
 >
 

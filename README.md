@@ -72,9 +72,9 @@ policy.
 
 ## Offline behavior
 
-The application caches the last successfully loaded menu, table, staff-order and kitchen-order data. Staff caches and queues are scoped to the signed-in account. Waiter-created orders receive a `clientOrderId`; kitchen mutations receive a `clientMutationId`, and both IDs are sent during replay. Pending work retries automatically when connectivity returns, remains visible until accepted by the API, and stops automatic retries after repeated or terminal failures so staff can retry it deliberately.
+The application caches the last successfully loaded menu, table, staff-order and kitchen-order data. Menu data and owner/staff menu mutations share a restaurant-scoped store, while operational order queues remain scoped to the signed-in account. Menu creates receive stable `clientDishId` and `clientMutationId` values, waiter-created orders receive a `clientOrderId`, and kitchen mutations receive a `clientMutationId`; those IDs are preserved across replay. Pending work retries automatically when connectivity returns, remains visible until accepted by the API, and stops automatic retries after repeated or terminal failures so staff can correct or retry it deliberately.
 
-The backend must enforce idempotency for those client IDs. The frontend alone cannot guarantee duplicate prevention or resolve cross-device conflicts.
+The backend must enforce idempotency for all of those client IDs. The frontend serializes local replay and prevents concurrent duplicate submissions on one device, but it cannot by itself guarantee cross-device duplicate prevention or conflict resolution.
 
 ## Android
 

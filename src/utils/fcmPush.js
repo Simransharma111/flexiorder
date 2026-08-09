@@ -8,6 +8,8 @@ import {
   LocalNotifications,
 } from "@capacitor/local-notifications";
 
+import { orderLocation } from "./orderModel";
+
 export const initFCM = async (api) => {
 
   try {
@@ -47,11 +49,25 @@ export const initFCM = async (api) => {
       return;
     }
 
-    // =========================
-    // LOCAL NOTIFICATION PERMISSION
-    // =========================
-
     await LocalNotifications.requestPermissions();
+
+    // CREATE HIGH IMPORTANCE CHANNEL FOR ORDER ALERTS
+    try {
+      await LocalNotifications.createChannel({
+        id: "orders",
+        name: "Order Alerts",
+        description: "Get alerts when new orders are placed",
+        importance: 5,
+        sound: "orders_received.mp3",
+        visibility: 1,
+        vibration: true,
+        lights: true,
+        lightColor: "#F97316",
+      });
+      console.log("Local notification channel 'orders' created successfully");
+    } catch (channelErr) {
+      console.warn("Could not create local notification channel", channelErr);
+    }
 
     // =========================
     // REGISTER DEVICE
@@ -187,6 +203,9 @@ export const initFCM = async (api) => {
                 sound:
                   "orders_received.mp3",
 
+                channelId:
+                  "orders",
+
                 smallIcon:
                   "ic_launcher",
 
@@ -233,4 +252,38 @@ export const initFCM = async (api) => {
 
   }
 
+};
+
+export const triggerLocalOrderNotification = async (order) => {
+  if (!order) return;
+
+  // 1. Play audio in frontend
+  try {
+    const audio = new Audio("/orders_received.mp3");
+    await audio.play();
+  } catch (err) {
+    console.warn("Audio play blocked/failed", err);
+  }
+
+  // 2. Schedule native local notification
+  try {
+    const location = orderLocation(order);
+    const count = (order.items || []).reduce((sum, item) => sum + Number(item.quantity || 1), 0);
+    
+    await LocalNotifications.schedule({
+      notifications: [
+        {
+          id: Date.now(),
+          title: `New Order - ${location}`,
+          body: `Received an order with ${count} items.`,
+          sound: "orders_received.mp3",
+          channelId: "orders",
+          smallIcon: "ic_launcher",
+          iconColor: "#F97316",
+        },
+      ],
+    });
+  } catch (err) {
+    console.log("Local notification trigger failed", err);
+  }
 };

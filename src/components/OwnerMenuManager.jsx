@@ -1,7 +1,28 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import api from "../api/axios";
 import { sortDishesForDisplay } from "../utils/menuOrdering";
-import { buildCategoryList, categoryKey, categoryName, normalizeCategory } from "../utils/menuCategories";
+import {
+  buildCategoryList,
+  categoryKey,
+  categoryName,
+  normalizeCategory,
+  resolveCategoryReference,
+} from "../utils/menuCategories";
+import { dishFieldsFromForm, readImageForStorage } from "../utils/menuData";
+import {
+  enqueueMenuCreate,
+  enqueueMenuDelete,
+  enqueueMenuUpdate,
+  getMenuSyncSummary,
+  MENU_CHANGED_EVENT,
+  readMenuCache,
+  reconcileMenuFromServer,
+  requestBackgroundSync,
+  retryMenuMutations,
+} from "../utils/offlineMenu";
+import { getRestaurantId } from "../utils/storageScope";
+import { useAuth } from "../context/AuthContext";
+import { useConnectivity } from "../context/ConnectivityContext";
 import {
   FiPlus,
   FiSearch,
@@ -27,14 +48,21 @@ const DEFAULT_CATEGORIES = [
   "Breakfast",
 ];
 
-export default function OwnerMenuManager({ advancedEnabled = false }) {
-  const [dishes, setDishes] = useState([]);
+export default function OwnerMenuManager({ advancedEnabled = false, restaurant = null }) {
+  const { user } = useAuth();
+  const { label: connectionLabel } = useConnectivity();
+  const hotelId = getRestaurantId(restaurant) || getRestaurantId(user);
+  const [dishes, setDishes] = useState(() => readMenuCache(hotelId));
   const [editingId, setEditingId] = useState(null);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
   const [activeCategory, setActiveCategory] = useState("All");
   const [showForm, setShowForm] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [loadError, setLoadError] = useState("");
+  const [feedback, setFeedback] = useState("");
+  const [syncSummary, setSyncSummary] = useState(() => getMenuSyncSummary(hotelId));
+  const savingInFlight = useRef(false);
 
   const [formData, setFormData] = useState({
     name: "",
@@ -64,13 +92,6 @@ export default function OwnerMenuManager({ advancedEnabled = false }) {
 
   const [imageFile, setImageFile] = useState(null);
 
-  const user = JSON.parse(localStorage.getItem("user") || "null");
-
-  const hotelId =
-    typeof user?.hotelId === "object"
-      ? user?.hotelId?._id
-      : user?.hotelId;
-
   // =====================================================
   // CATEGORIES
   // =====================================================
@@ -91,11 +112,18 @@ export default function OwnerMenuManager({ advancedEnabled = false }) {
   // =====================================================
 
   const fetchDishes = useCallback(async () => {
+    if (!hotelId) return;
+    setDishes(readMenuCache(hotelId));
     try {
       const res = await api.get(`/menu/${hotelId}`);
-      setDishes(res.data || []);
+      setDishes(reconcileMenuFromServer(hotelId, res.data));
+      setLoadError("");
     } catch (err) {
       console.error("Failed to fetch dishes:", err);
+      setDishes(readMenuCache(hotelId));
+      setLoadError(readMenuCache(hotelId).length
+        ? "Showing the saved menu. FlexiOrder will refresh it when the connection returns."
+        : "The menu could not be loaded. Check the connection and try again.");
     }
   }, [hotelId]);
 
@@ -104,6 +132,18 @@ export default function OwnerMenuManager({ advancedEnabled = false }) {
       fetchDishes();
     }
   }, [fetchDishes, hotelId]);
+
+  useEffect(() => {
+    if (!hotelId) return undefined;
+    const refreshFromStorage = (event) => {
+      if (event?.detail?.restaurantId && event.detail.restaurantId !== hotelId) return;
+      setDishes(readMenuCache(hotelId));
+      setSyncSummary(getMenuSyncSummary(hotelId));
+    };
+    window.addEventListener(MENU_CHANGED_EVENT, refreshFromStorage);
+    refreshFromStorage();
+    return () => window.removeEventListener(MENU_CHANGED_EVENT, refreshFromStorage);
+  }, [hotelId]);
 
   // =====================================================
   // HANDLE INPUT
@@ -160,6 +200,7 @@ export default function OwnerMenuManager({ advancedEnabled = false }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (savingInFlight.current) return;
 
     const enteredCategory = categoryName(formData.category);
     if (!enteredCategory) {
@@ -171,103 +212,29 @@ export default function OwnerMenuManager({ advancedEnabled = false }) {
       return;
     }
     const normalizedCategory = normalizeCategory(enteredCategory, categories);
+    const categoryReference = resolveCategoryReference(normalizedCategory, dishes);
 
     try {
+      savingInFlight.current = true;
       setLoading(true);
-
-      const token = localStorage.getItem("token");
-
-      const form = new FormData();
-
-      form.append("name", formData.name);
-      form.append("description", formData.description);
-      form.append("category", normalizedCategory);
-      form.append("foodType", formData.foodType);
-      form.append("containsEgg", formData.containsEgg);
-      form.append("price", formData.price);
-      form.append("discountType", formData.discountType);
-      form.append("discountValue", formData.discountValue);
-      form.append("prepTime", formData.prepTime);
-
-      form.append("isAvailable", formData.isAvailable);
-      form.append("isRecommended", formData.isRecommended);
-      form.append("isBestseller", formData.isBestseller);
-
-      form.append("featured", formData.featured);
-      form.append("todaySpecial", formData.todaySpecial);
-      form.append("isPopular", formData.isPopular);
-      form.append("isNewArrival", formData.isNewArrival);
-      form.append("chefChoice", formData.chefChoice);
-
-      form.append("spiceLevel", formData.spiceLevel);
-      form.append("displayOrder", formData.displayOrder);
-
-      form.append("tags", formData.tags.join(","));
-
-      if (imageFile) {
-        form.append("image", imageFile);
-      }
-
-      const config = {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "multipart/form-data",
-        },
-      };
-
-      let res;
-
-      // =================================================
-      // UPDATE
-      // =================================================
-
+      setFeedback("");
+      const image = await readImageForStorage(imageFile);
+      const fields = dishFieldsFromForm(formData, categoryReference);
       if (editingId) {
-        res = await api.put(
-          `/menu/dish/${editingId}`,
-          form,
-          config
-        );
-
-        setDishes((prev) =>
-          prev.map((dish) =>
-            dish._id === editingId
-              ? res.data
-              : dish
-          )
-        );
-
-        alert("Dish updated successfully");
+        enqueueMenuUpdate(hotelId, editingId, fields, image);
+        setFeedback("Dish updated here. FlexiOrder will sync it automatically.");
+      } else {
+        enqueueMenuCreate(hotelId, fields, image);
+        setFeedback("Dish added here. FlexiOrder will sync it automatically.");
       }
-
-      // =================================================
-      // CREATE
-      // =================================================
-
-      else {
-        res = await api.post(
-          "/menu/dish",
-          form,
-          config
-        );
-
-        setDishes((prev) => [
-          res.data,
-          ...prev,
-        ]);
-
-        alert("Dish added successfully");
-      }
-
+      setDishes(readMenuCache(hotelId));
       resetForm();
-
+      requestBackgroundSync();
     } catch (err) {
       console.error(err);
-
-      alert(
-        err?.response?.data?.message ||
-          "Something went wrong"
-      );
+      setLoadError(err?.message || "The dish could not be saved. Check the details and try again.");
     } finally {
+      savingInFlight.current = false;
       setLoading(false);
     }
   };
@@ -328,59 +295,25 @@ export default function OwnerMenuManager({ advancedEnabled = false }) {
     if (!confirmDelete) return;
 
     try {
-      const token = localStorage.getItem("token");
-
-      await api.delete(`/menu/dish/${id}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      setDishes((prev) =>
-        prev.filter((dish) => dish._id !== id)
-      );
-
+      enqueueMenuDelete(hotelId, id);
+      setDishes(readMenuCache(hotelId));
+      setFeedback("Dish removed here. FlexiOrder will sync the change automatically.");
+      requestBackgroundSync();
     } catch (err) {
       console.error(err);
-
-      alert(
-        err?.response?.data?.message ||
-          "Failed to delete dish"
-      );
+      setLoadError(err?.message || "The dish could not be removed. Try again.");
     }
   };
 
   const toggleAvailability = async (dish) => {
     const nextAvailable = !dish.isAvailable;
-    setDishes((prev) => prev.map((item) =>
-      item._id === dish._id
-        ? { ...item, isAvailable: nextAvailable }
-        : item
-    ));
-
     try {
-      const form = new FormData();
-      form.append("isAvailable", nextAvailable);
-      const response = await api.put(`/menu/dish/${dish._id}`, form, {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
-          "Content-Type": "multipart/form-data",
-        },
-      });
-
-      const updatedDish = response.data?.dish || response.data;
-      if (updatedDish?._id) {
-        setDishes((prev) => prev.map((item) =>
-          item._id === dish._id ? updatedDish : item
-        ));
-      }
+      enqueueMenuUpdate(hotelId, dish._id, { isAvailable: nextAvailable });
+      setDishes(readMenuCache(hotelId));
+      setFeedback(`${dish.name} is now ${nextAvailable ? "available" : "paused"}.`);
+      requestBackgroundSync();
     } catch (err) {
-      setDishes((prev) => prev.map((item) =>
-        item._id === dish._id
-          ? { ...item, isAvailable: dish.isAvailable }
-          : item
-      ));
-      alert(err?.response?.data?.message || "Could not update dish availability");
+      setLoadError(err?.message || "Could not update dish availability.");
     }
   };
 
@@ -432,13 +365,6 @@ export default function OwnerMenuManager({ advancedEnabled = false }) {
       if (!confirmed) return;
 
       setImporting(true);
-      const token = localStorage.getItem("token");
-      const config = {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "multipart/form-data",
-        },
-      };
       const created = [];
 
       for (const dish of importedDishes) {
@@ -449,28 +375,26 @@ export default function OwnerMenuManager({ advancedEnabled = false }) {
           ? normalizeCategory(importedCategory, categories)
           : "Main Course";
 
-        const form = new FormData();
-        [
+        const fields = Object.fromEntries([
           "name", "description", "foodType", "containsEgg",
           "price", "discountType", "discountValue", "prepTime",
           "isAvailable", "isRecommended", "isBestseller", "featured",
           "todaySpecial", "isPopular", "isNewArrival", "chefChoice",
           "spiceLevel", "displayOrder",
-        ].forEach((field) => {
-          if (dish[field] !== undefined) form.append(field, dish[field]);
-        });
-        form.append("category", safeCategory);
-        form.append("tags", Array.isArray(dish.tags) ? dish.tags.join(",") : (dish.tags || ""));
-
-        const response = await api.post("/menu/dish", form, config);
-        created.push(response.data);
+        ].filter((field) => dish[field] !== undefined).map((field) => [field, dish[field]]));
+        fields.category = resolveCategoryReference(safeCategory, dishes);
+        fields.tags = Array.isArray(dish.tags)
+          ? dish.tags
+          : String(dish.tags || "").split(",").map((tag) => tag.trim()).filter(Boolean);
+        created.push(enqueueMenuCreate(hotelId, fields));
       }
 
-      setDishes((prev) => [...created, ...prev]);
-      alert(`${created.length} dishes imported successfully.`);
+      setDishes(readMenuCache(hotelId));
+      setFeedback(`${created.length} dishes imported here. FlexiOrder will sync them automatically.`);
+      requestBackgroundSync();
     } catch (err) {
       console.error("Menu import failed", err);
-      alert(err?.message || err?.response?.data?.message || "Menu import failed.");
+      setLoadError(err?.message || "The menu could not be imported.");
     } finally {
       setImporting(false);
     }
@@ -621,6 +545,36 @@ export default function OwnerMenuManager({ advancedEnabled = false }) {
         </div>
 
       </div>
+
+      {feedback && (
+        <div className="ops-inline-success mb-4" role="status">
+          <span>{feedback}</span>
+          <button type="button" aria-label="Dismiss message" onClick={() => setFeedback("")}><FiX /></button>
+        </div>
+      )}
+
+      {loadError && (
+        <div className="ops-inline-error mb-4" role="alert">
+          <span>{loadError}</span>
+          <button type="button" onClick={fetchDishes}>Retry</button>
+          <button type="button" aria-label="Dismiss error" onClick={() => setLoadError("")}><FiX /></button>
+        </div>
+      )}
+
+      {(syncSummary.pending > 0 || syncSummary.attention > 0 || connectionLabel !== "Online") && (
+        <div className={`ops-sync-strip mb-4${syncSummary.attention ? " needs-attention" : ""}`} role="status">
+          <span>
+            {syncSummary.attention
+              ? `${syncSummary.attention} menu change${syncSummary.attention === 1 ? " needs" : "s need"} attention`
+              : syncSummary.pending
+                ? `${syncSummary.pending} menu change${syncSummary.pending === 1 ? "" : "s"} · ${connectionLabel}`
+                : connectionLabel}
+          </span>
+          {syncSummary.attention > 0 && (
+            <button type="button" onClick={() => retryMenuMutations(hotelId)}>Retry</button>
+          )}
+        </div>
+      )}
 
       {/* =================================================
           SEARCH
@@ -993,7 +947,7 @@ export default function OwnerMenuManager({ advancedEnabled = false }) {
 
             {/* DISPLAY SECTIONS */}
 
-            <div className="mt-6">
+            {advancedEnabled && <div className="mt-6">
 
               <h3 className="font-bold text-sm mb-3">
                 Display Sections
@@ -1080,11 +1034,11 @@ export default function OwnerMenuManager({ advancedEnabled = false }) {
 
               </div>
 
-            </div>
+            </div>}
 
             {/* TAGS */}
 
-            <div className="mt-6">
+            {advancedEnabled && <div className="mt-6">
 
               <h3 className="font-bold text-sm mb-3">
                 Dish Tags
@@ -1125,11 +1079,11 @@ export default function OwnerMenuManager({ advancedEnabled = false }) {
 
               </div>
 
-            </div>
+            </div>}
 
             {/* SPICE */}
 
-            <div className="grid sm:grid-cols-2 gap-4 mt-6">
+            <div className={`grid gap-4 mt-6 ${advancedEnabled ? "sm:grid-cols-2" : ""}`}>
 
               <div>
                 <label className="block text-sm font-semibold mb-1">
@@ -1157,7 +1111,7 @@ export default function OwnerMenuManager({ advancedEnabled = false }) {
                 </select>
               </div>
 
-              <div>
+              {advancedEnabled && <div>
                 <label className="block text-sm font-semibold mb-1">
                   Menu priority (optional)
                 </label>
@@ -1173,7 +1127,7 @@ export default function OwnerMenuManager({ advancedEnabled = false }) {
                 <p className="mt-1 text-xs text-gray-500">
                   Positive numbers appear first; 1 is highest. Leave 0 for normal order.
                 </p>
-              </div>
+              </div>}
 
             </div>
 
@@ -1524,6 +1478,12 @@ export default function OwnerMenuManager({ advancedEnabled = false }) {
                       {categoryName(dish.category) || "Uncategorized"} •{" "}
                       {dish.prepTime} min
                     </p>
+
+                    {dish.pendingSync && (
+                      <p className={`mt-1 text-xs font-semibold ${dish.syncError ? "text-red-700" : "text-blue-700"}`}>
+                        {dish.syncError || "Waiting to sync"}
+                      </p>
+                    )}
 
                     <div className="flex flex-wrap gap-2 mt-2">
 

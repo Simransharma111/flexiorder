@@ -1,20 +1,10 @@
 import { Navigate } from "react-router-dom";
 import { getHomePathForRole } from "../constants/roles";
+import { useAuth } from "../context/AuthContext";
 
-export default function HomeRedirect() {
-  const token = localStorage.getItem("token");
-  const role = (() => {
-    try {
-      return JSON.parse(localStorage.getItem("user") || "null")?.role || null;
-    } catch {
-      return null;
-    }
-  })();
-
-  // NOT LOGGED IN
-  if (!token) {
-    return <Navigate to="/" replace />;
-  }
-
-  return <Navigate to={getHomePathForRole(role)} replace />;
+export default function HomeRedirect({ children }) {
+  const { user, loading } = useAuth();
+  if (loading) return <div className="ops-loading">Restoring your workspace…</div>;
+  if (user) return <Navigate to={getHomePathForRole(user.role)} replace />;
+  return children || <Navigate to="/login" replace />;
 }
