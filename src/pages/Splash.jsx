@@ -27,7 +27,7 @@ shadow-2xl
 
 
 <img
-src="/icon-512.jpg"
+src="/logo.jpg"
 alt="FlexiOrder"
 className="
 h-full

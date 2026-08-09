@@ -35,6 +35,7 @@ import QRInventory from "./QRInventoryPage";
 import OwnerHotelSettings from "./OwnerHotelSettings";
 
 import HOTEL_THEMES from "../constants/hotelThemes";
+import KitchenBoard from "../components/kitchen/KitchenBoard";
 
 
 
@@ -46,11 +47,11 @@ label:"Dashboard",
 icon:FiBarChart2
 },
 
-{
-key:"orders",
-label:"Orders",
-icon:FiShoppingBag
-},
+// {
+// key:"orders",
+// label:"Orders",
+// icon:FiShoppingBag
+// },
 
 {
 key:"menu",
@@ -195,7 +196,42 @@ setLoadingOrders(false);
 };
 
 
+const updateStatus = async (
+  id,
+  status,
+  reason=""
+) => {
 
+  try {
+
+   const res = await api.put(
+  `/kitchen/orders/${id}`,
+  {
+    status,
+    reason
+  }
+);
+
+
+    setOrders(prev =>
+      prev.map(order =>
+        order._id === id
+          ? res.data.order || res.data
+          : order
+      )
+    );
+
+
+  } catch(error){
+
+    console.log(
+      "Status update error",
+      error
+    );
+
+  }
+
+};
 
 
 
@@ -234,17 +270,24 @@ hotel._id
 
 const newOrderHandler=(order)=>{
 
-
 setOrders(prev=>[
 order,
 ...prev
 ]);
 
+};
 
-setNewOrderCount(
-prev=>prev+1
+
+
+const updateOrderHandler=(updatedOrder)=>{
+
+setOrders(prev=>
+prev.map(order=>
+order._id===updatedOrder._id
+? updatedOrder
+: order
+)
 );
-
 
 };
 
@@ -256,6 +299,12 @@ newOrderHandler
 );
 
 
+socket.on(
+"kitchenOrderUpdated",
+updateOrderHandler
+);
+
+
 
 return ()=>{
 
@@ -264,17 +313,16 @@ socket.off(
 newOrderHandler
 );
 
+
+socket.off(
+"kitchenOrderUpdated",
+updateOrderHandler
+);
+
 };
 
 
-},[
-hotel
-]);
-
-
-
-
-
+},[hotel]);
 
 
 /*
@@ -460,7 +508,37 @@ fetchOrders();
 
 
 
+const getLocation = (order) => {
 
+  if(order.roomNumber){
+    return `Room ${order.roomNumber}`;
+  }
+
+  if(order.tableNumber){
+    return `Table ${order.tableNumber}`;
+  }
+
+  if(order.table?.number){
+    return `Table ${order.table.number}`;
+  }
+
+  return "Walk-in";
+
+};
+
+
+
+const getWaitingMinutes = (date) => {
+
+  if(!date) return 0;
+
+  return Math.floor(
+    (Date.now() - new Date(date).getTime())
+    /
+    60000
+  );
+
+};
 
 
 
@@ -631,7 +709,7 @@ md:p-6
 
 
 
-{
+{/* {
 activeTab==="home" &&
 
 <DashboardHome
@@ -644,14 +722,14 @@ accentColor={accentColor}
 
 />
 
-}
+} */}
 
 
 
 
 
 
-{
+{/* {
 activeTab==="orders" &&
 
 <Orders
@@ -666,13 +744,43 @@ primaryColor={primaryColor}
 
 />
 
+} */}
+
+
+{
+activeTab==="home" &&
+
+
+
+
+<KitchenBoard
+
+newOrders={
+orders.filter(
+o=>o.status==="pending"
+)
 }
 
+preparingOrders={
+orders.filter(
+o=>o.status==="preparing"
+)
+}
 
+pausedOrders={
+orders.filter(
+o=>o.status==="paused"
+)
+}
 
+updateStatus={updateStatus}
 
+getLocation={getLocation}
 
+getWaitingMinutes={getWaitingMinutes}
 
+/>
+}
 
 {
 activeTab==="menu" &&

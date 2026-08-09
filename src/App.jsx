@@ -1,3 +1,4 @@
+import React, { useState, useEffect } from "react";
 import { Routes, Route } from "react-router-dom";
 import "./App.css";
 
@@ -26,14 +27,40 @@ import ChangePassword from "./pages/ChangePassword";
 import BackButtonHandler from "./components/BackButtonHandler";
 
 // Protected Route
-import ProtectedRoute from "./components/ProtectedRoute"; 
-import {isMobileApp} from "./utils/platform";
+import ProtectedRoute from "./components/ProtectedRoute";
+import { isMobileApp } from "./utils/platform";
 import Orders from "./components/ownerdashboard/Orders";
 import StaffOrder from "./pages/StaffOrder";
-
+import Splash from "./pages/Splash";
 export default function App() {
-  
-const mobile = isMobileApp();
+
+  const mobile = isMobileApp();
+
+const [showSplash,setShowSplash] = useState(mobile);
+
+
+useEffect(()=>{
+
+if(!mobile) return;
+
+
+const timer=setTimeout(()=>{
+
+setShowSplash(false);
+
+},2000);
+
+
+return ()=>clearTimeout(timer);
+
+
+},[mobile]);
+
+
+
+if(showSplash){
+  return <Splash />;
+}
   return (
     <>
       <BackButtonHandler />
@@ -43,11 +70,33 @@ const mobile = isMobileApp();
         {/* ================= PUBLIC ================= */}
 
         {/* Directly open Auth Page */}
-       <Route
-  path="/"
-  element={<LandingPage />}
+      
+{
+mobile ? (
+
+<Route
+path="/"
+element={
+<AuthPage mode="login"/>
+}
 />
 
+)
+
+:
+
+(
+
+<Route
+path="/"
+element={
+<LandingPage />
+}
+/>
+
+)
+
+}
         <Route
           path="/login"
           element={<AuthPage mode="login" />}
@@ -119,9 +168,9 @@ const mobile = isMobileApp();
           }
         />
         <Route
-path="/owner/order"
-element={<StaffOrder/>}
-/>
+          path="/owner/order"
+          element={<StaffOrder />}
+        />
 
         {/* ================= KITCHEN ================= */}
 
@@ -147,13 +196,13 @@ element={<StaffOrder/>}
           element={<TrackOrderPage />}
         />
         <Route
-path="/owner/hotel/settings"
-element={<OwnerHotelSettings />}
-/>
-<Route
-path="/change-password"
-element={<ChangePassword/>}
-/>
+          path="/owner/hotel/settings"
+          element={<OwnerHotelSettings />}
+        />
+        <Route
+          path="/change-password"
+          element={<ChangePassword />}
+        />
 
       </Routes>
     </>

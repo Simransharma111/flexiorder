@@ -1,560 +1,634 @@
 import React, { useState } from "react";
 
 export default function KitchenBoard({
-
   newOrders = [],
   preparingOrders = [],
-  readyOrders = [],
   pausedOrders = [],
-
   updateStatus,
   getLocation,
   getWaitingMinutes,
-
 }) {
 
+  const [modalType, setModalType] = useState(null);
+  const [selectedOrder, setSelectedOrder] = useState(null);
+  const [reason, setReason] = useState("");
 
-const [pauseOrder,setPauseOrder] = useState(null);
-const [reason,setReason] = useState("");
 
+  const openModal = (type, order) => {
+    setModalType(type);
+    setSelectedOrder(order);
+    setReason("");
+  };
 
 
-const handlePause = ()=>{
+  const closeModal = () => {
+    setModalType(null);
+    setSelectedOrder(null);
+    setReason("");
+  };
 
-if(!reason.trim()) return;
 
-updateStatus(
-pauseOrder._id,
-"paused",
-reason
-);
+  const submitAction = () => {
 
-setPauseOrder(null);
-setReason("");
+    if (!selectedOrder) return;
 
-};
+    if (!reason.trim()) return;
 
 
+    updateStatus(
+      selectedOrder._id,
+      modalType === "pause"
+        ? "paused"
+        : "cancelled",
+      reason
+    );
 
 
+    closeModal();
 
-const columns=[
+  };
 
-{
-title:"🔥 NEW",
-orders:newOrders,
-color:"text-red-400"
-},
 
-{
-title:"👨‍🍳 PREPARING",
-orders:preparingOrders,
-color:"text-yellow-400"
-},
 
-{
-title:"✅ READY",
-orders:readyOrders,
-color:"text-green-400"
-},
+  const columns = [
 
-{
-title:"⏸ PAUSED",
-orders:pausedOrders,
-color:"text-orange-400"
-}
+    {
+      title:"🔥 NEW",
+      orders:newOrders,
+      type:"new",
+      color:"text-red-400"
+    },
 
-];
+    {
+      title:"👨‍🍳 PREPARING",
+      orders:preparingOrders,
+      type:"preparing",
+      color:"text-blue-400"
+    },
 
+    {
+      title:"⏸ PAUSED",
+      orders:pausedOrders,
+      type:"paused",
+      color:"text-orange-400"
+    }
 
+  ];
 
 
 
-const action=(order)=>{
+  return (
 
+    <>
 
-switch(order.status){
 
-case "pending":
-return ["Accept","accepted"];
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
 
-case "accepted":
-return ["Prepare","preparing"];
 
-case "preparing":
-return ["Ready","ready"];
+        {
+          columns.map((col)=>(
 
-case "ready":
-return ["Deliver","delivered"];
 
-case "paused":
-return ["Resume","preparing"];
+            <div
+              key={col.title}
+              className="
+              bg-slate-900
+              border
+              border-slate-800
+              rounded-xl
+              overflow-hidden
+              "
+            >
 
-default:
-return null;
 
-}
+              <div
+                className={`
+                px-3
+                py-2
+                border-b
+                border-slate-800
+                font-black
+                text-lg
+                ${col.color}
+                `}
+              >
 
-};
+                {col.title}
 
 
+                <span
+                  className="
+                  ml-2
+                  bg-slate-800
+                  text-white
+                  rounded-full
+                  px-2
+                  py-1
+                  text-xs
+                  "
+                >
+                  {col.orders.length}
+                </span>
 
 
+              </div>
 
 
-return (
 
-<div
-className="
-grid
-grid-cols-1
-lg:grid-cols-2
-2xl:grid-cols-4
-gap-3
-bg-slate-950
-p-3
-min-h-screen
-text-white
-"
->
+              <div
+                className="
+                p-2
+                space-y-2
+                max-h-[calc(100vh-170px)]
+                overflow-y-auto
+                "
+              >
 
 
+              {
+                col.orders.length === 0 ? (
 
-{
-columns.map(col=>(
+                  <div
+                    className="
+                    text-center
+                    text-slate-500
+                    text-sm
+                    py-6
+                    "
+                  >
+                    No Orders
+                  </div>
 
+                ) : (
 
-<div
-key={col.title}
-className="
-bg-slate-900
-rounded-xl
-border
-border-slate-800
-overflow-hidden
-"
->
 
+                  col.orders.map(order=>(
 
 
-{/* HEADER */}
+                    <div
+                      key={order._id}
+                      className="
+                      bg-slate-950
+                      border
+                      border-slate-800
+                      rounded-lg
+                      p-3
+                      "
+                    >
 
-<div
-className={`
-px-3
-py-2
-font-black
-text-lg
-border-b
-border-slate-800
-${col.color}
-`}
->
 
-{col.title}
 
-<span
-className="
-ml-2
-bg-slate-800
-text-white
-rounded-full
-px-2
-py-0.5
-text-xs
-"
->
-{col.orders.length}
-</span>
+                      <div className="flex justify-between">
 
-</div>
 
+                        <div>
 
+                          <p
+                            className="
+                            text-white
+                            font-bold
+                            text-sm
+                            "
+                          >
+                            #{order._id?.slice(-5)}
+                          </p>
 
 
+                          <p
+                            className="
+                            text-xs
+                            text-slate-400
+                            "
+                          >
+                            {
+                              getLocation
+                              ? getLocation(order)
+                              : "Table"
+                            }
+                          </p>
 
 
+                        </div>
 
 
-{/* LIST */}
 
+                        <p
+                          className={
+                            getWaitingMinutes(order.createdAt) > 15
+                            ?
+                            "text-red-400 text-xs font-bold"
+                            :
+                            "text-green-400 text-xs font-bold"
+                          }
+                        >
 
-<div
-className="
-p-2
-space-y-2
-max-h-[calc(100vh-160px)]
-overflow-y-auto
-"
->
+                          ⏱ {getWaitingMinutes(order.createdAt)}m
 
+                        </p>
 
-{
-col.orders.length===0 ?
 
+                      </div>
 
-<div
-className="
-text-center
-text-slate-500
-text-sm
-py-5
-"
->
-No orders
-</div>
 
 
-:
 
+                      <div className="mt-2 space-y-1">
 
-col.orders.map(order=>{
 
+                        {
+                          order.items
+                          ?.slice(0,3)
+                          .map((item,index)=>(
 
-const btn=action(order);
+                            <div
+                              key={index}
+                              className="
+                              text-xs
+                              text-slate-300
+                              flex
+                              justify-between
+                              "
+                            >
 
+                              <span>
+                                {item.name}
+                              </span>
 
-return (
 
-<div
+                              <span>
+                                x{item.quantity}
+                              </span>
 
-key={order._id}
+                            </div>
 
-className="
-bg-slate-950
-border
-border-slate-800
-rounded-lg
-p-2
-"
->
+                          ))
+                        }
 
 
+                      </div>
 
-<div
-className="
-flex
-justify-between
-"
->
 
 
-<div>
 
-<p className="font-bold text-sm">
 
-#{order._id.slice(-5)}
+                      <div className="flex gap-2 mt-3">
 
-</p>
 
 
-<p className="text-xs font-semibold">
+                        {
+                          col.type==="new" && (
 
-{getLocation(order)}
+                            <>
 
-</p>
+                            <button
+                              onClick={()=>
+                                updateStatus(
+                                  order._id,
+                                  "preparing"
+                                )
+                              }
+                              className="
+                              flex-1
+                              bg-green-600
+                              hover:bg-green-700
+                              text-white
+                              text-xs
+                              font-bold
+                              py-2
+                              rounded-lg
+                              "
+                            >
+                              Accept
+                            </button>
 
 
-</div>
+                            <button
+                              onClick={()=>
+                                openModal(
+                                  "cancel",
+                                  order
+                                )
+                              }
+                              className="
+                              bg-red-600
+                              text-white
+                              text-xs
+                              px-3
+                              rounded-lg
+                              "
+                            >
+                              Cancel
+                            </button>
 
 
+                            </>
 
-<p
+                          )
+                        }
 
-className={
 
-getWaitingMinutes(order.createdAt)>15
 
-?
 
-"text-red-400 text-xs font-bold"
 
-:
 
-"text-green-400 text-xs"
 
-}
+                        {
+                          col.type==="preparing" && (
 
->
+                            <>
 
-⏱ {getWaitingMinutes(order.createdAt)}m
 
-</p>
+                            <button
+                              onClick={()=>
+                                updateStatus(
+                                  order._id,
+                                  "ready"
+                                )
+                              }
+                              className="
+                              flex-1
+                              bg-purple-600
+                              hover:bg-purple-700
+                              text-white
+                              text-xs
+                              font-bold
+                              py-2
+                              rounded-lg
+                              "
+                            >
+                              Mark Ready
+                            </button>
 
 
-</div>
 
+                            <button
+                              onClick={()=>
+                                openModal(
+                                  "pause",
+                                  order
+                                )
+                              }
+                              className="
+                              bg-orange-600
+                              text-white
+                              text-xs
+                              px-3
+                              rounded-lg
+                              "
+                            >
+                              Pause
+                            </button>
 
 
+                            <button
+                              onClick={()=>
+                                openModal(
+                                  "cancel",
+                                  order
+                                )
+                              }
+                              className="
+                              bg-red-600
+                              text-white
+                              text-xs
+                              px-3
+                              rounded-lg
+                              "
+                            >
+                              Cancel
+                            </button>
 
 
 
+                            </>
 
+                          )
+                        }
 
-<div
-className="
-mt-2
-"
->
 
-{
-order.items?.slice(0,2)
-.map((item,index)=>(
 
 
-<p
-key={index}
-className="
-text-xs
-text-slate-300
-truncate
-"
->
 
-{item.name} × {item.quantity}
 
-</p>
+                        {
+                          col.type==="paused" && (
 
+                            <>
 
-))
-}
+                            <button
+                              onClick={()=>
+                                updateStatus(
+                                  order._id,
+                                  "preparing"
+                                )
+                              }
+                              className="
+                              flex-1
+                              bg-green-600
+                              text-white
+                              text-xs
+                              font-bold
+                              py-2
+                              rounded-lg
+                              "
+                            >
+                              Resume
+                            </button>
 
 
-{
-order.items?.length>2 &&
 
-<p className="text-[10px] text-slate-500">
+                            <button
+                              onClick={()=>
+                                openModal(
+                                  "cancel",
+                                  order
+                                )
+                              }
+                              className="
+                              bg-red-600
+                              text-white
+                              text-xs
+                              px-3
+                              rounded-lg
+                              "
+                            >
+                              Cancel
+                            </button>
 
-+{order.items.length-2} more
 
-</p>
+                            </>
 
-}
+                          )
+                        }
 
-</div>
 
 
+                      </div>
 
 
 
+                    </div>
 
 
+                  ))
 
-<div
-className="
-flex
-gap-2
-mt-2
-"
->
+                )
 
+              }
 
-{
-btn &&
 
-<button
 
-onClick={()=>updateStatus(
-order._id,
-btn[1]
-)}
+              </div>
 
-className="
-flex-1
-bg-white
-text-black
-rounded-md
-py-1
-text-xs
-font-bold
-"
 
->
+            </div>
 
-{btn[0]}
 
-</button>
+          ))
+        }
 
-}
 
 
+      </div>
 
-{
-![
-"ready",
-"delivered",
-"paused"
-]
-.includes(order.status)
 
-&&
 
-<button
 
-onClick={()=>setPauseOrder(order)}
 
-className="
-bg-orange-500
-rounded-md
-px-2
-text-xs
-font-bold
-"
 
->
-⏸
-</button>
 
-}
+      {
+        modalType && (
 
+          <div
+            className="
+            fixed
+            inset-0
+            bg-black/60
+            flex
+            items-center
+            justify-center
+            z-50
+            "
+          >
 
-</div>
 
+            <div
+              className="
+              bg-slate-900
+              border
+              border-slate-700
+              rounded-xl
+              p-5
+              w-[350px]
+              "
+            >
 
 
+              <h2
+                className="
+                text-white
+                font-bold
+                mb-3
+                "
+              >
 
-</div>
+                {
+                  modalType==="pause"
+                  ?
+                  "Pause Order"
+                  :
+                  "Cancel Order"
+                }
 
-)
+              </h2>
 
 
-})
 
-}
+              <textarea
+                value={reason}
+                onChange={(e)=>
+                  setReason(e.target.value)
+                }
+                placeholder={
+                  modalType==="pause"
+                  ?
+                  "Reason: ingredient unavailable..."
+                  :
+                  "Reason: dish unavailable..."
+                }
+                className="
+                w-full
+                h-24
+                bg-slate-950
+                border
+                border-slate-700
+                rounded-lg
+                p-2
+                text-white
+                text-sm
+                "
+              />
 
 
 
-</div>
+              <div className="flex gap-2 mt-3">
 
 
+                <button
+                  onClick={closeModal}
+                  className="
+                  flex-1
+                  bg-slate-700
+                  text-white
+                  py-2
+                  rounded-lg
+                  text-sm
+                  "
+                >
+                  Cancel
+                </button>
 
-</div>
 
 
-))
+                <button
+                  onClick={submitAction}
+                  className={`
+                  flex-1
+                  text-white
+                  py-2
+                  rounded-lg
+                  text-sm
+                  font-bold
+                  ${
+                    modalType==="pause"
+                    ?
+                    "bg-orange-600"
+                    :
+                    "bg-red-600"
+                  }
+                  `}
+                >
+                  Confirm
+                </button>
 
-}
 
+              </div>
 
 
 
+            </div>
 
 
+          </div>
 
+        )
+      }
 
 
-{
-pauseOrder &&
 
-<div
-className="
-fixed
-inset-0
-bg-black/60
-flex
-items-center
-justify-center
-z-50
-"
->
+    </>
 
-
-<div
-className="
-bg-white
-text-black
-rounded-xl
-p-5
-w-80
-"
->
-
-
-<h2 className="font-bold">
-Pause Order
-</h2>
-
-
-<textarea
-
-className="
-border
-rounded-lg
-w-full
-mt-3
-p-2
-"
-
-placeholder="Reason"
-
-value={reason}
-
-onChange={
-e=>setReason(e.target.value)
-}
-
-/>
-
-
-
-<div
-className="
-flex
-gap-2
-mt-3
-"
->
-
-
-<button
-
-onClick={()=>{
-setPauseOrder(null);
-setReason("");
-}}
-
-className="
-flex-1
-bg-gray-200
-rounded-lg
-py-2
-"
->
-Cancel
-</button>
-
-
-
-<button
-
-onClick={handlePause}
-
-className="
-flex-1
-bg-orange-500
-text-white
-rounded-lg
-py-2
-"
->
-Pause
-</button>
-
-
-</div>
-
-
-</div>
-
-
-</div>
-
-}
-
-
-</div>
-
-);
-
+  );
 
 }
