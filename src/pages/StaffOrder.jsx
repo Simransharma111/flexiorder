@@ -37,6 +37,7 @@ export default function StaffOrder({ hotel, onOrderCreated }) {
   const [tableSearch, setTableSearch] = useState("");
   const [dishSearch, setDishSearch] = useState("");
   const [category, setCategory] = useState("All");
+  const [activeSubCategory, setActiveSubCategory] = useState("All");
   const [showAllCategories, setShowAllCategories] = useState(false);
   const [showGuest, setShowGuest] = useState(false);
   const [guestName, setGuestName] = useState("");
@@ -115,6 +116,11 @@ export default function StaffOrder({ hotel, onOrderCreated }) {
     };
   }, [onOrderCreated, refreshQueueCounts, restaurantId]);
 
+  // Reset subcategory on main category change
+  useEffect(() => {
+    setActiveSubCategory("All");
+  }, [category]);
+
   const categories = useMemo(
     () => buildCategoryList(menu.filter((dish) => dish.isAvailable !== false)),
     [menu]
@@ -125,6 +131,22 @@ export default function StaffOrder({ hotel, onOrderCreated }) {
     return tables.filter((table) => !term || tableLabel(table).toLowerCase().includes(term));
   }, [tableSearch, tables]);
 
+  // Unique subcategories for the selected category
+  const subCategories = useMemo(() => {
+    const categoryFiltered = menu.filter((dish) => dish.isAvailable !== false).filter((dish) => {
+      return category === "All" || categoryKey(dish.category) === categoryKey(category);
+    });
+    
+    const set = new Set();
+    categoryFiltered.forEach((dish) => {
+      const sub = dish.subCategory || dish.subcategory || "";
+      if (sub && sub.trim()) {
+        set.add(sub.trim());
+      }
+    });
+    return ["All", ...Array.from(set)];
+  }, [category, menu]);
+
   const visibleMenu = useMemo(() => {
     const term = dishSearch.trim().toLowerCase();
     return sortDishesForDisplay(menu.filter((dish) => dish.isAvailable !== false).filter((dish) => {
@@ -132,6 +154,25 @@ export default function StaffOrder({ hotel, onOrderCreated }) {
         (!term || String(dish.name || "").toLowerCase().includes(term));
     }));
   }, [category, dishSearch, menu]);
+
+  // Grouped menu items by subcategory
+  const groupedMenu = useMemo(() => {
+    const groups = {};
+    visibleMenu.forEach((dish) => {
+      const sub = (dish.subCategory || dish.subcategory || "").trim();
+      const groupName = sub || "";
+      
+      if (activeSubCategory !== "All" && groupName !== activeSubCategory) {
+        return;
+      }
+      
+      if (!groups[groupName]) {
+        groups[groupName] = [];
+      }
+      groups[groupName].push(dish);
+    });
+    return groups;
+  }, [visibleMenu, activeSubCategory]);
 
   const quantityFor = (dishId) => cart.find((item) => item.menuId === dishId)?.quantity || 0;
 
@@ -303,25 +344,49 @@ export default function StaffOrder({ hotel, onOrderCreated }) {
             {categories.length > 4 && <button type="button" onClick={() => setShowAllCategories(true)}>More ›</button>}
           </div>
 
+          {/* Subcategory Pill Bar */}
+          {subCategories.length > 1 && (
+            <div className="guest-subcategory-bar">
+              {subCategories.map((sub) => (
+                <button
+                  type="button"
+                  key={sub}
+                  className={activeSubCategory === sub ? "is-active" : ""}
+                  onClick={() => setActiveSubCategory(sub)}
+                >
+                  {sub}
+                </button>
+              ))}
+            </div>
+          )}
+
           <div className="staff-dish-list">
-            {visibleMenu.map((dish) => {
-              const quantity = quantityFor(dish._id);
-              const { basePrice, finalPrice, hasDiscount } = getDishPricing(dish);
+            {Object.entries(groupedMenu).map(([subCatName, subCatDishes]) => {
+              if (!subCatDishes.length) return null;
               return (
-                <div className="staff-dish-row" key={dish._id}>
-                  <button type="button" className="staff-dish-row__main" onClick={() => changeQuantity(dish, 1)} aria-label={`Add ${dish.name}`}>
-                    <span className={`food-mark ${dish.foodType === "nonveg" ? "is-nonveg" : "is-veg"}`} aria-label={dish.foodType === "nonveg" ? "Non-vegetarian" : "Vegetarian"} />
-                    <span><strong>{dish.name}</strong>{dish.containsEgg && dish.foodType !== "nonveg" && <small>Contains egg</small>}</span>
-                    <span className="staff-dish-price">{hasDiscount && <del>₹{basePrice.toFixed(0)}</del>}<b>₹{finalPrice.toFixed(0)}</b></span>
-                    {!quantity && <span className="staff-add-label">Add</span>}
-                  </button>
-                  {quantity > 0 && (
-                    <div className="staff-qty" aria-label={`${dish.name} quantity`}>
-                      <button type="button" aria-label={`Remove one ${dish.name}`} onClick={() => changeQuantity(dish, -1)}><FiMinus /></button>
-                      <b>{quantity}</b>
-                      <button type="button" aria-label={`Add one ${dish.name}`} onClick={() => changeQuantity(dish, 1)}><FiPlus /></button>
-                    </div>
-                  )}
+                <div key={subCatName || "other"}>
+                  {subCatName && <div className="staff-subcategory-header">{subCatName}</div>}
+                  {subCatDishes.map((dish) => {
+                    const quantity = quantityFor(dish._id);
+                    const { basePrice, finalPrice, hasDiscount } = getDishPricing(dish);
+                    return (
+                      <div className="staff-dish-row" key={dish._id}>
+                        <button type="button" className="staff-dish-row__main" onClick={() => changeQuantity(dish, 1)} aria-label={`Add ${dish.name}`}>
+                          <span className={`food-mark ${dish.foodType === "nonveg" ? "is-nonveg" : "is-veg"}`} aria-label={dish.foodType === "nonveg" ? "Non-vegetarian" : "Vegetarian"} />
+                          <span><strong>{dish.name}</strong>{dish.containsEgg && dish.foodType !== "nonveg" && <small>Contains egg</small>}</span>
+                          <span className="staff-dish-price">{hasDiscount && <del>₹{basePrice.toFixed(0)}</del>}<b>₹{finalPrice.toFixed(0)}</b></span>
+                          {!quantity && <span className="staff-add-label">Add</span>}
+                        </button>
+                        {quantity > 0 && (
+                          <div className="staff-qty" aria-label={`${dish.name} quantity`}>
+                            <button type="button" aria-label={`Remove one ${dish.name}`} onClick={() => changeQuantity(dish, -1)}><FiMinus /></button>
+                            <b>{quantity}</b>
+                            <button type="button" aria-label={`Add one ${dish.name}`} onClick={() => changeQuantity(dish, 1)}><FiPlus /></button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               );
             })}
