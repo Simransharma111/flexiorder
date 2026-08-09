@@ -39,14 +39,11 @@ export default function QRInventoryPage() {
       const COLS = 3;
       const COL_W = (210 - 20) / COLS;
       const ROW_H = QR_SIZE + 18;
-      let page = 0;
-
       qrs.forEach((qr, i) => {
         const col = i % COLS;
         const row = Math.floor((i % (COLS * 4)) / COLS);
         if (i > 0 && i % (COLS * 4) === 0) {
           pdf.addPage();
-          page++;
         }
         const x = 10 + col * COL_W;
         const y = 16 + row * ROW_H;

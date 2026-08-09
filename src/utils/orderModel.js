@@ -128,8 +128,18 @@ export const reconcileAuthoritativeOrders = (
   pendingUpdates = [],
 ) => {
   const active = Array.isArray(incoming) ? incoming : [];
-  // Merge all existing local orders with active incoming ones so historical data is never discarded.
-  let reconciled = mergeOrders(current, active);
+  let reconciled = mergeOrders([], active);
+
+  current.forEach((order) => {
+    const key = orderKey(order);
+    if (!key) return;
+    const inActive = active.some((incomingOrder) => sameOrder(order, incomingOrder));
+    if (!inActive) {
+      if (["delivered", "cancelled"].includes(order.status) || order.pendingSync) {
+        reconciled = replaceOrderAuthoritatively(reconciled, order);
+      }
+    }
+  });
 
   pendingUpdates.forEach((update) => {
     const local = current.find((order) => order?._id === update.orderId);

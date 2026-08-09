@@ -1,5 +1,4 @@
 import { FiAlertCircle, FiCheckCircle, FiClock, FiCreditCard, FiShoppingBag, FiGlobe, FiMapPin } from "react-icons/fi";
-import { resolveHotelTheme } from "../../utils/hotelTheme";
 
 export default function DashboardHome({ stats, hotel, setActiveTab }) {
   const metrics = [

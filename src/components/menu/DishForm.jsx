@@ -3,7 +3,6 @@ import api from "../../api/axios";
 import { FiX, FiImage } from "react-icons/fi";
 
 export default function DishForm({
-  hotelId,
   categories = [],
   editingDish,
   onSaved,
@@ -391,10 +390,7 @@ export default function DishForm({
   // CHECKBOX ITEM
   // =============================
 
-  const CheckOption = ({
-    name,
-    label
-  }) => (
+  const renderCheckOption = (name, label) => (
     <label
       className="
         flex
@@ -874,45 +870,14 @@ export default function DishForm({
 
             <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
 
-              <CheckOption
-                name="isAvailable"
-                label="Available"
-              />
-
-              <CheckOption
-                name="featured"
-                label="Featured"
-              />
-
-              <CheckOption
-                name="todaySpecial"
-                label="Today's Special"
-              />
-
-              <CheckOption
-                name="isRecommended"
-                label="Recommended"
-              />
-
-              <CheckOption
-                name="isBestseller"
-                label="Bestseller"
-              />
-
-              <CheckOption
-                name="isPopular"
-                label="Popular"
-              />
-
-              <CheckOption
-                name="isNewArrival"
-                label="New Arrival"
-              />
-
-              <CheckOption
-                name="chefChoice"
-                label="Chef's Choice"
-              />
+              {renderCheckOption("isAvailable", "Available")}
+              {renderCheckOption("featured", "Featured")}
+              {renderCheckOption("todaySpecial", "Today's Special")}
+              {renderCheckOption("isRecommended", "Recommended")}
+              {renderCheckOption("isBestseller", "Bestseller")}
+              {renderCheckOption("isPopular", "Popular")}
+              {renderCheckOption("isNewArrival", "New Arrival")}
+              {renderCheckOption("chefChoice", "Chef's Choice")}
 
             </div>
           </div>

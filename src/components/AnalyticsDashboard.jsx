@@ -15,7 +15,7 @@ import {
 
 const currency = (value) => `₹${Math.round(Number(value) || 0).toLocaleString("en-IN")}`;
 
-export default function AnalyticsDashboard({ hotel, orders = [], advancedEnabled = false }) {
+export default function AnalyticsDashboard({ orders = [], advancedEnabled = false }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -61,7 +61,7 @@ export default function AnalyticsDashboard({ hotel, orders = [], advancedEnabled
   };
 
   // Helper to parse dates safely
-  const getOrderDate = (order) => new Date(order.createdAt || order.queuedAt || order.updatedAt || Date.now());
+  const getOrderDate = (order) => new Date(order.createdAt || order.queuedAt || order.updatedAt || 0);
 
   // Filter out cancelled orders
   const validOrders = useMemo(() => {

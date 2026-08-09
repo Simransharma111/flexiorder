@@ -1,6 +1,5 @@
 import axios from "axios";
 import {
-  clearAuthSession,
   clearSessionForUnauthorizedResponse,
   getStoredAuthToken,
 } from "../utils/session";
