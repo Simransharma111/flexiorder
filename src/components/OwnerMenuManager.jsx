@@ -10,8 +10,6 @@ export default function OwnerMenuManager() {
   const [categories, setCategories] = useState([]);
   const [editingDish, setEditingDish] = useState(null);
   const [showForm, setShowForm] = useState(false);
-  const [search, setSearch] = useState("");
-  const [activeCategory, setActiveCategory] = useState("All");
   const [hotelId, setHotelId] = useState(null);
 
   // ============================
@@ -27,7 +25,6 @@ export default function OwnerMenuManager() {
       const res = await api.get("/hotel/me");
 
       const hotel = res.data?.hotel || res.data;
-
       const id = hotel?._id;
 
       if (!id) {
@@ -36,7 +33,6 @@ export default function OwnerMenuManager() {
       }
 
       setHotelId(id);
-
     } catch (err) {
       console.error(
         "Hotel loading error:",
@@ -57,7 +53,7 @@ export default function OwnerMenuManager() {
   }, [hotelId]);
 
   // ============================
-  // CATEGORIES
+  // LOAD CATEGORIES
   // ============================
 
   const loadCategories = async () => {
@@ -67,7 +63,6 @@ export default function OwnerMenuManager() {
       );
 
       setCategories(res.data || []);
-
     } catch (err) {
       console.error(
         "Category loading error:",
@@ -77,7 +72,7 @@ export default function OwnerMenuManager() {
   };
 
   // ============================
-  // DISHES
+  // LOAD DISHES
   // ============================
 
   const loadDishes = async () => {
@@ -87,7 +82,6 @@ export default function OwnerMenuManager() {
       );
 
       setDishes(res.data || []);
-
     } catch (err) {
       console.error(
         "Dish loading error:",
@@ -97,17 +91,67 @@ export default function OwnerMenuManager() {
   };
 
   // ============================
+  // DELETE DISH
+  // ============================
+
+  const handleDelete = async (dishId) => {
+    if (!dishId) {
+      console.error("Dish ID missing");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      "Are you sure you want to delete this dish?"
+    );
+
+    if (!confirmed) return;
+
+    try {
+      await api.delete(
+        `/menu/dish/${dishId}`
+      );
+
+      // Remove immediately from UI
+      setDishes((prev) =>
+        prev.filter(
+          (dish) => dish._id !== dishId
+        )
+      );
+
+      alert("Dish deleted successfully");
+    } catch (err) {
+      console.error(
+        "DELETE DISH ERROR:",
+        err.response?.data || err
+      );
+
+      alert(
+        err?.response?.data?.message ||
+        "Failed to delete dish"
+      );
+    }
+  };
+
+  // ============================
   // AFTER SAVE
   // ============================
 
-  const handleSaved = () => {
-    loadDishes();
+  const handleSaved = async () => {
+    await loadDishes();
+
     setEditingDish(null);
     setShowForm(false);
   };
 
+  // ============================
+  // RENDER
+  // ============================
+
   return (
-    <>
+    <div className="space-y-6">
+
+      {/* ADD DISH */}
+
       <button
         onClick={() => {
           setEditingDish(null);
@@ -118,12 +162,16 @@ export default function OwnerMenuManager() {
         + Add Dish
       </button>
 
+      {/* CATEGORY MANAGER */}
+
       {hotelId && (
         <MenuCategoryManager
           hotelId={hotelId}
           onCategoryUpdate={setCategories}
         />
       )}
+
+      {/* DISH FORM */}
 
       {showForm && hotelId && (
         <DishForm
@@ -138,14 +186,19 @@ export default function OwnerMenuManager() {
         />
       )}
 
+      {/* DISH LIST */}
+
       <DishList
         dishes={dishes}
+
         onEdit={(dish) => {
           setEditingDish(dish);
           setShowForm(true);
         }}
-        onDelete={loadDishes}
+
+        onDelete={handleDelete}
       />
-    </>
+
+    </div>
   );
 }
