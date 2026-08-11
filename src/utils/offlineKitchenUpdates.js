@@ -135,7 +135,9 @@ const appendKitchenUpdate = (queue, update) => {
   const now = new Date().toISOString();
   const queued = {
     ...update,
-    confirmedStatus: latestForOrder?.confirmedStatus || update.confirmedStatus,
+    confirmedStatus: update.preserveConfirmedStatus
+      ? update.confirmedStatus
+      : latestForOrder?.confirmedStatus || update.confirmedStatus,
     clientMutationId: update.clientMutationId || mutationId(),
     queuedAt: update.queuedAt || now,
     updatedAt: now,

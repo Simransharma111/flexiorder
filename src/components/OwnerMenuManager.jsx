@@ -640,7 +640,7 @@ export default function OwnerMenuManager({ advancedEnabled = false, restaurant =
       ================================================= */}
 
       {showForm && (
-        <div className="bg-white border border-gray-200 rounded-2xl shadow-sm mb-8">
+        <div className="ops-menu-dish-editor bg-white border border-gray-200 rounded-2xl shadow-sm mb-8">
 
           {/* FORM HEADER */}
 
@@ -670,7 +670,7 @@ export default function OwnerMenuManager({ advancedEnabled = false, restaurant =
 
           <form
             onSubmit={handleSubmit}
-            className="p-5"
+            className="ops-menu-dish-form p-5"
           >
 
             {/* BASIC DETAILS */}

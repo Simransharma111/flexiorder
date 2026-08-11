@@ -39,6 +39,36 @@ const countItems = (items = []) => items.reduce(
   0,
 );
 
+const finiteAmount = (value) => {
+  if (!["number", "string"].includes(typeof value) || String(value).trim() === "") return null;
+  return Number.isFinite(Number(value)) ? Number(value) : null;
+};
+
+const firstFiniteAmount = (...values) => {
+  for (const value of values) {
+    const amount = finiteAmount(value);
+    if (amount !== null) return amount;
+  }
+  return null;
+};
+
+export const operationalOrderTotal = (order) => {
+  const storedTotal = firstFiniteAmount(order?.totalAmount, order?.total);
+  if (storedTotal !== null) return storedTotal;
+  return (Array.isArray(order?.items) ? order.items : []).reduce((sum, item) => {
+    const unitPrice = firstFiniteAmount(item?.finalPrice, item?.price) ?? 0;
+    const nextTotal = sum + unitPrice * itemQuantity(item);
+    return Number.isFinite(nextTotal) ? nextTotal : sum;
+  }, 0);
+};
+
+const hasOperationalOrderAmount = (order) => (
+  firstFiniteAmount(order?.totalAmount, order?.total) !== null ||
+  (Array.isArray(order?.items) ? order.items : []).some(
+    (item) => firstFiniteAmount(item?.finalPrice, item?.price) !== null
+  )
+);
+
 const orderTimingLabel = (order) => {
   const type = String(order?.orderType || order?.type || "")
     .toLowerCase()
@@ -124,10 +154,9 @@ export default function OperationalOrderCard({
         ? "Deliver"
         : "Ready for pickup";
 
-  const calculatedTotal = items.reduce(
-    (sum, item) => sum + Number(item.price || item.finalPrice || 0) * Number(item.quantity || 1),
-    0
-  );
+  const calculatedTotal = orders.reduce((sum, currentOrder) =>
+    sum + operationalOrderTotal(currentOrder), 0);
+  const hasCalculatedAmount = orders.some(hasOperationalOrderAmount);
 
   return (
     <article
@@ -205,7 +234,11 @@ export default function OperationalOrderCard({
         <span><FiClock /> {lane === "new" ? "Received " : ""}{waitingMinutes(oldest)} min{lane === "new" ? " ago" : ""}</span>
         {lane === "new" && orders.length === 1 && <span>{orderTimingLabel(lead)}</span>}
         <span>{totalItems} {totalItems === 1 ? "item" : "items"}</span>
-        {calculatedTotal > 0 && <span className="ops-order-card__price-badge">₹{calculatedTotal}</span>}
+        {hasCalculatedAmount && calculatedTotal >= 0 && (
+          <span className="ops-order-card__price-badge" aria-label={`Order amount ₹${calculatedTotal.toFixed(2)}`}>
+            ₹{calculatedTotal.toLocaleString("en-IN", { maximumFractionDigits: 2 })}
+          </span>
+        )}
         {delayed && <span className="ops-order-card__delay"><FiAlertTriangle /> Delayed</span>}
       </div>
 

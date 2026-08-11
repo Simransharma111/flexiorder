@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  getReadyOrderIds,
+  getActiveOrderIds,
   groupOrdersByLocation,
   mergeOrderUpdate,
   mergeOrders,
@@ -21,29 +21,57 @@ describe("order model", () => {
       .toEqual([{ _id: "1", status: "accepted" }]);
   });
 
-  it("freezes and revalidates only unblocked ready order identities", () => {
+  it("freezes and revalidates every unblocked active order identity", () => {
     const initial = [
-      { _id: "ready-1", status: "ready" },
+      { _id: "pending-1", status: "pending" },
       { _id: "ready-2", clientOrderId: "local-ready-2", status: "ready" },
       { _id: "preparing-1", status: "preparing" },
-      { _id: "attention-1", status: "ready" },
+      { _id: "paused-1", status: "paused" },
+      { _id: "attention-1", status: "accepted" },
+      { _id: "delivered-1", status: "delivered" },
+      { _id: "cancelled-1", status: "cancelled" },
     ];
-    const frozen = getReadyOrderIds(initial, null, ["attention-1"]);
-    expect(frozen).toEqual(["ready-1", "local-ready-2"]);
+    const frozen = getActiveOrderIds(initial, null, ["attention-1"]);
+    expect(frozen).toEqual(["pending-1", "ready-2", "preparing-1", "paused-1"]);
 
     const changed = [
-      { _id: "ready-1", status: "delivered" },
+      { _id: "pending-1", status: "delivered" },
       { _id: "ready-2", clientOrderId: "local-ready-2", status: "ready" },
-      { _id: "new-ready", status: "ready" },
+      { _id: "preparing-1", status: "cancelled" },
+      { _id: "paused-1", status: "preparing" },
+      { _id: "new-active", status: "pending" },
     ];
-    expect(getReadyOrderIds(changed, frozen)).toEqual(["local-ready-2"]);
+    expect(getActiveOrderIds(changed, frozen)).toEqual(["ready-2", "paused-1"]);
   });
 
-  it("deduplicates ready records that expose different aliases for one order", () => {
-    expect(getReadyOrderIds([
+  it("deduplicates active aliases and excludes a terminal duplicate", () => {
+    expect(getActiveOrderIds([
       { _id: "server-ready", clientOrderId: "local-ready", status: "ready" },
       { _id: "local-ready", status: "ready" },
-    ])).toEqual(["local-ready"]);
+    ])).toEqual(["server-ready"]);
+    expect(getActiveOrderIds([
+      { _id: "local-terminal", status: "pending" },
+      { _id: "server-terminal", clientOrderId: "local-terminal", status: "delivered" },
+    ])).toEqual([]);
+  });
+
+  it("uses a newer explicit correction and the real server id across aliases", () => {
+    expect(getActiveOrderIds([
+      {
+        _id: "server-1",
+        clientOrderId: "local-1",
+        status: "delivered",
+        updatedAt: "2026-08-11T12:00:01Z",
+      },
+      {
+        _id: "local-1",
+        clientOrderId: "local-1",
+        status: "ready",
+        reverted: true,
+        statusChangeType: "revert",
+        updatedAt: "2026-08-11T12:00:02Z",
+      },
+    ])).toEqual(["server-1"]);
   });
 
   it("groups separate records by location without losing order boundaries", () => {
@@ -113,6 +141,27 @@ describe("order model", () => {
     });
   });
 
+  it("clears correction markers after authoritative confirmation", () => {
+    const result = mergeOrderUpdate(
+      [{
+        _id: "server-1",
+        status: "ready",
+        reverted: true,
+        statusChangeType: "revert",
+        pendingMutation: true,
+        updatedAt: "2026-08-11T12:00:00Z",
+      }],
+      { _id: "server-1", status: "ready", updatedAt: "2026-08-11T12:00:01Z" },
+      [],
+    );
+    expect(result[0]).toMatchObject({
+      status: "ready",
+      pendingMutation: false,
+      reverted: false,
+    });
+    expect(result[0].statusChangeType).toBeUndefined();
+  });
+
   it("uses an authoritative snapshot while retaining queued local mutations", () => {
     const result = reconcileAuthoritativeOrders(
       [{ _id: "one", status: "ready" }, { _id: "removed", status: "pending" }],
@@ -130,6 +179,20 @@ describe("order model", () => {
       [],
     );
     expect(result[0].status).toBe("delivered");
+  });
+
+  it("does not let an older terminal snapshot overwrite an explicit correction", () => {
+    const result = mergeOrders(
+      [{
+        _id: "one",
+        status: "ready",
+        reverted: true,
+        statusChangeType: "revert",
+        updatedAt: "2026-08-11T12:00:02Z",
+      }],
+      [{ _id: "one", status: "delivered", updatedAt: "2026-08-11T12:00:01Z" }],
+    );
+    expect(result[0].status).toBe("ready");
   });
 
   it("does not group unrelated takeaway or unknown-location orders", () => {

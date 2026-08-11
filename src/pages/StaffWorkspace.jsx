@@ -164,6 +164,9 @@ export default function StaffWorkspace() {
   const canChangeOrdering = canUseStaffCapability(hotel, "changeOrdering", currentRole);
   const canUseDisplay = featureSettings.publicDisplayEnabled &&
     canUseStaffCapability(hotel, "usePublicDisplay", currentRole);
+  const canBulkDeliver = ["staff", "waiter", "owner", "superadmin"].includes(
+    String(currentRole || "").toLowerCase()
+  );
 
   if (loading && !hotel) return <div className="ops-loading">Loading waiter workspace…</div>;
 
@@ -211,7 +214,7 @@ export default function StaffWorkspace() {
             refresh={fetchData}
             onOrdersChange={setOrders}
             godModeEnabled={featureSettings.godModeEnabled}
-            allowBulkDelivery
+            allowBulkDelivery={canBulkDeliver}
             hotel={hotel}
           />
         </div>

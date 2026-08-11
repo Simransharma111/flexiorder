@@ -5,7 +5,7 @@ import OrderCard from "./OrderCard";
 import OrderReceiptActions from "../orders/OrderReceiptActions";
 import useDialogFocus from "../../hooks/useDialogFocus";
 import {
-  getReadyOrderIds,
+  getActiveOrderIds,
   mergeOrders,
   mergeOrderUpdate,
   matchesOrderId,
@@ -43,6 +43,7 @@ export default function Orders({
   const [search, setSearch] = useState("");
   const [historyActionOrder, setHistoryActionOrder] = useState(null);
   const [historyActionOpenedAt, setHistoryActionOpenedAt] = useState(0);
+  const [historyCancellationMode, setHistoryCancellationMode] = useState(false);
   const [historyDetailOrder, setHistoryDetailOrder] = useState(null);
   const [bulkSnapshotIds, setBulkSnapshotIds] = useState(null);
   const [bulkSubmitting, setBulkSubmitting] = useState(false);
@@ -51,13 +52,18 @@ export default function Orders({
   const historyDetailDialogRef = useRef(null);
   const bulkDialogRef = useRef(null);
   const bulkDispatchingRef = useRef(false);
-  const closeHistoryActions = useCallback(() => setHistoryActionOrder(null), []);
+  const historyDispatches = useRef(new Set());
+  const closeHistoryActions = useCallback(() => {
+    setHistoryActionOrder(null);
+    setHistoryCancellationMode(false);
+  }, []);
   const closeHistoryDetails = useCallback(() => setHistoryDetailOrder(null), []);
   const closeBulkConfirmation = useCallback(() => {
     if (!bulkDispatchingRef.current) setBulkSnapshotIds(null);
   }, []);
   const openHistoryActions = useCallback((order) => {
     setHistoryActionOpenedAt(Date.now());
+    setHistoryCancellationMode(false);
     setHistoryActionOrder(order);
   }, []);
   useDialogFocus(Boolean(historyActionOrder), historyDialogRef, closeHistoryActions);
@@ -68,32 +74,6 @@ export default function Orders({
   const [attentionCount, setAttentionCount] = useState(getKitchenUpdatesNeedingAttention().length);
   // Delivered orders accumulate for the session so History persists across polls.
   const [sessionDeliveries, setSessionDeliveries] = useState([]);
-  // IDs currently visible in the Delivered lane (auto-hidden after 20 seconds).
-  const [visibleDeliveredIds, setVisibleDeliveredIds] = useState(new Set());
-  const deliveredAutoHideTimers = useRef({});
-
-  // Start 20-second auto-hide timer for each new entry in sessionDeliveries.
-  useEffect(() => {
-    sessionDeliveries.forEach((order) => {
-      if (deliveredAutoHideTimers.current[order._id]) return; // already tracking
-      // Show immediately in the Delivered lane.
-      setVisibleDeliveredIds((prev) => new Set([...prev, order._id]));
-      // Hide from the Delivered lane after 20 seconds (moves to History automatically).
-      deliveredAutoHideTimers.current[order._id] = window.setTimeout(() => {
-        setVisibleDeliveredIds((prev) => {
-          const next = new Set(prev);
-          next.delete(order._id);
-          return next;
-        });
-        delete deliveredAutoHideTimers.current[order._id];
-      }, 20000);
-    });
-  }, [sessionDeliveries]);
-
-  // Cleanup timers on unmount.
-  useEffect(() => () => {
-    Object.values(deliveredAutoHideTimers.current).forEach((t) => clearTimeout(t));
-  }, []);
 
   useEffect(() => {
     setLocalOrders((current) => reconcileAuthoritativeOrders(
@@ -132,20 +112,6 @@ export default function Orders({
             ? mergeOrders(current, [order])
             : current;
         });
-        if (order.clientOrderId && order._id && String(order.clientOrderId) !== String(order._id)) {
-          const localId = order.clientOrderId;
-          if (deliveredAutoHideTimers.current[localId]) {
-            clearTimeout(deliveredAutoHideTimers.current[localId]);
-            delete deliveredAutoHideTimers.current[localId];
-          }
-          setVisibleDeliveredIds((current) => {
-            if (!current.has(localId)) return current;
-            const next = new Set(current);
-            next.delete(localId);
-            next.add(order._id);
-            return next;
-          });
-        }
       });
       setPendingSyncCount(getPendingKitchenUpdates().length);
       setAttentionCount(getKitchenUpdatesNeedingAttention().length);
@@ -157,7 +123,12 @@ export default function Orders({
     };
   }, [publishOrders, refresh]);
 
-  const updateStatus = (orderId, status, pauseReason = null) => {
+  const updateStatus = (
+    orderId,
+    status,
+    pauseReason = null,
+    { preserveConfirmedStatus = false } = {},
+  ) => {
     let previousOrder = null;
     const currentOrder = localOrders.find((order) => matchesOrderId(order, orderId));
     const queued = queueKitchenUpdate({
@@ -165,6 +136,7 @@ export default function Orders({
       status,
       pauseReason,
       confirmedStatus: currentOrder?.status,
+      preserveConfirmedStatus,
     });
     flushSync(() => {
       publishOrders((current) => {
@@ -186,27 +158,19 @@ export default function Orders({
       });
     });
 
-    // When marking delivered, add a session snapshot immediately so the
-    // Delivered lane populates even before the API responds.
+    // Keep an optimistic History snapshot while synchronization completes.
     if (status === "delivered") {
-      const snapshot = { ...(previousOrder || {}), _id: orderId, status: "delivered",
-        deliveredAt: new Date().toISOString() };
-      setSessionDeliveries((prev) => [
-        ...prev.filter((o) => o._id !== orderId),
-        snapshot,
-      ]);
+      const snapshot = {
+        ...(previousOrder || {}),
+        _id: previousOrder?._id || orderId,
+        status: "delivered",
+        pendingMutation: true,
+        clientMutationId: queued.clientMutationId,
+        deliveredAt: new Date().toISOString(),
+      };
+      setSessionDeliveries((prev) => mergeOrders(prev, [snapshot]));
     } else {
-      // If an order is corrected back (e.g. to "preparing"), remove it from session
-      setSessionDeliveries((prev) => prev.filter((o) => o._id !== orderId));
-      if (deliveredAutoHideTimers.current[orderId]) {
-        clearTimeout(deliveredAutoHideTimers.current[orderId]);
-        delete deliveredAutoHideTimers.current[orderId];
-      }
-      setVisibleDeliveredIds((prev) => {
-        const next = new Set(prev);
-        next.delete(orderId);
-        return next;
-      });
+      setSessionDeliveries((prev) => prev.filter((order) => !matchesOrderId(order, orderId)));
     }
 
     setPendingSyncCount(getPendingKitchenUpdates().length);
@@ -214,12 +178,12 @@ export default function Orders({
   };
 
   const attentionOrderIds = getKitchenUpdatesNeedingAttention().map((item) => item.orderId);
-  const readyOrderIds = useMemo(
-    () => getReadyOrderIds(localOrders, null, attentionOrderIds),
+  const activeOrderIds = useMemo(
+    () => getActiveOrderIds(localOrders, null, attentionOrderIds),
     [attentionOrderIds, localOrders],
   );
   const revalidatedBulkIds = useMemo(
-    () => getReadyOrderIds(localOrders, bulkSnapshotIds, attentionOrderIds),
+    () => getActiveOrderIds(localOrders, bulkSnapshotIds, attentionOrderIds),
     [attentionOrderIds, bulkSnapshotIds, localOrders],
   );
   const bulkLocations = useMemo(() => new Set(revalidatedBulkIds.map((id) => {
@@ -228,20 +192,20 @@ export default function Orders({
   }).filter(Boolean)).size, [localOrders, revalidatedBulkIds]);
 
   const openBulkConfirmation = () => {
-    if (!allowBulkDelivery || bulkDispatchingRef.current || !readyOrderIds.length) return;
+    if (!allowBulkDelivery || bulkDispatchingRef.current || !activeOrderIds.length) return;
     setBulkAnnouncement("");
-    setBulkSnapshotIds([...readyOrderIds]);
+    setBulkSnapshotIds([...activeOrderIds]);
   };
 
   const deliverBulkSnapshot = () => {
     if (!allowBulkDelivery || bulkDispatchingRef.current || !bulkSnapshotIds) return;
-    const eligibleIds = getReadyOrderIds(
+    const eligibleIds = getActiveOrderIds(
       localOrders,
       bulkSnapshotIds,
       getKitchenUpdatesNeedingAttention().map((item) => item.orderId),
     );
     if (!eligibleIds.length) {
-      setBulkAnnouncement("No snapshotted orders are still Ready.");
+      setBulkAnnouncement("No snapshotted orders are still active.");
       setBulkSnapshotIds(null);
       return;
     }
@@ -257,7 +221,8 @@ export default function Orders({
         ? order.clientOrderId
         : undefined,
       status: "delivered",
-      confirmedStatus: "ready",
+      confirmedStatus: order.status,
+      preserveConfirmedStatus: true,
     })));
     const queuedByOrder = new Map(queued.map((item) => [String(item.orderId), item]));
     const optimisticOrders = sourceOrders.map((order) => {
@@ -280,7 +245,7 @@ export default function Orders({
     });
     setPendingSyncCount(getPendingKitchenUpdates().length);
     const skipped = bulkSnapshotIds.length - optimisticOrders.length;
-    setBulkAnnouncement(`${optimisticOrders.length} ${optimisticOrders.length === 1 ? "order" : "orders"} moved to History${skipped > 0 ? ` · ${skipped} no longer Ready` : ""}. Synchronization continues separately.`);
+    setBulkAnnouncement(`${optimisticOrders.length} ${optimisticOrders.length === 1 ? "order" : "orders"} moved to History${skipped > 0 ? ` · ${skipped} no longer active` : ""}. Synchronization continues separately.`);
     syncKitchenNow();
     setBulkSubmitting(false);
     bulkDispatchingRef.current = false;
@@ -291,25 +256,19 @@ export default function Orders({
     (order) => !["cancelled", "delivered"].includes(order.status)
   ), [localOrders]);
 
-  // Delivered lane: only orders still within their 20-second visibility window.
-  const deliveredOrders = useMemo(() =>
-    sessionDeliveries.filter((o) => visibleDeliveredIds.has(o._id)),
-  [sessionDeliveries, visibleDeliveredIds]);
-
   const lanes = {
     newOrders: activeOrders.filter((order) => order.status === "pending"),
     preparingOrders: activeOrders.filter((order) => ["accepted", "preparing"].includes(order.status)),
     readyOrders: activeOrders.filter((order) => order.status === "ready"),
     pausedOrders: activeOrders.filter((order) => order.status === "paused"),
-    deliveredOrders,
   };
 
-  // History: delivered/cancelled from live orders + ALL session deliveries (including auto-hidden ones).
+  // History: delivered/cancelled live orders plus optimistic session deliveries.
   const historyOrders = useMemo(() => {
     const localHistory = localOrders.filter(
       (order) => ["delivered", "cancelled"].includes(order.status)
     );
-    // Session deliveries that were reconciled away from localOrders (auto-hidden) still show in history.
+    // Session deliveries remain available while server polling catches up.
     const sessionHistory = sessionDeliveries.filter((delivery) => !localHistory.some((order) =>
       matchesOrderId(order, delivery._id) || matchesOrderId(order, delivery.clientOrderId)));
     return [...localHistory, ...sessionHistory].sort(
@@ -327,11 +286,16 @@ export default function Orders({
     ].some((value) => String(value || "").toLowerCase().includes(term)));
   }, [historyOrders, search]);
 
-  const changeHistoryStatus = (status) => {
+  const changeHistoryStatus = (status, cancellationReason = null) => {
     if (!historyActionOrder) return;
-    updateStatus(historyActionOrder._id, status);
-    setHistoryActionOrder(null);
+    const orderId = historyActionOrder._id || orderKey(historyActionOrder);
+    const signature = `${orderId}:${status}:${cancellationReason || ""}`;
+    if (historyDispatches.current.has(signature)) return;
+    historyDispatches.current.add(signature);
+    updateStatus(orderId, status, cancellationReason, { preserveConfirmedStatus: true });
+    closeHistoryActions();
     if (!["delivered", "cancelled"].includes(status)) setActiveView("active");
+    window.setTimeout(() => historyDispatches.current.delete(signature), 800);
   };
 
   const correctionTime = historyActionOrder && new Date(
@@ -349,15 +313,15 @@ export default function Orders({
           <button type="button" role="tab" aria-selected={activeView === "active"} className={activeView === "active" ? "is-active" : ""} onClick={() => setActiveView("active")}>Active</button>
           <button type="button" role="tab" aria-selected={activeView === "history"} className={activeView === "history" ? "is-active" : ""} onClick={() => setActiveView("history")}>History</button>
         </div>
-        {allowBulkDelivery && activeView === "active" && (
+        {allowBulkDelivery && activeView === "active" && !bulkSnapshotIds && (
           <button
             type="button"
             className="ops-deliver-all"
             onClick={openBulkConfirmation}
-            disabled={!readyOrderIds.length || bulkSubmitting}
-            aria-label={`Deliver all ready orders${readyOrderIds.length ? ` (${readyOrderIds.length})` : ""}`}
+            disabled={!activeOrderIds.length || bulkSubmitting}
+            aria-label={`Mark all active orders delivered${activeOrderIds.length ? ` (${activeOrderIds.length})` : ""}`}
           >
-            Deliver all ready{readyOrderIds.length ? ` (${readyOrderIds.length})` : ""}
+            Mark all delivered{activeOrderIds.length ? ` (${activeOrderIds.length})` : ""}
           </button>
         )}
       </div>
@@ -384,21 +348,6 @@ export default function Orders({
               <button type="button" onClick={() => {
                 const restorations = getKitchenRejectedRestorations();
                 const pending = discardKitchenUpdatesNeedingAttention();
-                const restoredAliases = new Set(restorations.flatMap((restoration) => {
-                  const delivery = sessionDeliveries.find((order) =>
-                    matchesOrderId(order, restoration.orderId));
-                  return [
-                    restoration.orderId,
-                    delivery?._id,
-                    delivery?.clientOrderId,
-                    delivery?.localId,
-                  ].filter(Boolean).map(String);
-                }));
-                restoredAliases.forEach((id) => {
-                  if (!deliveredAutoHideTimers.current[id]) return;
-                  clearTimeout(deliveredAutoHideTimers.current[id]);
-                  delete deliveredAutoHideTimers.current[id];
-                });
                 publishOrders((current) => current.map((order) => {
                   const restoration = restorations.find((item) => matchesOrderId(order, item.orderId));
                   return restoration ? {
@@ -412,11 +361,6 @@ export default function Orders({
                 }));
                 setSessionDeliveries((current) => current.filter((delivery) =>
                   !restorations.some((item) => matchesOrderId(delivery, item.orderId))));
-                setVisibleDeliveredIds((current) => {
-                  const next = new Set(current);
-                  restoredAliases.forEach((id) => next.delete(id));
-                  return next;
-                });
                 setPendingSyncCount(pending.length);
                 setAttentionCount(0);
                 refresh?.();
@@ -450,17 +394,30 @@ export default function Orders({
         <div className="ops-sheet-backdrop" onClick={closeHistoryActions}>
           <section ref={historyDialogRef} tabIndex={-1} className="ops-action-sheet" role="dialog" aria-modal="true" aria-label={`History actions for ${orderLocation(historyActionOrder)}`} onClick={(event) => event.stopPropagation()}>
             <div><h2>{orderLocation(historyActionOrder)}</h2><p>{historyActionOrder.status === "cancelled" ? "Cancelled order" : "Delivered order"}</p></div>
-            <div className="ops-action-sheet__actions">
-              <button type="button" onClick={() => {
-                setHistoryDetailOrder(historyActionOrder);
-                setHistoryActionOrder(null);
-              }}>View full details</button>
-              {canCorrectHistory && <button type="button" onClick={() => changeHistoryStatus("preparing")}>Mark not delivered</button>}
-              {canCorrectHistory && <button type="button" onClick={() => changeHistoryStatus("ready")}>Change to Ready</button>}
-              {canCorrectHistory && historyActionOrder.status !== "cancelled" && <button type="button" className="is-danger" onClick={() => changeHistoryStatus("cancelled")}>Cancel order</button>}
-            </div>
+            {historyCancellationMode ? (
+              <div className="ops-cancellation-reasons" role="group" aria-label="Cancellation reason">
+                {["Need modification", "Guest left", "Dish not available", "Other"].map((reason) => (
+                  <button type="button" className="is-danger" key={reason} onClick={() => changeHistoryStatus("cancelled", reason)}>{reason}</button>
+                ))}
+              </div>
+            ) : (
+              <div className="ops-action-sheet__actions">
+                <button type="button" onClick={() => {
+                  setHistoryDetailOrder(historyActionOrder);
+                  closeHistoryActions();
+                }}>View full details</button>
+                {canCorrectHistory && historyActionOrder.status === "delivered" && (
+                  <button type="button" onClick={() => changeHistoryStatus("ready")}>Change to Ready</button>
+                )}
+                {canCorrectHistory && historyActionOrder.status === "delivered" && (
+                  <button type="button" className="is-danger" onClick={() => setHistoryCancellationMode(true)}>Cancel order</button>
+                )}
+              </div>
+            )}
             {!canCorrectHistory && <p>Correction window closed. Details remain available.</p>}
-            <button type="button" className="ops-sheet-cancel" onClick={closeHistoryActions}>Close</button>
+            <button type="button" className="ops-sheet-cancel" onClick={historyCancellationMode ? () => setHistoryCancellationMode(false) : closeHistoryActions}>
+              {historyCancellationMode ? "Back" : "Close"}
+            </button>
           </section>
         </div>
       )}
@@ -477,17 +434,17 @@ export default function Orders({
       {bulkSnapshotIds && (
         <div className="ops-sheet-backdrop" onClick={closeBulkConfirmation}>
           <section ref={bulkDialogRef} tabIndex={-1} className="ops-action-sheet" role="dialog" aria-modal="true" aria-labelledby="deliver-all-title" onClick={(event) => event.stopPropagation()}>
-            <h2 id="deliver-all-title">Deliver {revalidatedBulkIds.length} ready {revalidatedBulkIds.length === 1 ? "order" : "orders"}?</h2>
-            <p>{bulkLocations} {bulkLocations === 1 ? "location" : "locations"} will move to History now. Each order will synchronize separately.</p>
+            <h2 id="deliver-all-title">Mark {revalidatedBulkIds.length} active {revalidatedBulkIds.length === 1 ? "order" : "orders"} delivered?</h2>
+            <p>Every snapshotted active order across New, Preparing, Paused, and Ready will move to History now. {bulkLocations} {bulkLocations === 1 ? "location" : "locations"} affected. Each order will synchronize separately.</p>
             {revalidatedBulkIds.length !== bulkSnapshotIds.length && (
-              <p role="status">Ready count changed from {bulkSnapshotIds.length} to {revalidatedBulkIds.length}. Only orders still Ready will be delivered.</p>
+              <p role="status">Active count changed from {bulkSnapshotIds.length} to {revalidatedBulkIds.length}. Only snapshotted orders that are still active will be delivered.</p>
             )}
             <div className="ops-action-sheet__actions">
               <button type="button" onClick={deliverBulkSnapshot} disabled={!revalidatedBulkIds.length || bulkSubmitting}>
                 {bulkSubmitting ? "Saving…" : `Confirm delivery of ${revalidatedBulkIds.length}`}
               </button>
             </div>
-            <button type="button" className="ops-sheet-cancel" onClick={closeBulkConfirmation} disabled={bulkSubmitting}>Keep orders Ready</button>
+            <button type="button" className="ops-sheet-cancel" onClick={closeBulkConfirmation} disabled={bulkSubmitting}>Keep orders active</button>
           </section>
         </div>
       )}

@@ -36,20 +36,51 @@ export const matchesOrderId = (order, id) => Boolean(
   )
 );
 
-export const getReadyOrderIds = (orders = [], snapshotIds = null, blockedIds = []) => {
+const BULK_ACTIVE_STATUSES = new Set(["pending", "accepted", "preparing", "paused", "ready"]);
+
+export const getActiveOrderIds = (orders = [], snapshotIds = null, blockedIds = []) => {
   const frozenIds = Array.isArray(snapshotIds) ? snapshotIds.map(String) : null;
   const blocked = (Array.isArray(blockedIds) ? blockedIds : []).map(String);
-  const seen = new Set();
-  return (Array.isArray(orders) ? orders : []).flatMap((order) => {
-    const key = orderKey(order);
+  const groups = [];
+
+  (Array.isArray(orders) ? orders : []).forEach((order) => {
     const aliases = [order?._id, order?.clientOrderId, order?.localId]
       .filter(Boolean)
       .map(String);
-    if (!key || order?.status !== "ready" || blocked.some((id) => matchesOrderId(order, id))) return [];
-    if (frozenIds && !frozenIds.some((id) => matchesOrderId(order, id))) return [];
-    if (aliases.some((id) => seen.has(id))) return [];
-    aliases.forEach((id) => seen.add(id));
-    return [key];
+    if (!aliases.length) return;
+
+    const matchingIndexes = groups.flatMap((group, index) => (
+      [...group.aliases].some((alias) => aliases.includes(alias)) ? [index] : []
+    ));
+    if (!matchingIndexes.length) {
+      groups.push({ aliases: new Set(aliases), orders: [order] });
+      return;
+    }
+
+    const primary = groups[matchingIndexes[0]];
+    aliases.forEach((alias) => primary.aliases.add(alias));
+    primary.orders.push(order);
+    matchingIndexes.slice(1).reverse().forEach((index) => {
+      groups[index].aliases.forEach((alias) => primary.aliases.add(alias));
+      primary.orders.push(...groups[index].orders);
+      groups.splice(index, 1);
+    });
+  });
+
+  return groups.flatMap((group) => {
+    const aliases = [...group.aliases];
+    const representative = group.orders.reduce(
+      (selected, order) => chooseOrder(selected, order),
+      null,
+    );
+    if (!BULK_ACTIVE_STATUSES.has(representative?.status)) return [];
+    if (blocked.some((id) => aliases.includes(id))) return [];
+    if (frozenIds && !frozenIds.some((id) => aliases.includes(id))) return [];
+    const serverOrder = group.orders.find((order) => order?._id &&
+      [order?.clientOrderId, order?.localId]
+        .filter(Boolean)
+        .every((alias) => String(alias) !== String(order._id)));
+    return [String(serverOrder?._id || representative?._id || orderKey(representative))];
   });
 };
 
@@ -98,6 +129,7 @@ const chooseOrder = (current, incoming) => {
   const currentRank = STATUS_RANK[current.status] ?? -1;
   const incomingRank = STATUS_RANK[incoming.status] ?? -1;
   const explicitRevert = incoming.reverted === true || incoming.statusChangeType === "revert";
+  const currentIsRevert = current.reverted === true || current.statusChangeType === "revert";
 
   const preserveIdentityAndSync = (selected) => ({
     ...selected,
@@ -109,6 +141,9 @@ const chooseOrder = (current, incoming) => {
   });
 
   if (!explicitRevert && incomingRank < currentRank) {
+    return preserveIdentityAndSync(current);
+  }
+  if (currentIsRevert && incomingRank > currentRank && orderTime(incoming) <= orderTime(current)) {
     return preserveIdentityAndSync(current);
   }
   if (incomingRank === currentRank && orderTime(incoming) < orderTime(current)) {
@@ -148,10 +183,12 @@ const hasPendingMutation = (order, currentOrder, pendingUpdates) => pendingUpdat
 export const mergeOrderUpdate = (current = [], incoming, pendingUpdates = []) => {
   if (!incoming) return current;
   const currentOrder = current.find((order) => sameOrder(order, incoming));
+  const pendingMutation = hasPendingMutation(incoming, currentOrder, pendingUpdates);
   return mergeOrders(current, [{
     ...incoming,
     clientOrderId: incoming.clientOrderId || currentOrder?.clientOrderId,
-    pendingMutation: hasPendingMutation(incoming, currentOrder, pendingUpdates),
+    pendingMutation,
+    ...(!pendingMutation ? { reverted: false, statusChangeType: undefined } : {}),
   }]);
 };
 
@@ -179,10 +216,12 @@ export const reconcileAuthoritativeOrders = (
   const active = Array.isArray(incoming) ? incoming : [];
   let reconciled = mergeOrders([], active.map((incomingOrder) => {
     const currentOrder = current.find((order) => sameOrder(order, incomingOrder));
+    const pendingMutation = hasPendingMutation(incomingOrder, currentOrder, pendingUpdates);
     return chooseOrder(currentOrder, {
       ...incomingOrder,
       clientOrderId: incomingOrder.clientOrderId || currentOrder?.clientOrderId,
-      pendingMutation: hasPendingMutation(incomingOrder, currentOrder, pendingUpdates),
+      pendingMutation,
+      ...(!pendingMutation ? { reverted: false, statusChangeType: undefined } : {}),
     });
   }));
 

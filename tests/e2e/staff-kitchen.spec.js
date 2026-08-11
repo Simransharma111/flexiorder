@@ -74,7 +74,14 @@ test("waiter saves an offline order and automatically syncs it after reconnectio
 
 test("kitchen advances an order from new to preparing to ready with one tap", async ({ page }) => {
   await installSession(page, "staff");
-  let currentOrder = kitchenOrder({ specialInstructions: "Less spicy, please" });
+  let currentOrder = kitchenOrder({
+    specialInstructions: "Less spicy, please",
+    totalAmount: 283.5,
+    items: [
+      { name: "Paneer Tikka", quantity: 2, price: 150, finalPrice: 125 },
+      { name: "Naan", quantity: 1, price: 50, finalPrice: 20 },
+    ],
+  });
   const statuses = [];
 
   await page.route("**/hotel/me", (route) => fulfillJson(route, hotel));
@@ -97,6 +104,7 @@ test("kitchen advances an order from new to preparing to ready with one tap", as
   await expect(newCard.locator(".ops-order-card__meta")).toContainText(/Received \d+ min ago/);
   await expect(newCard.getByText("Immediate", { exact: true })).toBeVisible();
   await expect(newCard.getByText("3 items", { exact: true })).toBeVisible();
+  await expect(newCard.getByText("₹283.5", { exact: true })).toHaveCSS("font-size", "16px");
   await expect(newCard.locator(".ops-order-card__item-row").filter({ hasText: "Paneer Tikka" })).toContainText("2 ×");
   await expect(newCard.getByText("Less spicy, please", { exact: true })).toBeVisible();
 
@@ -181,7 +189,9 @@ test("God Mode waiter blocks an accidental double click then delivers deliberate
   await expect(deliver).toBeVisible();
   await deliver.click();
   await expect.poll(() => statuses).toEqual(["ready", "delivered"]);
-  await expect(page.locator(".ops-order-card--delivered")).toHaveClass(/is-compact/);
+  await expect(page.locator(".ops-order-card--delivered")).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: /DELIVERED/ })).toHaveCount(0);
+  await expect(page.getByRole("tab", { name: "History" })).toBeVisible();
 });
 
 test("God Mode queues direct Ready offline once and replays the same mutation id", async ({ page, context }) => {
@@ -420,12 +430,96 @@ test("delivered leaves active orders immediately and history exposes full detail
   await expect(page.getByRole("heading", { name: "Timing" })).toBeVisible();
 });
 
-test("waiter delivers every snapshotted Ready order once and excludes other lanes", async ({ page }) => {
+test("operational cancellation uses four tap-only literal reasons", async ({ page }) => {
+  await installSession(page, "staff");
+  const reasons = ["Need modification", "Guest left", "Dish not available", "Other"];
+  const orders = reasons.map((_, index) => kitchenOrder({
+    _id: `cancel-${index + 1}`,
+    locationNumber: String(index + 8),
+  }));
+  const updates = [];
+  await mockStaffWorkspace(page, orders);
+  await page.route("**/kitchen/orders/*", async (route) => {
+    const id = route.request().url().split("/").pop();
+    const body = route.request().postDataJSON();
+    updates.push({ id, ...body });
+    const index = orders.findIndex((order) => order._id === id);
+    orders[index] = { ...orders[index], ...body, updatedAt: new Date().toISOString() };
+    return fulfillJson(route, { order: orders[index] });
+  });
+
+  await page.goto("/owner/order");
+  for (let index = 0; index < reasons.length; index += 1) {
+    await page.getByRole("button", { name: `More actions for Table ${index + 8}` }).click();
+    const dialog = page.getByRole("dialog", { name: `Actions for Table ${index + 8}` });
+    await expect(dialog.getByRole("textbox")).toHaveCount(0);
+    await dialog.getByRole("button", { name: "Cancel order" }).click();
+    await expect(dialog.getByRole("group", { name: "Cancellation reason" })).toBeVisible();
+    await expect(dialog.getByRole("textbox")).toHaveCount(0);
+    const reasonButton = dialog.getByRole("button", { name: reasons[index], exact: true });
+    if (reasons[index] === "Other") {
+      await reasonButton.evaluate((button) => {
+        button.click();
+        button.click();
+      });
+    } else {
+      await reasonButton.click();
+    }
+  }
+
+  await expect.poll(() => updates).toHaveLength(4);
+  expect(updates.map((update) => [update.status, update.pauseReason])).toEqual(
+    reasons.map((reason) => ["cancelled", reason])
+  );
+});
+
+test("delivered History can return to Ready or cancel with a tap reason", async ({ page }) => {
   await installSession(page, "staff");
   const orders = [
-    kitchenOrder({ _id: "ready-8", clientOrderId: "local-ready-8", status: "ready", orderNumber: "8001" }),
-    kitchenOrder({ _id: "ready-9", status: "ready", orderNumber: "9001", locationNumber: "9" }),
+    kitchenOrder({ _id: "history-ready", status: "delivered", deliveredAt: new Date().toISOString() }),
+    kitchenOrder({ _id: "history-cancel", status: "delivered", locationNumber: "9", deliveredAt: new Date().toISOString() }),
+  ];
+  const updates = [];
+  await mockStaffWorkspace(page, orders);
+  await page.route("**/kitchen/orders/*", async (route) => {
+    const id = route.request().url().split("/").pop();
+    const body = route.request().postDataJSON();
+    updates.push({ id, ...body });
+    const index = orders.findIndex((order) => order._id === id);
+    orders[index] = { ...orders[index], ...body, updatedAt: new Date().toISOString() };
+    return fulfillJson(route, { order: orders[index] });
+  });
+
+  await page.goto("/owner/order");
+  await page.getByRole("tab", { name: "History" }).click();
+  await page.getByRole("button", { name: "More options for Table 8" }).click();
+  await page.getByRole("button", { name: "Change to Ready" }).click();
+  await expect(page.getByRole("tab", { name: "Active" })).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByRole("button", { name: /^Deliver Table 8 order/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /DELIVERED/ })).toHaveCount(0);
+
+  await page.getByRole("tab", { name: "History" }).click();
+  await page.getByRole("button", { name: "More options for Table 9" }).click();
+  const dialog = page.getByRole("dialog", { name: "History actions for Table 9" });
+  await dialog.getByRole("button", { name: "Cancel order" }).click();
+  await expect(dialog.getByRole("textbox")).toHaveCount(0);
+  await dialog.getByRole("button", { name: "Guest left" }).click();
+
+  await expect.poll(() => updates).toHaveLength(2);
+  expect(updates).toEqual([
+    expect.objectContaining({ id: "history-ready", status: "ready" }),
+    expect.objectContaining({ id: "history-cancel", status: "cancelled", pauseReason: "Guest left" }),
+  ]);
+});
+
+test("waiter marks every snapshotted active order delivered once", async ({ page }) => {
+  await installSession(page, "staff");
+  const orders = [
+    kitchenOrder({ _id: "pending-8", status: "pending", orderNumber: "8001" }),
+    kitchenOrder({ _id: "accepted-9", status: "accepted", orderNumber: "9001", locationNumber: "9" }),
     kitchenOrder({ _id: "preparing-10", status: "preparing", orderNumber: "10001", locationNumber: "10" }),
+    kitchenOrder({ _id: "paused-11", status: "paused", orderNumber: "11001", locationNumber: "11" }),
+    kitchenOrder({ _id: "ready-12", clientOrderId: "local-ready-12", status: "ready", orderNumber: "12001", locationNumber: "12" }),
   ];
   const updates = [];
   await mockStaffWorkspace(page, orders);
@@ -438,35 +532,57 @@ test("waiter delivers every snapshotted Ready order once and excludes other lane
   });
 
   await page.goto("/owner/order");
-  const deliverAll = page.getByRole("button", { name: "Deliver all ready orders (2)" });
+  const readyRegion = page.getByLabel("Ready orders awaiting delivery");
+  await expect(readyRegion).toHaveCSS("position", "sticky");
+  await expect(readyRegion.locator(".ops-order-card--ready")).not.toHaveClass(/is-compact/);
+  await expect(readyRegion.getByText("Paneer Tikka", { exact: true })).toBeVisible();
+  const lanePositions = await page.locator(".ops-lane--new, .ops-lane--preparing, .ops-lane--ready").evaluateAll(
+    (lanes) => lanes.map((lane) => ({ className: lane.className, top: lane.getBoundingClientRect().top }))
+  );
+  const readyTop = lanePositions.find((lane) => lane.className.includes("ops-lane--ready")).top;
+  expect(readyTop).toBeGreaterThanOrEqual(Math.max(
+    ...lanePositions.filter((lane) => !lane.className.includes("ops-lane--ready")).map((lane) => lane.top)
+  ));
+  const statusColors = await page.locator(
+    ".ops-order-card--new, .ops-order-card--preparing, .ops-order-card--ready"
+  ).evaluateAll((cards) => [...new Set(cards.map((card) => getComputedStyle(card).backgroundColor))]);
+  expect(statusColors).toHaveLength(3);
+  const deliverAll = page.getByRole("button", { name: "Mark all active orders delivered (5)" });
   await expect(deliverAll).toBeVisible();
   await deliverAll.click();
-  const dialog = page.getByRole("dialog", { name: "Deliver 2 ready orders?" });
-  await expect(dialog).toContainText("2 locations");
-  await dialog.getByRole("button", { name: "Confirm delivery of 2" }).evaluate((button) => {
+  const dialog = page.getByRole("dialog", { name: "Mark 5 active orders delivered?" });
+  await expect(dialog.getByRole("heading")).toHaveCount(1);
+  await expect(page.getByRole("button", { name: /Mark all active orders delivered/ })).toHaveCount(0);
+  await expect(dialog).toContainText("5 locations affected");
+  await expect(dialog).toContainText("New, Preparing, Paused, and Ready");
+  await dialog.getByRole("button", { name: "Confirm delivery of 5" }).evaluate((button) => {
     button.click();
     button.click();
   });
 
   await expect(page.getByRole("tab", { name: "History" })).toHaveAttribute("aria-selected", "true");
   await expect(page.getByRole("button", { name: "More options for Table 8" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "More options for Table 9" })).toBeVisible();
-  await expect.poll(() => updates).toHaveLength(2);
+  await expect(page.getByRole("button", { name: "More options for Table 12" })).toBeVisible();
+  await expect.poll(() => updates).toHaveLength(5);
   expect(updates.map((item) => `${item.id}:${item.status}`).sort()).toEqual([
-    "ready-8:delivered",
-    "ready-9:delivered",
+    "accepted-9:delivered",
+    "paused-11:delivered",
+    "pending-8:delivered",
+    "preparing-10:delivered",
+    "ready-12:delivered",
   ]);
-  expect(new Set(updates.map((item) => item.clientMutationId)).size).toBe(2);
+  expect(new Set(updates.map((item) => item.clientMutationId)).size).toBe(5);
 
   await page.getByRole("tab", { name: "Active" }).click();
-  await expect(page.getByRole("button", { name: /Table 10 order/ })).toBeVisible();
+  await expect(page.locator(".ops-order-card")).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: /DELIVERED/ })).toHaveCount(0);
 });
 
 test("bulk delivery keeps successes in History and restores only a rejected order", async ({ page }) => {
   await installSession(page, "staff");
   const orders = [
     kitchenOrder({ _id: "bulk-success", status: "ready", locationNumber: "8" }),
-    kitchenOrder({ _id: "bulk-rejected", status: "ready", locationNumber: "9" }),
+    kitchenOrder({ _id: "bulk-rejected", status: "preparing", locationNumber: "9" }),
   ];
   await mockStaffWorkspace(page, orders);
   await page.route("**/kitchen/orders/*", async (route) => {
@@ -480,7 +596,7 @@ test("bulk delivery keeps successes in History and restores only a rejected orde
   });
 
   await page.goto("/owner/order");
-  await page.getByRole("button", { name: "Deliver all ready orders (2)" }).click();
+  await page.getByRole("button", { name: "Mark all active orders delivered (2)" }).click();
   await page.getByRole("button", { name: "Confirm delivery of 2" }).click();
   await expect(page.getByText("1 need attention")).toBeVisible();
   await expect(page.getByText("Delivery rejected for Table 9")).toBeVisible();
@@ -490,7 +606,7 @@ test("bulk delivery keeps successes in History and restores only a rejected orde
   await page.getByRole("button", { name: "Restore confirmed" }).click();
   await expect(page.getByText("1 need attention")).toHaveCount(0);
   await page.getByRole("tab", { name: "Active" }).click();
-  await expect(page.getByRole("button", { name: /^Deliver Table 9 order/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Finish Table 9 order/ })).toBeVisible();
   await expect(page.getByRole("button", { name: /^Deliver Table 8 order/ })).toHaveCount(0);
   await page.getByRole("tab", { name: "History" }).click();
   await expect(page.getByRole("button", { name: "More options for Table 8" })).toBeVisible();

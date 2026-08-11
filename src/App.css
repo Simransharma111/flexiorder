@@ -532,6 +532,40 @@ img {
 .ops-workspace button:disabled,
 .owner-shell button:disabled { opacity: .72; }
 
+.ops-menu-dish-editor {
+  border-color: var(--ops-border) !important;
+  background: var(--ops-card) !important;
+  color: var(--ops-ink) !important;
+}
+.ops-menu-dish-form input:not([type="checkbox"]):not([type="file"]),
+.ops-menu-dish-form select,
+.ops-menu-dish-form textarea {
+  border-color: var(--ops-border) !important;
+  background: var(--ops-card) !important;
+  color: var(--ops-ink) !important;
+  caret-color: var(--ops-ink);
+}
+.ops-menu-dish-editor .text-gray-500 { color: var(--ops-muted) !important; }
+.ops-menu-dish-form input::placeholder,
+.ops-menu-dish-form textarea::placeholder {
+  color: var(--ops-muted) !important;
+  opacity: 1;
+}
+.ops-menu-dish-form input:disabled,
+.ops-menu-dish-form select:disabled,
+.ops-menu-dish-form textarea:disabled {
+  background: var(--ops-subtle) !important;
+  color: var(--ops-disabled, var(--ops-muted)) !important;
+  opacity: 1;
+}
+.ops-menu-dish-form input:not(:disabled):-webkit-autofill,
+.ops-menu-dish-form input:not(:disabled):-webkit-autofill:hover,
+.ops-menu-dish-form input:not(:disabled):-webkit-autofill:focus {
+  -webkit-text-fill-color: var(--ops-ink) !important;
+  box-shadow: 0 0 0 1000px var(--ops-card) inset !important;
+  caret-color: var(--ops-ink);
+}
+
 .ops-loading {
   min-height: 100dvh;
   display: grid;
@@ -676,6 +710,42 @@ img {
   border-radius: 14px;
   background: var(--ops-subtle);
   overflow: hidden;
+}
+
+.ops-board--waiter {
+  min-height: calc(100dvh - 116px);
+  grid-template-areas:
+    "new"
+    "preparing"
+    "ready";
+  grid-template-rows: auto auto minmax(180px, auto);
+  align-content: stretch;
+}
+.ops-board--waiter .ops-lane--new { grid-area: new; border-color: #f59e0b; }
+.ops-board--waiter .ops-lane--preparing { grid-area: preparing; border-color: #93c5fd; background: #e8f1ff; }
+.ops-board--waiter .ops-lane--ready { grid-area: ready; }
+.ops-board--waiter .ops-paused-groups { grid-column: 1 / -1; }
+.ops-board--waiter .ops-lane--preparing .ops-lane__head { background: #dbeafe; border-bottom-color: #93c5fd; }
+.ops-board--waiter .ops-lane--preparing .ops-lane__head h2 { color: #173f7a; }
+.ops-lane--waiter-delivery {
+  position: sticky;
+  z-index: 12;
+  bottom: max(8px, env(safe-area-inset-bottom));
+  max-height: 46dvh;
+  display: flex;
+  flex-direction: column;
+  border: 2px solid #16a34a;
+  background: #dcfce7;
+  box-shadow: 0 -6px 22px rgba(22, 101, 52, .13);
+}
+.ops-lane--waiter-delivery .ops-lane__head { flex: 0 0 42px; background: #bbf7d0; border-bottom-color: #4ade80; }
+.ops-lane--waiter-delivery .ops-lane__head h2 { color: #14532d; }
+.ops-lane--waiter-delivery .ops-lane__cards {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
+  grid-auto-flow: row;
+  grid-auto-columns: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 .ops-lane__head {
@@ -853,6 +923,10 @@ img {
 .ops-order-card--new .ops-order-card__price-badge {
   background: rgba(69, 26, 3, 0.05) !important;
   border-color: rgba(69, 26, 3, 0.15) !important;
+  padding: 3px 8px;
+  font-size: 16px;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
 }
 .ops-order-card--new .ops-order-card__status {
   background: #fef3c7 !important;
@@ -918,6 +992,33 @@ img {
 .ops-order-card--preparing { border-left-color: var(--ops-preparing); }
 .ops-order-card--ready { border-left-color: var(--ops-ready); }
 .ops-order-card--paused { border-left-color: #6b7280; }
+.ops-board--waiter .ops-order-card--preparing {
+  border-color: #93c5fd;
+  border-left-color: #2563eb;
+  background: #eef5ff;
+  color: #173f7a;
+}
+.ops-board--waiter .ops-order-card--ready {
+  border-color: #86efac;
+  border-left-color: #16a34a;
+  background: #f0fdf4;
+  color: #14532d;
+}
+.ops-board--waiter .ops-order-card--preparing .ops-order-card__identity strong,
+.ops-board--waiter .ops-order-card--preparing .ops-order-card__identity span,
+.ops-board--waiter .ops-order-card--preparing .ops-order-card__meta,
+.ops-board--waiter .ops-order-card--preparing .ops-order-card__meta span { color: #173f7a; }
+.ops-board--waiter .ops-order-card--ready .ops-order-card__identity strong,
+.ops-board--waiter .ops-order-card--ready .ops-order-card__identity span,
+.ops-board--waiter .ops-order-card--ready .ops-order-card__meta,
+.ops-board--waiter .ops-order-card--ready .ops-order-card__meta span,
+.ops-board--waiter .ops-order-card--ready .ops-order-card__summary { color: #14532d; }
+.ops-board--waiter .ops-paused-strip,
+.ops-board--waiter .ops-paused-options {
+  border-color: #c4b5fd;
+  background: #f5f3ff;
+  color: #5b21b6;
+}
 .ops-order-card.is-delayed { border-top-color: var(--ops-delayed); border-right-color: var(--ops-delayed); border-bottom-color: var(--ops-delayed); }
 .ops-order-card.is-updated { box-shadow: inset 0 0 0 2px #f59e0b; }
 
@@ -1098,6 +1199,16 @@ img {
 .ops-action-sheet p { margin: 3px 0 12px; color: var(--ops-muted); font-size: 13px; }
 .ops-action-sheet textarea { width: 100%; min-height: 72px; resize: vertical; border: 1px solid var(--ops-border); border-radius: 10px; padding: 10px; }
 .ops-action-sheet__actions { display: grid; gap: 8px; margin-top: 10px; }
+.ops-cancellation-reasons { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 10px; }
+.ops-cancellation-reasons button {
+  min-height: 54px;
+  border: 1px solid #fecaca;
+  border-radius: 10px;
+  background: #fff7f7;
+  padding: 8px 10px;
+  color: #991b1b;
+  font-weight: 800;
+}
 .ops-action-sheet__actions button,
 .ops-sheet-cancel,
 .ops-tools-sheet > button,
@@ -1207,6 +1318,14 @@ img {
 
 @media (min-width: 900px) {
   .ops-board { grid-template-columns: minmax(0, 1.15fr) minmax(0, 1.15fr) minmax(240px, .7fr); gap: 12px; padding: 14px 16px; }
+  .ops-board--waiter {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-areas:
+      "new preparing"
+      "ready ready";
+    grid-template-rows: minmax(250px, 1fr) minmax(190px, auto);
+  }
+  .ops-board--waiter .ops-lane { min-height: 0; }
   .ops-kitchen-workspace .ops-board { min-height: 100dvh; }
   .ops-lane { display: flex; min-height: calc(100dvh - 28px); flex-direction: column; }
   .ops-lane__cards { grid-auto-flow: row; grid-auto-columns: auto; align-content: start; overflow-x: hidden; overflow-y: auto; }

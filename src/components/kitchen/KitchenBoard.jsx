@@ -15,9 +15,11 @@ const LANE_META = [
   { key: "ready", title: "🟢 READY", empty: "Nothing ready" },
 ];
 
-const WAITER_LANE_META = [
-  ...LANE_META,
-  { key: "delivered", title: "✅ DELIVERED", empty: "Nothing delivered yet" },
+const CANCELLATION_REASONS = [
+  "Need modification",
+  "Guest left",
+  "Dish not available",
+  "Other",
 ];
 
 export default function KitchenBoard({
@@ -25,15 +27,15 @@ export default function KitchenBoard({
   preparingOrders = [],
   readyOrders = [],
   pausedOrders = [],
-  deliveredOrders = [],
   updateStatus,
   surface = "kitchen",
   godModeEnabled = false,
 }) {
   const [actionGroup, setActionGroup] = useState(null);
-  const [reason, setReason] = useState("");
+  const [choosingCancellationReason, setChoosingCancellationReason] = useState(false);
   const sheetRef = useRef(null);
   const lastGodModeActivation = useRef(new Map());
+  const actionDispatches = useRef(new Set());
 
   const groupForDisplay = useCallback((orders) => godModeEnabled
     ? orders.map((order) => ({
@@ -48,14 +50,11 @@ export default function KitchenBoard({
     new: groupForDisplay(newOrders),
     preparing: groupForDisplay(preparingOrders),
     ready: groupForDisplay(readyOrders),
-    delivered: groupForDisplay(deliveredOrders),
-  }), [deliveredOrders, groupForDisplay, newOrders, preparingOrders, readyOrders]);
-
-  const activeLaneMeta = surface === "waiter" ? WAITER_LANE_META : LANE_META;
+  }), [groupForDisplay, newOrders, preparingOrders, readyOrders]);
 
   const updateGroup = (orders, status, pauseReason = null) => {
     orders.forEach((order) => {
-      updateStatus(order._id, status, pauseReason);
+      updateStatus(order._id || orderKey(order), status, pauseReason);
     });
   };
 
@@ -78,20 +77,24 @@ export default function KitchenBoard({
               }
             }, 800);
           }
-          updateStatus(order._id, next, null);
+          updateStatus(order._id || orderKey(order), next, null);
         }
       });
   };
 
   const closeActions = useCallback(() => {
     setActionGroup(null);
-    setReason("");
+    setChoosingCancellationReason(false);
   }, []);
 
-  const runAction = (status) => {
+  const runAction = (status, cancellationReason = null) => {
     if (!actionGroup) return;
-    updateGroup(actionGroup.orders, status, reason.trim() || null);
+    const signature = `${actionGroup.orders.map((order) => orderKey(order)).sort().join("|")}:${status}:${cancellationReason || ""}`;
+    if (actionDispatches.current.has(signature)) return;
+    actionDispatches.current.add(signature);
+    updateGroup(actionGroup.orders, status, cancellationReason);
     closeActions();
+    window.setTimeout(() => actionDispatches.current.delete(signature), 800);
   };
 
   useDialogFocus(Boolean(actionGroup), sheetRef, closeActions);
@@ -107,8 +110,12 @@ export default function KitchenBoard({
 
   return (
     <section className={`ops-board ops-board--${surface}${godModeEnabled ? " is-god-mode" : ""}`} aria-label={`${surface} active orders`}>
-      {activeLaneMeta.map((lane) => (
-        <section className={`ops-lane ops-lane--${lane.key}`} key={lane.key}>
+      {LANE_META.map((lane) => (
+        <section
+          className={`ops-lane ops-lane--${lane.key}${surface === "waiter" && lane.key === "ready" ? " ops-lane--waiter-delivery" : ""}`}
+          key={lane.key}
+          aria-label={surface === "waiter" && lane.key === "ready" ? "Ready orders awaiting delivery" : undefined}
+        >
           <header className="ops-lane__head">
             <h2>{lane.title}</h2>
             <span className={`ops-lane__count${lane.key === "new" && lanes.new.length ? " is-live" : ""}`}>
@@ -122,16 +129,13 @@ export default function KitchenBoard({
                 group={group}
                 surface={surface}
                 compact={godModeEnabled
-                  ? (surface === "kitchen" ? lane.key === "ready" : lane.key === "delivered")
-                  : lane.key !== "new"}
+                  ? surface === "kitchen" && lane.key === "ready"
+                  : lane.key !== "new" && !(surface === "waiter" && lane.key === "ready")}
                 godModeEnabled={godModeEnabled}
               onPrimary={
                 // Kitchen: suppress primary tap on ready (no further kitchen action).
                 // Waiter: ready cards deliver on tap; all other lanes advance normally.
-                // Delivered lane: no further action possible.
-                lane.key === "delivered" ||
-                (lane.key === "ready" && surface === "kitchen") ||
-                group.orders.every((order) => order.status === "delivered")
+                (lane.key === "ready" && surface === "kitchen")
                   ? undefined
                   : primaryAction
               }
@@ -175,29 +179,30 @@ export default function KitchenBoard({
               <h2>{actionGroup.location}</h2>
               <p>Choose an action for {actionGroup.orders.length > 1 ? "these orders" : "this order"}.</p>
             </div>
-            <><textarea value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Reason or note (optional)" />
-            <div className="ops-action-sheet__actions">
-              {actionGroup.orders[0]?.status === "delivered" ? (
-                <>
-                  <button type="button" onClick={() => runAction("ready")}>Mark not delivered (Back to Ready)</button>
+            {choosingCancellationReason ? (
+              <div className="ops-cancellation-reasons" role="group" aria-label="Cancellation reason">
+                {CANCELLATION_REASONS.map((reason) => (
+                  <button type="button" className="is-danger" key={reason} onClick={() => runAction("cancelled", reason)}>
+                    {reason}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className="ops-action-sheet__actions">
+                {actionGroup.orders[0]?.status === "paused" ? (
                   <button type="button" onClick={() => runAction("preparing")}>Resume preparing</button>
-                  <button type="button" className="is-danger" onClick={() => runAction("cancelled")}>Cancel order</button>
-                </>
-              ) : (
-                <>
-                  {actionGroup.orders[0]?.status === "paused" ? (
-                    <button type="button" onClick={() => runAction("preparing")}>Resume preparing</button>
-                  ) : (
-                    <button type="button" onClick={() => runAction("paused")}>Pause</button>
-                  )}
-                  {surface === "waiter" && (
-                    <button type="button" onClick={() => runAction("delivered")}>Mark delivered</button>
-                  )}
-                  <button type="button" className="is-danger" onClick={() => runAction("cancelled")}>Cancel order</button>
-                </>
-              )}
-            </div></>
-            <button type="button" className="ops-sheet-cancel" onClick={closeActions}>Close</button>
+                ) : (
+                  <button type="button" onClick={() => runAction("paused")}>Pause</button>
+                )}
+                {surface === "waiter" && (
+                  <button type="button" onClick={() => runAction("delivered")}>Mark delivered</button>
+                )}
+                <button type="button" className="is-danger" onClick={() => setChoosingCancellationReason(true)}>Cancel order</button>
+              </div>
+            )}
+            <button type="button" className="ops-sheet-cancel" onClick={choosingCancellationReason ? () => setChoosingCancellationReason(false) : closeActions}>
+              {choosingCancellationReason ? "Back" : "Close"}
+            </button>
           </section>
         </div>
       )}

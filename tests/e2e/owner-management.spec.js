@@ -232,6 +232,50 @@ test("owner can type and save a custom dish category", async ({ page }) => {
   await expect(page.getByRole("button", { name: "House Specials" })).toBeVisible();
 });
 
+test("dish editor controls remain readable in a dark restaurant theme", async ({ page }) => {
+  await page.unroute("**/hotel/me");
+  await page.route("**/hotel/me", (route) => fulfillJson(route, { hotel: {
+    ...hotel,
+    theme: {
+      mode: "dark",
+      primary: "#111827",
+      secondary: "#0f172a",
+      accent: "#f97316",
+    },
+  } }));
+  await page.route("**/menu/hotel-1", (route) => fulfillJson(route, []));
+
+  await page.goto("/owner/dashboard");
+  await openOwnerTab(page, "Menu");
+  await page.getByRole("button", { name: "Add Dish" }).click();
+  const form = page.locator(".ops-menu-dish-form");
+  await expect(form).toBeVisible();
+
+  const controls = form.locator('input:not([type="checkbox"]):not([type="file"]), select, textarea');
+  await expect(controls.first()).not.toHaveCSS("background-color", "rgb(255, 255, 255)");
+  const readable = await controls.evaluateAll((elements) => {
+    const luminance = (cssColor) => {
+      const [red, green, blue] = cssColor.match(/[\d.]+/g).slice(0, 3).map(Number).map((value) => {
+        const channel = value / 255;
+        return channel <= 0.03928 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+      });
+      return 0.2126 * red + 0.7152 * green + 0.0722 * blue;
+    };
+    return elements.every((element) => {
+      const style = getComputedStyle(element);
+      const foreground = luminance(style.color);
+      const background = luminance(style.backgroundColor);
+      return (Math.max(foreground, background) + 0.05) /
+        (Math.min(foreground, background) + 0.05) >= 4.5;
+    });
+  });
+  expect(readable).toBe(true);
+  const placeholderColor = await form.getByPlaceholder("e.g. Paneer Butter Masala").evaluate(
+    (element) => getComputedStyle(element, "::placeholder").color
+  );
+  expect(placeholderColor).not.toBe("rgb(255, 255, 255)");
+});
+
 test("owner reads wrapped menus with a populated restaurant id", async ({ page }) => {
   await page.addInitScript(() => {
     const user = JSON.parse(localStorage.getItem("user") || "null");

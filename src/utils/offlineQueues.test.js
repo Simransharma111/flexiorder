@@ -96,6 +96,51 @@ describe("offline queues", () => {
     expect(getPendingKitchenUpdates()).toHaveLength(2);
   });
 
+  it("retains each mixed-status bulk order's own rollback status", () => {
+    queueKitchenUpdate({
+      orderId: "prep-1",
+      status: "preparing",
+      confirmedStatus: "pending",
+    });
+    const queued = queueKitchenUpdates([
+      { orderId: "new-1", status: "delivered", confirmedStatus: "pending", preserveConfirmedStatus: true },
+      { orderId: "prep-1", status: "delivered", confirmedStatus: "preparing", preserveConfirmedStatus: true },
+      { orderId: "paused-1", status: "delivered", confirmedStatus: "paused", preserveConfirmedStatus: true },
+      { orderId: "ready-1", status: "delivered", confirmedStatus: "ready", preserveConfirmedStatus: true },
+    ]);
+
+    expect(queued.filter((item) => item.status === "delivered")
+      .map(({ orderId, confirmedStatus }) => [orderId, confirmedStatus])).toEqual([
+      ["new-1", "pending"],
+      ["prep-1", "preparing"],
+      ["paused-1", "paused"],
+      ["ready-1", "ready"],
+    ]);
+    expect(new Set(queued.map((item) => item.clientMutationId)).size).toBe(4);
+  });
+
+  it("restores Delivered when a correction queued behind delivery is rejected", () => {
+    queueKitchenUpdate({
+      orderId: "order-1",
+      status: "delivered",
+      confirmedStatus: "ready",
+    });
+    queueKitchenUpdate({
+      orderId: "order-1",
+      status: "ready",
+      confirmedStatus: "delivered",
+      preserveConfirmedStatus: true,
+    });
+
+    expect(getPendingKitchenUpdates().map(({ status, confirmedStatus }) => ({
+      status,
+      confirmedStatus,
+    }))).toEqual([
+      { status: "delivered", confirmedStatus: "ready" },
+      { status: "ready", confirmedStatus: "delivered" },
+    ]);
+  });
+
   it("records failed kitchen retries without losing the mutation", () => {
     queueKitchenUpdate({ orderId: "order-1", status: "ready" });
     const failed = recordKitchenUpdateFailure(
