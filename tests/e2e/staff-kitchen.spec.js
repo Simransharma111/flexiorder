@@ -53,7 +53,7 @@ test("waiter saves an offline order and automatically syncs it after reconnectio
 
 test("kitchen advances an order from new to preparing to ready with one tap", async ({ page }) => {
   await installSession(page, "staff");
-  let currentOrder = kitchenOrder();
+  let currentOrder = kitchenOrder({ specialInstructions: "Less spicy, please" });
   const statuses = [];
 
   await page.route("**/hotel/me", (route) => fulfillJson(route, hotel));
@@ -68,11 +68,21 @@ test("kitchen advances an order from new to preparing to ready with one tap", as
   });
 
   await page.goto("/kitchen");
+  const newCard = page.locator(".ops-order-card--new");
   let orderCard = page.getByRole("button", { name: /^Accept Table 8 order/ });
   await expect(orderCard).toBeVisible();
+  await expect(newCard.getByText("NEW ORDER", { exact: true })).toBeVisible();
+  await expect(newCard.getByText("Table 8", { exact: true })).toBeVisible();
+  await expect(newCard.locator(".ops-order-card__meta")).toContainText(/Received \d+ min ago/);
+  await expect(newCard.getByText("Immediate", { exact: true })).toBeVisible();
+  await expect(newCard.getByText("3 items", { exact: true })).toBeVisible();
+  await expect(newCard.locator(".ops-order-card__item-row").filter({ hasText: "Paneer Tikka" })).toContainText("2 ×");
+  await expect(newCard.getByText("Less spicy, please", { exact: true })).toBeVisible();
 
   await orderCard.click();
   await expect.poll(() => statuses).toEqual(["accepted"]);
+  await expect(page.locator(".ops-order-card__new-banner")).toHaveCount(0);
+  await expect(page.locator(".ops-order-card--preparing")).toBeVisible();
   orderCard = page.getByRole("button", { name: /^Finish Table 8 order/ });
   await orderCard.click();
   await expect.poll(() => statuses).toEqual(["accepted", "preparing"]);
@@ -81,6 +91,53 @@ test("kitchen advances an order from new to preparing to ready with one tap", as
 
   const readyColumn = page.getByRole("heading", { name: /READY/ }).locator("../..");
   await expect(readyColumn.getByText("Table 8")).toBeVisible();
+});
+
+test("grouped new orders preserve item, timing, and instruction boundaries", async ({ page }) => {
+  await installSession(page, "staff");
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  const scheduledFor = new Date(Date.now() + 60 * 60_000).toISOString();
+  const orders = [
+    kitchenOrder({
+      _id: "order-group-a",
+      items: [{ name: "Paneer Tikka", quantity: 2 }],
+      note: "Less spicy",
+    }),
+    kitchenOrder({
+      _id: "order-group-b",
+      orderType: "schedule",
+      scheduledFor,
+      guestName: "Anika",
+      items: [
+        { name: "Hakka Noodles", quantity: 1 },
+        { name: "Removed dish", quantity: 0 },
+      ],
+      note: "No onion",
+    }),
+  ];
+
+  await page.route("**/hotel/me", (route) => fulfillJson(route, hotel));
+  await page.route("**/kitchen/orders", (route) => fulfillJson(route, { orders }));
+
+  await page.goto("/kitchen");
+  const newCard = page.locator(".ops-order-card--new");
+  await expect(newCard).toHaveCount(1);
+  await expect(newCard.getByText("2 separate orders", { exact: true })).toBeVisible();
+  await expect(newCard.getByText("3 items", { exact: true })).toBeVisible();
+
+  const orderBlocks = newCard.locator(".ops-order-card__order-block");
+  await expect(orderBlocks).toHaveCount(2);
+  const immediateBlock = orderBlocks.filter({ hasText: "Paneer Tikka" });
+  const scheduledBlock = orderBlocks.filter({ hasText: "Hakka Noodles" });
+  await expect(immediateBlock.getByText("Immediate", { exact: true })).toBeVisible();
+  await expect(immediateBlock.getByText("Less spicy", { exact: true })).toBeVisible();
+  await expect(immediateBlock.getByText("No onion", { exact: true })).toHaveCount(0);
+
+  await expect(scheduledBlock.getByText(/^Scheduled ·/)).toBeVisible();
+  await expect(scheduledBlock.getByText("Removed dish", { exact: true })).toHaveCount(0);
+  await expect(scheduledBlock.getByText("No onion", { exact: true })).toBeVisible();
+  await expect(scheduledBlock.getByText("Less spicy", { exact: true })).toHaveCount(0);
+  await expect(newCard).toHaveCSS("animation-name", "none");
 });
 
 test("kitchen queues a status change offline and replays it with a mutation id", async ({ page, context }) => {

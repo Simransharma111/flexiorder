@@ -21,6 +21,41 @@ const STATUS_LABEL = {
 const getNote = (order) =>
   order?.note || order?.notes || order?.specialInstructions || order?.instructions || "";
 
+const getOrderNotes = (order) => [...new Set(
+  [order?.note, order?.notes, order?.specialInstructions, order?.instructions]
+    .flatMap((value) => Array.isArray(value) ? value : [value])
+    .map((value) => String(value || "").trim())
+    .filter(Boolean)
+)];
+
+const itemQuantity = (item) => {
+  if (item?.quantity === undefined || item?.quantity === null || item?.quantity === "") return 1;
+  const quantity = Number(item?.quantity);
+  return Number.isFinite(quantity) && quantity > 0 ? quantity : 0;
+};
+
+const countItems = (items = []) => items.reduce(
+  (total, item) => total + itemQuantity(item),
+  0,
+);
+
+const orderTimingLabel = (order) => {
+  const type = String(order?.orderType || order?.type || "")
+    .toLowerCase()
+    .replace(/[\s_-]/g, "");
+  const scheduled = order?.scheduledFor || order?.scheduledAt;
+  if (!["schedule", "scheduled"].includes(type) && !scheduled) return "Immediate";
+
+  const date = new Date(scheduled);
+  if (!scheduled || Number.isNaN(date.getTime())) return "Scheduled";
+  return `Scheduled · ${date.toLocaleString([], {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  })}`;
+};
+
 export default function OperationalOrderCard({
   order,
   group,
@@ -37,6 +72,7 @@ export default function OperationalOrderCard({
   const delayed = orders.some((item) => isDelayedOrder(item));
   const updated = orders.some((item) => item?.isUpdated || item?.updatedByGuest || item?.hasEdits);
   const notes = [...new Set(orders.map(getNote).filter(Boolean))];
+  const totalItems = countItems(items);
   const pressTimer = useRef(null);
   const longPressTriggered = useRef(false);
   const waitingToSync = orders.some((item) => item?.pendingSync);
@@ -99,7 +135,7 @@ export default function OperationalOrderCard({
         <button
           type="button"
           className="ops-order-card__primary-action"
-          aria-label={`${actionName} ${location} order. ${items.reduce((sum, item) => sum + Number(item.quantity || 0), 0)} items.`}
+          aria-label={`${actionName} ${location} order. ${totalItems} items.`}
           onClick={activate}
           onKeyDown={(event) => {
             if (event.key === "F10" && event.shiftKey) {
@@ -108,6 +144,14 @@ export default function OperationalOrderCard({
             }
           }}
         />
+      )}
+      {lane === "new" && (
+        <div className="ops-order-card__new-banner">
+          <strong>NEW ORDER</strong>
+          <span>{orders.length > 1
+            ? `${orders.length} separate orders`
+            : interactive ? "Tap card to accept" : "1 order"}</span>
+        </div>
       )}
       <div className="ops-order-card__head">
         <div className="ops-order-card__identity">
@@ -118,9 +162,11 @@ export default function OperationalOrderCard({
           {orders.length > 1 && <span>{orders.length} orders</span>}
         </div>
         <div className="ops-order-card__signals">
-          <span className="ops-order-card__status">
-            {STATUS_LABEL[lane]} {interactive && " →"}
-          </span>
+          {lane !== "new" && (
+            <span className="ops-order-card__status">
+              {STATUS_LABEL[lane]} {interactive && " →"}
+            </span>
+          )}
           {waitingToSync && <span className="ops-order-card__updated">Syncing</span>}
           {updated && <span className="ops-order-card__updated">Updated</span>}
           {onOptions && (
@@ -141,17 +187,68 @@ export default function OperationalOrderCard({
       </div>
 
       <div className="ops-order-card__meta">
-        <span><FiClock /> {waitingMinutes(oldest)} min</span>
-        <span>{items.reduce((sum, item) => sum + Number(item.quantity || 0), 0)} items</span>
+        <span><FiClock /> {lane === "new" ? "Received " : ""}{waitingMinutes(oldest)} min{lane === "new" ? " ago" : ""}</span>
+        {lane === "new" && orders.length === 1 && <span>{orderTimingLabel(lead)}</span>}
+        <span>{totalItems} {totalItems === 1 ? "item" : "items"}</span>
         {calculatedTotal > 0 && <span className="ops-order-card__price-badge">₹{calculatedTotal}</span>}
         {delayed && <span className="ops-order-card__delay"><FiAlertTriangle /> Delayed</span>}
       </div>
 
-      {(!compact || lane === "new") && (
+      {lane === "new" && (
+        <div className="ops-order-card__order-blocks">
+          {orders.map((currentOrder, orderIndex) => {
+            const orderItems = Array.isArray(currentOrder?.items) ? currentOrder.items : [];
+            const visibleOrderItems = orderItems.filter((item) => itemQuantity(item) > 0);
+            const orderNotes = getOrderNotes(currentOrder);
+            const orderItemTotal = countItems(orderItems);
+            const boundaryBase = orderKey(currentOrder) || currentOrder?.createdAt || currentOrder?.queuedAt || location;
+            const boundaryKey = `${boundaryBase}-${orderIndex}`;
+
+            return (
+              <section
+                className="ops-order-card__order-block"
+                aria-label={orders.length > 1 ? `Order ${orderIndex + 1}` : "Order items"}
+                key={boundaryKey}
+              >
+                {orders.length > 1 && (
+                  <header className="ops-order-card__order-head">
+                    <strong>Order {orderIndex + 1}</strong>
+                    <span>{orderTimingLabel(currentOrder)}</span>
+                    <span>{orderItemTotal} {orderItemTotal === 1 ? "item" : "items"}</span>
+                  </header>
+                )}
+                {currentOrder?.guestName && currentOrder.guestName !== "Guest" && orders.length > 1 && (
+                  <span className="ops-order-card__order-guest">{currentOrder.guestName}</span>
+                )}
+                <div className="ops-order-card__items">
+                  {visibleOrderItems.map((item, itemIndex) => (
+                    <div className="ops-order-card__item-row" key={`${boundaryKey}-${item.menuId || item._id || item.name}-${itemIndex}`}>
+                      <b>{itemQuantity(item)} ×</b>
+                      <span>{item.name || item.menu?.name || "Dish"}</span>
+                    </div>
+                  ))}
+                  {!visibleOrderItems.length && (
+                    <p className="ops-order-card__empty-items" role="alert">No items — review order</p>
+                  )}
+                </div>
+                {orderNotes.map((note, noteIndex) => (
+                  <div className="ops-order-card__note" key={`${boundaryKey}-note-${noteIndex}`}>
+                    <FiAlertTriangle aria-hidden="true" />
+                    <span>{note}</span>
+                  </div>
+                ))}
+              </section>
+            );
+          })}
+        </div>
+      )}
+
+      {!compact && lane !== "new" && (
         <div className="ops-order-card__items">
-          {items.map((item, index) => (
-            <div key={`${orderKey(lead)}-${item.menuId || item._id || item.name}-${index}`}>
-              <b>{Number(item.quantity || 1)} ×</b> {item.name || item.menu?.name || "Dish"}
+          {items.filter((item) => itemQuantity(item) > 0).map((item, index) => (
+            <div className="ops-order-card__item-row" key={`${orderKey(lead)}-${item.menuId || item._id || item.name}-${index}`}>
+              <b>{itemQuantity(item)} ×</b>
+              <span>{item.name || item.menu?.name || "Dish"}</span>
             </div>
           ))}
         </div>
@@ -168,7 +265,7 @@ export default function OperationalOrderCard({
         </p>
       )}
 
-      {notes.map((note) => (
+      {lane !== "new" && notes.map((note) => (
         <div className="ops-order-card__note" key={note}>
           <FiAlertTriangle aria-hidden="true" />
           <span>{note}</span>
