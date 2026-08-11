@@ -39,7 +39,7 @@ export default function AnalyticsDashboard({ orders = [], advancedEnabled = fals
   
   // Selected metric tab: "revenue" | "orders" | "aov" | "dishes"
   const [selectedMetric, setSelectedMetric] = useState("revenue");
-  const [rangeMode, setRangeMode] = useState("monthly");
+  const [rangeMode, setRangeMode] = useState("custom");
   const [selectedMonth, setSelectedMonth] = useState(() => monthInputValue(new Date()));
   const [selectedQuarter, setSelectedQuarter] = useState(() => Math.floor(new Date().getMonth() / 3) + 1);
   const [selectedYear, setSelectedYear] = useState(() => new Date().getFullYear());
