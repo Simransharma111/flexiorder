@@ -26,7 +26,7 @@ import { useSync } from "../../context/SyncContext";
 import { SYNC_STATE_EVENT } from "../../utils/syncQueues";
 import { flushSync } from "react-dom";
 
-export default function Orders({ orders = [], refresh, onOrdersChange }) {
+export default function Orders({ orders = [], refresh, onOrdersChange, godModeEnabled = false }) {
   const { syncKitchenNow } = useSync();
   const [activeView, setActiveView] = useState("active");
   const [search, setSearch] = useState("");
@@ -297,7 +297,12 @@ export default function Orders({ orders = [], refresh, onOrdersChange }) {
         </div>
       )}
       {activeView === "active" ? (
-        <KitchenBoard {...lanes} updateStatus={updateStatus} surface="waiter" />
+        <KitchenBoard
+          {...lanes}
+          updateStatus={updateStatus}
+          surface="waiter"
+          godModeEnabled={godModeEnabled}
+        />
       ) : (
         <div className="ops-order-history">
           <label className="ops-search"><FiSearch /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search old orders" /></label>

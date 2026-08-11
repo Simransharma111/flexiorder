@@ -56,6 +56,13 @@ const orderTimingLabel = (order) => {
   })}`;
 };
 
+const orderReference = (order) => {
+  const value = String(
+    order?.orderNumber || order?.reference || orderKey(order) || "—"
+  ).trim();
+  return value.replace(/^order\s*#?\s*/i, "") || "—";
+};
+
 export default function OperationalOrderCard({
   order,
   group,
@@ -63,6 +70,7 @@ export default function OperationalOrderCard({
   onPrimary,
   onOptions,
   compact = false,
+  godModeEnabled = false,
 }) {
   const orders = group?.orders || [order];
   const lead = order || orders[0];
@@ -106,7 +114,9 @@ export default function OperationalOrderCard({
 
   useEffect(() => () => clearPress(), []);
 
-  const actionName = lane === "new"
+  const actionName = godModeEnabled && ["new", "preparing"].includes(lane)
+    ? "Mark ready"
+    : lane === "new"
     ? "Accept"
     : lane === "preparing"
       ? "Finish"
@@ -121,7 +131,7 @@ export default function OperationalOrderCard({
 
   return (
     <article
-      className={`ops-order-card ops-order-card--${lane}${delayed ? " is-delayed" : ""}${updated ? " is-updated" : ""}${compact ? " is-compact" : ""}`}
+      className={`ops-order-card ops-order-card--${lane}${delayed ? " is-delayed" : ""}${updated ? " is-updated" : ""}${compact ? " is-compact" : ""}${godModeEnabled ? " is-god-mode" : ""}`}
       onPointerDown={startPress}
       onPointerUp={clearPress}
       onPointerLeave={clearPress}
@@ -150,12 +160,17 @@ export default function OperationalOrderCard({
           <strong>NEW ORDER</strong>
           <span>{orders.length > 1
             ? `${orders.length} separate orders`
-            : interactive ? "Tap card to prepare" : "1 order"}</span>
+            : interactive && !godModeEnabled ? "Tap card to prepare" : "1 order"}</span>
         </div>
       )}
       <div className="ops-order-card__head">
         <div className="ops-order-card__identity">
           <strong>{location}</strong>
+          {godModeEnabled && (
+            <span className="ops-order-card__reference">
+              Order #{orderReference(lead)}
+            </span>
+          )}
           {lead.guestName && lead.guestName !== "Guest" && (
             <span className="ops-order-card__guest-label">{lead.guestName}</span>
           )}
@@ -164,7 +179,7 @@ export default function OperationalOrderCard({
         <div className="ops-order-card__signals">
           {lane !== "new" && (
             <span className="ops-order-card__status">
-              {STATUS_LABEL[lane]} {interactive && " →"}
+              {STATUS_LABEL[lane]} {interactive && !godModeEnabled && " →"}
             </span>
           )}
           {waitingToSync && <span className="ops-order-card__updated">Syncing</span>}
@@ -260,8 +275,8 @@ export default function OperationalOrderCard({
           {lane === "delivered"
             ? " · Delivered"
             : lane === "ready"
-              ? surface === "waiter" ? " · Tap to deliver" : " · Ready for pickup"
-              : " · Tap to finish"}
+              ? surface === "waiter" && !godModeEnabled ? " · Tap to deliver" : " · Ready for pickup"
+              : godModeEnabled ? ` · ${STATUS_LABEL[lane]}` : " · Tap to finish"}
         </p>
       )}
 

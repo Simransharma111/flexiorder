@@ -3,15 +3,23 @@ import { fulfillJson, hotel, installSession, kitchenOrder } from "./helpers";
 
 const openOwnerTab = async (page, name) => {
   if ((page.viewportSize()?.width || 0) < 768) {
-    await page.getByRole("button", { name: "Open owner menu" }).click();
+    const menu = page.getByRole("button", { name: "Open owner menu" });
+    await expect(menu).toBeVisible();
+    await menu.click();
   }
-  await page.getByRole("button", { name, exact: true }).click();
+  const tab = page.getByRole("button", { name, exact: true }).filter({ visible: true });
+  await expect(tab).toBeVisible();
+  await tab.click();
 };
 
 test.beforeEach(async ({ page }) => {
   await installSession(page, "owner");
   await page.route("**/hotel/me", (route) => fulfillJson(route, { hotel }));
-  await page.route("**/kitchen/orders?type=kitchen", (route) => fulfillJson(route, { orders: [] }));
+  await page.route(/\/kitchen\/orders(?:\?.*)?$/, (route) => (
+    route.request().method() === "GET"
+      ? fulfillJson(route, { orders: [] })
+      : route.fallback()
+  ));
 });
 
 test("owner opens on a compact Today surface", async ({ page }) => {
@@ -79,8 +87,8 @@ test("staff creation reports a duplicate email and can retry successfully", asyn
 });
 
 test("owner can inspect completed order history", async ({ page }) => {
-  await page.unroute("**/kitchen/orders?type=kitchen");
-  await page.route("**/kitchen/orders?type=kitchen", (route) => fulfillJson(route, {
+  await page.unroute(/\/kitchen\/orders(?:\?.*)?$/);
+  await page.route(/\/kitchen\/orders(?:\?.*)?$/, (route) => fulfillJson(route, {
     orders: [{ ...kitchenOrder(), status: "delivered" }],
   }));
 
@@ -97,12 +105,74 @@ test("Simple app level hides optional owner controls immediately", async ({ page
   await page.getByRole("button", { name: /^Simple Orders/ }).click();
 
   await expect(page.getByText("Staff access", { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("checkbox", { name: "God Mode" })).toBeVisible();
   if ((page.viewportSize()?.width || 0) < 768) {
     await page.getByRole("button", { name: "Open owner menu" }).click();
   }
   await expect(page.getByRole("button", { name: "Staff", exact: true })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Analytics", exact: true })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "QR Tables", exact: true })).toBeVisible();
+});
+
+test("God Mode defaults on and owner-saved values survive reload", async ({ page }) => {
+  let savedHotel = { ...hotel };
+  delete savedHotel.featureSettings;
+  await page.unroute("**/hotel/me");
+  await page.route("**/hotel/me", (route) => fulfillJson(route, { hotel: savedHotel }));
+  await page.route("**/hotel/profile", async (route) => {
+    const body = route.request().postDataJSON();
+    expect(body.godModeEnabled).toBe(body.featureSettings.godModeEnabled);
+    expect(typeof body.godModeEnabled).toBe("boolean");
+    savedHotel = { ...savedHotel, featureSettings: body.featureSettings };
+    return fulfillJson(route, { hotel: savedHotel });
+  });
+
+  await page.goto("/owner/dashboard");
+  await openOwnerTab(page, "Settings");
+  const toggle = page.getByRole("checkbox", { name: "God Mode" });
+  await expect(toggle).toBeChecked();
+  await toggle.uncheck();
+  const savedDialog = page.waitForEvent("dialog");
+  await page.getByRole("button", { name: "Save app settings" }).click();
+  await (await savedDialog).accept();
+
+  await page.reload();
+  await openOwnerTab(page, "Settings");
+  const restoredToggle = page.getByRole("checkbox", { name: "God Mode" });
+  await expect(restoredToggle).not.toBeChecked();
+  await restoredToggle.check();
+  const enabledDialog = page.waitForEvent("dialog");
+  await page.getByRole("button", { name: "Save app settings" }).click();
+  await (await enabledDialog).accept();
+
+  await page.reload();
+  await openOwnerTab(page, "Settings");
+  await expect(page.getByRole("checkbox", { name: "God Mode" })).toBeChecked();
+});
+
+test("owner dashboard order board follows God Mode", async ({ page }) => {
+  let currentOrder = kitchenOrder({ orderNumber: "3042" });
+  const statuses = [];
+  await page.unroute("**/hotel/me");
+  await page.route("**/hotel/me", (route) => fulfillJson(route, {
+    hotel: { ...hotel, featureSettings: { godModeEnabled: true } },
+  }));
+  await page.unroute(/\/kitchen\/orders(?:\?.*)?$/);
+  await page.route(/\/kitchen\/orders(?:\?.*)?$/, (route) => (
+    fulfillJson(route, { orders: [currentOrder] })
+  ));
+  await page.route("**/kitchen/orders/order-00008", async (route) => {
+    const body = route.request().postDataJSON();
+    statuses.push(body.status);
+    currentOrder = { ...currentOrder, status: body.status };
+    return fulfillJson(route, { order: currentOrder });
+  });
+
+  await page.goto("/owner/dashboard");
+  await openOwnerTab(page, "History");
+  await page.getByRole("button", { name: /^Mark ready Table 8 order/ }).click();
+  await expect(page.locator(".ops-order-card--ready")).toBeVisible();
+  await expect.poll(() => statuses).toEqual(["ready"]);
 });
 
 test("Advanced explains inherited features and exposes working menu data tools", async ({ page }) => {

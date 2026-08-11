@@ -29,21 +29,30 @@ import {
 } from "../utils/offlineKitchenUpdates";
 import { getHotelThemeStyle } from "../utils/hotelTheme";
 import {
+  applyHotelSettingsUpdate,
   canUseStaffCapability,
   getFeatureSettings,
   hydrateHotelFeatures,
+  persistFeatureSettings,
 } from "../utils/featureSettings";
 import { useConnectivity } from "../context/ConnectivityContext";
 import { useSync } from "../context/SyncContext";
 import { SYNC_STATE_EVENT } from "../utils/syncQueues";
 
 const CACHE_KEY = "flexiorder_kitchen_active_orders";
+const HOTEL_CACHE_KEY = "flexiorder_kitchen_hotel";
 
 export default function KitchenDashboard() {
   const navigate = useNavigate();
   const { status: connectionStatus, label: connectionLabel } = useConnectivity();
   const { syncKitchenNow } = useSync();
-  const [hotel, setHotel] = useState(null);
+  const [hotel, setHotel] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem(getScopedStorageKey(HOTEL_CACHE_KEY)) || "null");
+    } catch {
+      return null;
+    }
+  });
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -55,6 +64,7 @@ export default function KitchenDashboard() {
   const [hiddenReadyIds, setHiddenReadyIds] = useState(new Set());
   // orderId → timer handle — persists across re-renders so timers never restart.
   const readyAutoHideTimers = useRef({});
+  const settingsRevision = useRef(0);
 
   // Auto-hide ready orders after 20 seconds to reduce kitchen clutter.
   useEffect(() => {
@@ -82,13 +92,23 @@ export default function KitchenDashboard() {
   };
 
   const fetchHotel = useCallback(async () => {
+    const requestRevision = settingsRevision.current;
     try {
       const response = await api.get("/hotel/me");
       const nextHotel = hydrateHotelFeatures(response.data?.hotel || response.data);
       rememberRestaurantId(nextHotel);
+      if (requestRevision !== settingsRevision.current) return;
       setHotel(nextHotel);
+      localStorage.setItem(getScopedStorageKey(HOTEL_CACHE_KEY), JSON.stringify(nextHotel));
     } catch (error) {
       console.warn("Kitchen hotel fetch failed", error);
+      if (requestRevision !== settingsRevision.current) return;
+      try {
+        const cachedHotel = localStorage.getItem(getScopedStorageKey(HOTEL_CACHE_KEY));
+        if (cachedHotel) setHotel(JSON.parse(cachedHotel));
+      } catch (cacheError) {
+        console.warn("Kitchen hotel cache could not be read", cacheError);
+      }
     }
   }, []);
 
@@ -116,7 +136,10 @@ export default function KitchenDashboard() {
   useEffect(() => {
     fetchHotel();
     fetchOrders();
-    const poll = window.setInterval(fetchOrders, 30000);
+    const poll = window.setInterval(() => {
+      fetchHotel();
+      fetchOrders();
+    }, 30000);
     return () => window.clearInterval(poll);
   }, [fetchHotel, fetchOrders]);
 
@@ -139,11 +162,23 @@ export default function KitchenDashboard() {
           : mergeOrderUpdate(current, order, getPendingKitchenUpdates())
       ));
     };
+    const onHotelSettingsUpdate = (payload) => {
+      settingsRevision.current += 1;
+      setHotel((current) => {
+        const next = applyHotelSettingsUpdate(current, payload);
+        if (!next || next === current) return current;
+        persistFeatureSettings(next, next.featureSettings);
+        localStorage.setItem(getScopedStorageKey(HOTEL_CACHE_KEY), JSON.stringify(next));
+        return next;
+      });
+    };
     socket.on("newOrder", onNewOrder);
     socket.on("kitchenOrderUpdated", onOrderUpdate);
+    socket.on("hotelSettingsUpdated", onHotelSettingsUpdate);
     return () => {
       socket.off("newOrder", onNewOrder);
       socket.off("kitchenOrderUpdated", onOrderUpdate);
+      socket.off("hotelSettingsUpdated", onHotelSettingsUpdate);
     };
   }, []);
 
@@ -324,7 +359,12 @@ export default function KitchenDashboard() {
         </div>
       )}
 
-      <KitchenBoard {...lanes} updateStatus={updateStatus} surface="kitchen" />
+      <KitchenBoard
+        {...lanes}
+        updateStatus={updateStatus}
+        surface="kitchen"
+        godModeEnabled={featureSettings.godModeEnabled}
+      />
     </main>
   );
 }

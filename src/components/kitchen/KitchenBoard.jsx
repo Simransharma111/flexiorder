@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FiMoreVertical } from "react-icons/fi";
 import OperationalOrderCard from "../orders/OperationalOrderCard";
-import { groupOrdersByLocation, nextOrderStatus } from "../../utils/orderModel";
+import {
+  groupOrdersByLocation,
+  nextOrderStatus,
+  orderKey,
+  orderLocation,
+} from "../../utils/orderModel";
 import useDialogFocus from "../../hooks/useDialogFocus";
 
 const LANE_META = [
@@ -23,17 +28,28 @@ export default function KitchenBoard({
   deliveredOrders = [],
   updateStatus,
   surface = "kitchen",
+  godModeEnabled = false,
 }) {
   const [actionGroup, setActionGroup] = useState(null);
   const [reason, setReason] = useState("");
   const sheetRef = useRef(null);
+  const lastGodModeActivation = useRef(new Map());
+
+  const groupForDisplay = useCallback((orders) => godModeEnabled
+    ? orders.map((order) => ({
+      key: `god-mode:${orderKey(order)}`,
+      location: orderLocation(order),
+      orders: [order],
+      items: Array.isArray(order.items) ? order.items : [],
+    }))
+    : groupOrdersByLocation(orders), [godModeEnabled]);
 
   const lanes = useMemo(() => ({
-    new: groupOrdersByLocation(newOrders),
-    preparing: groupOrdersByLocation(preparingOrders),
-    ready: groupOrdersByLocation(readyOrders),
-    delivered: groupOrdersByLocation(deliveredOrders),
-  }), [newOrders, preparingOrders, readyOrders, deliveredOrders]);
+    new: groupForDisplay(newOrders),
+    preparing: groupForDisplay(preparingOrders),
+    ready: groupForDisplay(readyOrders),
+    delivered: groupForDisplay(deliveredOrders),
+  }), [deliveredOrders, groupForDisplay, newOrders, preparingOrders, readyOrders]);
 
   const activeLaneMeta = surface === "waiter" ? WAITER_LANE_META : LANE_META;
 
@@ -46,8 +62,22 @@ export default function KitchenBoard({
   const primaryAction = (_lead, orders) => {
     orders
       .forEach((order) => {
-        const next = nextOrderStatus(order.status, surface);
+        const key = orderKey(order);
+        const next = nextOrderStatus(order.status, surface, { godModeEnabled });
+        const now = Date.now();
+        const previousActivation = lastGodModeActivation.current.get(key);
+        if (godModeEnabled && previousActivation?.status === next &&
+            now - previousActivation.at < 800) return;
         if (next) {
+          if (godModeEnabled) {
+            const activation = { at: now, status: next };
+            lastGodModeActivation.current.set(key, activation);
+            window.setTimeout(() => {
+              if (lastGodModeActivation.current.get(key) === activation) {
+                lastGodModeActivation.current.delete(key);
+              }
+            }, 800);
+          }
           updateStatus(order._id, next, null);
         }
       });
@@ -76,7 +106,7 @@ export default function KitchenBoard({
   }, [actionGroup, closeActions, newOrders, pausedOrders, preparingOrders, readyOrders]);
 
   return (
-    <section className={`ops-board ops-board--${surface}`} aria-label={`${surface} active orders`}>
+    <section className={`ops-board ops-board--${surface}${godModeEnabled ? " is-god-mode" : ""}`} aria-label={`${surface} active orders`}>
       {activeLaneMeta.map((lane) => (
         <section className={`ops-lane ops-lane--${lane.key}`} key={lane.key}>
           <header className="ops-lane__head">
@@ -91,7 +121,10 @@ export default function KitchenBoard({
                 key={group.key}
                 group={group}
                 surface={surface}
-                compact={lane.key !== "new"}
+                compact={godModeEnabled
+                  ? (surface === "kitchen" ? lane.key === "ready" : lane.key === "delivered")
+                  : lane.key !== "new"}
+                godModeEnabled={godModeEnabled}
               onPrimary={
                 // Kitchen: suppress primary tap on ready (no further kitchen action).
                 // Waiter: ready cards deliver on tap; all other lanes advance normally.
@@ -112,7 +145,7 @@ export default function KitchenBoard({
 
       {pausedOrders.length > 0 && (
         <div className="ops-paused-groups" aria-label="Paused orders">
-          {groupOrdersByLocation(pausedOrders).map((group) => (
+          {groupForDisplay(pausedOrders).map((group) => (
             <div className="ops-paused-group" key={group.key}>
               <button
                 type="button"

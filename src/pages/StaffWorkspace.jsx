@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { FiLogOut, FiMoreVertical, FiPower, FiRefreshCw, FiX } from "react-icons/fi";
 import { useNavigate } from "react-router-dom";
 import api from "../api/axios";
@@ -12,9 +12,11 @@ import { getPendingKitchenUpdates } from "../utils/offlineKitchenUpdates";
 import { getHotelThemeStyle } from "../utils/hotelTheme";
 import { clearAuthSession, readStoredSession } from "../utils/session";
 import {
+  applyHotelSettingsUpdate,
   canUseStaffCapability,
   getFeatureSettings,
   hydrateHotelFeatures,
+  persistFeatureSettings,
 } from "../utils/featureSettings";
 import { useConnectivity } from "../context/ConnectivityContext";
 
@@ -32,6 +34,7 @@ export default function StaffWorkspace() {
   const [updatingOrdering, setUpdatingOrdering] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
+  const settingsRevision = useRef(0);
   const currentRole = readStoredSession().user?.role;
 
   const persistOrders = useCallback((next) => {
@@ -40,6 +43,7 @@ export default function StaffWorkspace() {
   }, []);
 
   const fetchData = useCallback(async () => {
+    const requestRevision = settingsRevision.current;
     try {
       const [hotelResponse, ordersResponse] = await Promise.all([
         api.get("/hotel/me"),
@@ -48,17 +52,21 @@ export default function StaffWorkspace() {
       const nextHotel = hydrateHotelFeatures(hotelResponse.data?.hotel || hotelResponse.data);
       rememberRestaurantId(nextHotel);
       const nextOrders = ordersResponse.data?.orders || ordersResponse.data || [];
-      setHotel(nextHotel);
+      if (requestRevision === settingsRevision.current) {
+        setHotel(nextHotel);
+        localStorage.setItem(getScopedStorageKey(HOTEL_CACHE_KEY), JSON.stringify(nextHotel));
+      }
       setOrders((current) => persistOrders(
         reconcileAuthoritativeOrders(current, nextOrders, getPendingKitchenUpdates())
       ));
-      localStorage.setItem(getScopedStorageKey(HOTEL_CACHE_KEY), JSON.stringify(nextHotel));
     } catch (error) {
       console.warn("Staff workspace loading failed", error);
       try {
         const cachedHotel = localStorage.getItem(getScopedStorageKey(HOTEL_CACHE_KEY));
         const cachedOrders = localStorage.getItem(getScopedStorageKey(ORDERS_CACHE_KEY));
-        if (cachedHotel) setHotel(JSON.parse(cachedHotel));
+        if (cachedHotel && requestRevision === settingsRevision.current) {
+          setHotel(JSON.parse(cachedHotel));
+        }
         if (cachedOrders) setOrders((current) => mergeOrders(current, JSON.parse(cachedOrders)));
       } catch (cacheError) {
         console.warn("Staff workspace cache failed", cacheError);
@@ -99,11 +107,23 @@ export default function StaffWorkspace() {
       triggerLocalOrderNotification(order);
     };
     const update = (order) => upsert(order);
+    const updateHotelSettings = (payload) => {
+      settingsRevision.current += 1;
+      setHotel((current) => {
+        const next = applyHotelSettingsUpdate(current, payload);
+        if (!next || next === current) return current;
+        persistFeatureSettings(next, next.featureSettings);
+        localStorage.setItem(getScopedStorageKey(HOTEL_CACHE_KEY), JSON.stringify(next));
+        return next;
+      });
+    };
     socket.on("newOrder", handleNewOrder);
     socket.on("kitchenOrderUpdated", update);
+    socket.on("hotelSettingsUpdated", updateHotelSettings);
     return () => {
       socket.off("newOrder", handleNewOrder);
       socket.off("kitchenOrderUpdated", update);
+      socket.off("hotelSettingsUpdated", updateHotelSettings);
     };
   }, [persistOrders]);
 
@@ -186,7 +206,12 @@ export default function StaffWorkspace() {
           <StaffOrder hotel={hotel} onOrderCreated={addVisibleOrder} />
         </div>
         <div hidden={activeTab !== "orders"}>
-          <Orders orders={orders} refresh={fetchData} onOrdersChange={setOrders} />
+          <Orders
+            orders={orders}
+            refresh={fetchData}
+            onOrdersChange={setOrders}
+            godModeEnabled={featureSettings.godModeEnabled}
+          />
         </div>
       </div>
     </main>

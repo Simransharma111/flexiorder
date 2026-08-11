@@ -113,6 +113,112 @@ test("kitchen advances an order from new to preparing to ready with one tap", as
   await expect(readyColumn.getByText("Table 8")).toBeVisible();
 });
 
+test("God Mode kitchen moves only the activated order directly to compact Ready", async ({ page }) => {
+  await installSession(page, "staff");
+  const orders = [
+    kitchenOrder({ _id: "god-order-a", orderNumber: "1042", specialInstructions: "No onion" }),
+    kitchenOrder({ _id: "god-order-b", orderNumber: "1043", items: [{ name: "Dal", quantity: 3 }] }),
+  ];
+  const updates = [];
+  await page.route("**/hotel/me", (route) => fulfillJson(route, {
+    ...hotel,
+    featureSettings: { godModeEnabled: true },
+  }));
+  await page.route(/\/kitchen\/orders(?:\?.*)?$/, (route) => fulfillJson(route, { orders }));
+  await page.route("**/kitchen/orders/*", async (route) => {
+    const body = route.request().postDataJSON();
+    updates.push({ url: route.request().url(), ...body });
+    const id = route.request().url().split("/").pop();
+    const order = orders.find((item) => item._id === id);
+    return fulfillJson(route, { order: { ...order, status: body.status } });
+  });
+
+  await page.goto("/kitchen");
+  await expect(page.locator(".ops-order-card--new")).toHaveCount(2);
+  const first = page.getByRole("button", { name: /^Mark ready Table 8 order/ }).first();
+  await first.focus();
+  await page.keyboard.press("Enter");
+  await expect(page.locator(".ops-order-card--ready")).toHaveCount(1);
+  await expect(page.locator(".ops-order-card--new")).toHaveCount(1);
+  await expect(page.locator(".ops-order-card--ready")).toHaveClass(/is-compact/);
+  await expect.poll(() => updates.map((item) => item.status)).toEqual(["ready"]);
+  await expect(page.locator(".ops-order-card--ready")).toContainText("Order #1042");
+  await expect(page.locator(".ops-order-card--new")).toContainText("Order #1043");
+});
+
+test("God Mode waiter blocks an accidental double click then delivers deliberately", async ({ page }) => {
+  await installSession(page, "owner");
+  let currentOrder = kitchenOrder({ orderNumber: "2042", specialInstructions: "Allergy: peanuts" });
+  const statuses = [];
+  await page.route("**/table", (route) => fulfillJson(route, { tables: [] }));
+  await page.route("**/menu/hotel-1", (route) => fulfillJson(route, []));
+  await page.route("**/hotel/me", (route) => fulfillJson(route, {
+    ...hotel,
+    featureSettings: { godModeEnabled: true },
+  }));
+  await page.route(/\/kitchen\/orders(?:\?.*)?$/, (route) => fulfillJson(route, { orders: [currentOrder] }));
+  await page.route("**/kitchen/orders/order-00008", async (route) => {
+    const body = route.request().postDataJSON();
+    statuses.push(body.status);
+    currentOrder = { ...currentOrder, status: body.status, updatedAt: new Date().toISOString() };
+    return fulfillJson(route, { order: currentOrder });
+  });
+
+  await page.goto("/owner/order");
+  const card = page.locator(".ops-order-card--new");
+  await expect(card).toBeVisible();
+  await page.getByRole("button", { name: /^Mark ready Table 8 order/ }).evaluate((element) => {
+    element.click();
+    element.click();
+  });
+  await expect(page.locator(".ops-order-card--ready")).toBeVisible();
+  await expect(page.locator(".ops-order-card--ready")).not.toHaveClass(/is-compact/);
+  await expect(page.getByText("Paneer Tikka", { exact: true })).toBeVisible();
+  await expect(page.getByText("Allergy: peanuts", { exact: true })).toBeVisible();
+  await expect.poll(() => statuses).toEqual(["ready"]);
+
+  const deliver = page.getByRole("button", { name: /^Deliver Table 8 order/ });
+  await expect(deliver).toBeVisible();
+  await deliver.click();
+  await expect.poll(() => statuses).toEqual(["ready", "delivered"]);
+  await expect(page.locator(".ops-order-card--delivered")).toHaveClass(/is-compact/);
+});
+
+test("God Mode queues direct Ready offline once and replays the same mutation id", async ({ page, context }) => {
+  await installSession(page, "staff");
+  const order = kitchenOrder();
+  const updates = [];
+  await page.route("**/hotel/me", (route) => fulfillJson(route, {
+    ...hotel,
+    featureSettings: { godModeEnabled: true },
+  }));
+  await page.route(/\/kitchen\/orders(?:\?.*)?$/, (route) => fulfillJson(route, { orders: [order] }));
+  await page.route("**/kitchen/orders/order-00008", async (route) => {
+    const body = route.request().postDataJSON();
+    updates.push(body);
+    return fulfillJson(route, { order: { ...order, status: body.status } });
+  });
+
+  await page.goto("/kitchen");
+  await context.setOffline(true);
+  await page.getByRole("button", { name: /^Mark ready Table 8 order/ }).click();
+  await expect(page.locator(".ops-order-card--ready")).toBeVisible();
+  const queued = await page.evaluate(() => {
+    const key = Object.keys(localStorage).find((item) => item.startsWith("flexiorder_pending_kitchen_updates:"));
+    return JSON.parse(localStorage.getItem(key) || "[]");
+  });
+  expect(queued).toHaveLength(1);
+  expect(queued[0]).toMatchObject({ status: "ready" });
+  expect(queued[0].clientMutationId).toBeTruthy();
+
+  await context.setOffline(false);
+  await expect.poll(() => updates).toHaveLength(1);
+  expect(updates[0]).toMatchObject({
+    status: "ready",
+    clientMutationId: queued[0].clientMutationId,
+  });
+});
+
 test("grouped new orders preserve item, timing, and instruction boundaries", async ({ page }) => {
   await installSession(page, "staff");
   await page.emulateMedia({ reducedMotion: "reduce" });

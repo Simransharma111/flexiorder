@@ -658,6 +658,8 @@ localStorage.setItem(getScopedStorageKey(ORDERS_CACHE_KEY),JSON.stringify(next))
 
 loading={loadingOrders}
 
+godModeEnabled={getFeatureSettings(hotel).godModeEnabled}
+
 primaryColor={primaryColor}
 
 />

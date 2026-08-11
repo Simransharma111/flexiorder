@@ -40,6 +40,16 @@ describe("order model", () => {
     expect(orderLocation({ locationType: "room", locationNumber: 101 })).toBe("Room 101");
   });
 
+  it("uses direct God Mode transitions without changing paused or kitchen Ready rules", () => {
+    const godMode = { godModeEnabled: true };
+    expect(nextOrderStatus("pending", "kitchen", godMode)).toBe("ready");
+    expect(nextOrderStatus("accepted", "kitchen", godMode)).toBe("ready");
+    expect(nextOrderStatus("preparing", "waiter", godMode)).toBe("ready");
+    expect(nextOrderStatus("ready", "waiter", godMode)).toBe("delivered");
+    expect(nextOrderStatus("ready", "kitchen", godMode)).toBeNull();
+    expect(nextOrderStatus("paused", "kitchen", godMode)).toBe("preparing");
+  });
+
   it("reads nested table records and common takeaway shapes", () => {
     expect(orderLocation({ tableId: { tableNumber: "8", type: "table" } })).toBe("Table 8");
     expect(orderLocation({ table: { locationNumber: "101", locationType: "room" } })).toBe("Room 101");

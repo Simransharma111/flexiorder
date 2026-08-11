@@ -17,7 +17,8 @@ export const statusLane = (status) => {
   return "history";
 };
 
-export const nextOrderStatus = (status, surface = "kitchen") => {
+export const nextOrderStatus = (status, surface = "kitchen", { godModeEnabled = false } = {}) => {
+  if (godModeEnabled && ["pending", "accepted", "preparing"].includes(status)) return "ready";
   if (status === "pending") return "preparing";
   if (status === "accepted") return "ready";
   if (status === "preparing") return "ready";

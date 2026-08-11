@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  applyHotelSettingsUpdate,
   appLevelAllows,
   canUseStaffCapability,
   getFeatureSettings,
@@ -24,7 +25,61 @@ describe("feature settings", () => {
   it("uses a safe basic default and merges capability switches", () => {
     expect(normalizeFeatureSettings({ staffCapabilities: { editMenu: false } })).toMatchObject({
       appLevel: "basic",
+      godModeEnabled: true,
       staffCapabilities: { editMenu: false, changeOrdering: true },
+    });
+  });
+
+  it("defaults God Mode on but preserves an explicit restaurant-scoped off value", () => {
+    const first = { _id: "hotel-1" };
+    const second = { _id: "hotel-2" };
+    persistFeatureSettings(first, { godModeEnabled: false });
+    expect(getFeatureSettings(first).godModeEnabled).toBe(false);
+    expect(getFeatureSettings(second).godModeEnabled).toBe(true);
+  });
+
+  it("lets an explicit server value override stale local God Mode state", () => {
+    const hotel = { _id: "hotel-1" };
+    persistFeatureSettings(hotel, { godModeEnabled: true });
+    expect(getFeatureSettings({ ...hotel, featureSettings: { godModeEnabled: false } }).godModeEnabled)
+      .toBe(false);
+  });
+
+  it("preserves a top-level explicit off value when nested settings are partial", () => {
+    expect(getFeatureSettings({
+      _id: "hotel-1",
+      godModeEnabled: false,
+      featureSettings: { appLevel: "advanced" },
+    }).godModeEnabled).toBe(false);
+  });
+
+  it("applies only restaurant-scoped realtime setting updates", () => {
+    const hotel = { _id: "hotel-1", featureSettings: { godModeEnabled: true } };
+    expect(applyHotelSettingsUpdate(hotel, {
+      hotelId: "hotel-2",
+      featureSettings: { godModeEnabled: false },
+    })).toBe(hotel);
+    expect(applyHotelSettingsUpdate(hotel, {
+      hotelId: "hotel-1",
+      featureSettings: { godModeEnabled: false },
+    }).featureSettings.godModeEnabled).toBe(false);
+  });
+
+  it("merges partial realtime capabilities without resetting omitted permissions", () => {
+    const hotel = {
+      _id: "hotel-1",
+      featureSettings: {
+        staffCapabilities: { editMenu: false, changeOrdering: false },
+      },
+    };
+    const next = applyHotelSettingsUpdate(hotel, {
+      hotelId: "hotel-1",
+      featureSettings: { staffCapabilities: { editMenu: true } },
+    });
+
+    expect(next.featureSettings.staffCapabilities).toMatchObject({
+      editMenu: true,
+      changeOrdering: false,
     });
   });
 

@@ -180,6 +180,7 @@ const res = await api.patch(
     simpleMenu: hotel.menuMode === "simple",
     appLevel: featureSettings.appLevel,
     publicDisplayEnabled: featureSettings.publicDisplayEnabled,
+    godModeEnabled: featureSettings.godModeEnabled,
     staffCapabilities: featureSettings.staffCapabilities,
     featureSettings,
   }
@@ -225,22 +226,21 @@ setLoading(false);
 };
 
 const saveAppSettings=async()=>{
-  const featureSettings = persistFeatureSettings(
-    hotel,
-    normalizeFeatureSettings(hotel.featureSettings)
-  );
+  const featureSettings = normalizeFeatureSettings(hotel.featureSettings);
   try {
     setLoading(true);
     await api.patch("/hotel/profile", {
       appLevel: featureSettings.appLevel,
       publicDisplayEnabled: featureSettings.publicDisplayEnabled,
+      godModeEnabled: featureSettings.godModeEnabled,
       staffCapabilities: featureSettings.staffCapabilities,
       featureSettings,
     });
+    persistFeatureSettings(hotel, featureSettings);
     alert("App settings saved");
   } catch (error) {
     console.warn("Cloud feature settings update failed", error);
-    alert("App settings saved on this device. Cloud update will require backend support.");
+    alert("App settings could not be saved. Please try again.");
   } finally {
     setLoading(false);
   }
@@ -734,6 +734,20 @@ mt-5
       )}
     </div>
   )}
+
+  <label className="mt-5 flex min-h-12 items-center justify-between gap-3 rounded-xl border border-white/10 px-3">
+    <span>
+      <strong className="block">God Mode</strong>
+      <small className="block opacity-70">Kitchen completes in one tap; waiter uses Ready then Delivered.</small>
+    </span>
+    <input
+      type="checkbox"
+      aria-label="God Mode"
+      checked={featureSettings.godModeEnabled}
+      disabled={loading}
+      onChange={(event) => updateFeatureSetting("godModeEnabled", event.target.checked)}
+    />
+  </label>
 
   <button type="button" disabled={loading} onClick={saveAppSettings} className="mt-5 rounded-xl bg-white px-5 py-3 font-bold text-black">
     <FaSave /> Save app settings

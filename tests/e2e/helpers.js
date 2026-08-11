@@ -7,6 +7,7 @@ export const hotel = {
   gstPercentage: 5,
   menuMode: "graphic",
   theme: { primary: "#f97316" },
+  featureSettings: { godModeEnabled: false },
 };
 
 export const table = {
@@ -74,6 +75,10 @@ export const installSession = async (page, role = "staff") => {
     localStorage.setItem("user", JSON.stringify(storedUser));
     localStorage.setItem("token", storedToken);
   }, { storedUser: user, storedToken: token });
+
+  // Session restore may register a native push token. Keep that unrelated
+  // background request from reaching a real API and clearing the test login.
+  await page.route("**/notifications/save-token", (route) => fulfillJson(route, { success: true }));
 
   return { user, token };
 };

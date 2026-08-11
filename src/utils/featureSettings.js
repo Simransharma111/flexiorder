@@ -29,6 +29,7 @@ export const FEATURE_REGISTRY = [
 export const DEFAULT_FEATURE_SETTINGS = {
   appLevel: "basic",
   publicDisplayEnabled: false,
+  godModeEnabled: true,
   staffCapabilities: {
     editMenu: true,
     changeOrdering: true,
@@ -58,6 +59,9 @@ export const normalizeFeatureSettings = (settings = {}) => {
     ...settings,
     appLevel,
     publicDisplayEnabled: Boolean(settings.publicDisplayEnabled),
+    godModeEnabled: typeof settings.godModeEnabled === "boolean"
+      ? settings.godModeEnabled
+      : DEFAULT_FEATURE_SETTINGS.godModeEnabled,
     staffCapabilities: {
       ...DEFAULT_FEATURE_SETTINGS.staffCapabilities,
       ...(settings.staffCapabilities || {}),
@@ -67,13 +71,22 @@ export const normalizeFeatureSettings = (settings = {}) => {
 
 export const getFeatureSettings = (hotel) => {
   const localSettings = readLocalSettings(hotel);
-  const serverSettings = hotel?.featureSettings || Object.fromEntries(
+  const legacySettings = Object.fromEntries(
     Object.entries({
       appLevel: hotel?.appLevel,
       publicDisplayEnabled: hotel?.publicDisplayEnabled,
+      godModeEnabled: hotel?.godModeEnabled,
       staffCapabilities: hotel?.staffCapabilities,
     }).filter(([, value]) => value !== undefined)
   );
+  const serverSettings = {
+    ...legacySettings,
+    ...(hotel?.featureSettings || {}),
+    staffCapabilities: {
+      ...(legacySettings.staffCapabilities || {}),
+      ...(hotel?.featureSettings?.staffCapabilities || {}),
+    },
+  };
   return normalizeFeatureSettings({
     ...localSettings,
     ...serverSettings,
@@ -82,6 +95,33 @@ export const getFeatureSettings = (hotel) => {
       ...(serverSettings?.staffCapabilities || {}),
     },
   });
+};
+
+export const applyHotelSettingsUpdate = (hotel, update) => {
+  if (!hotel || !update) return hotel;
+  const updateHotel = update.hotel && typeof update.hotel === "object" ? update.hotel : update;
+  const currentId = hotelIdOf(hotel);
+  const updateId = String(update.hotelId || updateHotel?._id || updateHotel?.id || "");
+  if (updateId && currentId !== "unknown" && updateId !== currentId) return hotel;
+
+  const incomingFeatureSettings = update.featureSettings || updateHotel?.featureSettings;
+  const legacyGodMode = update.godModeEnabled ?? updateHotel?.godModeEnabled;
+  if (!incomingFeatureSettings && typeof legacyGodMode !== "boolean") return hotel;
+
+  const featureSettings = normalizeFeatureSettings({
+    ...getFeatureSettings(hotel),
+    ...(incomingFeatureSettings || {}),
+    ...(typeof legacyGodMode === "boolean" ? { godModeEnabled: legacyGodMode } : {}),
+    staffCapabilities: {
+      ...getFeatureSettings(hotel).staffCapabilities,
+      ...(incomingFeatureSettings?.staffCapabilities || {}),
+    },
+  });
+  return {
+    ...hotel,
+    ...(update.hotel ? updateHotel : {}),
+    featureSettings,
+  };
 };
 
 export const hydrateHotelFeatures = (hotel) => hotel
