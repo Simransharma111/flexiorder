@@ -2,18 +2,27 @@ import { getScopedStorageKey } from "./storageScope";
 
 const STORAGE_KEY = "flexiorder_pending_kitchen_updates";
 const currentStorageKey = () => getScopedStorageKey(STORAGE_KEY);
+const memoryQueues = new Map();
 
 const readQueue = () => {
+  const key = currentStorageKey();
   try {
-    const parsed = JSON.parse(localStorage.getItem(currentStorageKey()) || "[]");
+    const stored = localStorage.getItem(key);
+    const parsed = JSON.parse(stored ?? JSON.stringify(memoryQueues.get(key) || []));
     return Array.isArray(parsed) ? parsed : [];
   } catch {
-    return [];
+    return memoryQueues.get(key) || [];
   }
 };
 
 const writeQueue = (updates) => {
-  localStorage.setItem(currentStorageKey(), JSON.stringify(updates));
+  const key = currentStorageKey();
+  try {
+    localStorage.setItem(key, JSON.stringify(updates));
+    memoryQueues.delete(key);
+  } catch {
+    memoryQueues.set(key, updates);
+  }
 };
 
 const errorMessage = (error) => (
@@ -54,53 +63,107 @@ export const retryKitchenUpdatesNeedingAttention = () => {
   return next;
 };
 
+export const discardKitchenUpdatesNeedingAttention = () => {
+  const queue = readQueue();
+  const rejectedOrderIds = new Set(queue
+    .filter((item) => item.requiresAttention)
+    .map((item) => String(item.orderId)));
+  const next = queue.filter((item) => !rejectedOrderIds.has(String(item.orderId)));
+  writeQueue(next);
+  return next;
+};
+
+export const getKitchenRejectedRestorations = () => {
+  const restorations = new Map();
+  readQueue().forEach((item) => {
+    if (!item.requiresAttention || restorations.has(String(item.orderId))) return;
+    restorations.set(String(item.orderId), {
+      orderId: item.orderId,
+      status: item.confirmedStatus || "pending",
+    });
+  });
+  return [...restorations.values()];
+};
+
 export const markKitchenUpdatesHandled = () => {
-  const next = readQueue().map((item) => item.requiresAttention && item.ambiguousOutcome !== false ? {
-    ...item,
-    status: "delivered",
-    alreadyHandled: true,
-    requiresAttention: false,
-    attemptCount: 0,
-    nextAttemptAt: null,
-    lastError: null,
-    updatedAt: new Date().toISOString(),
-  } : item);
+  const queue = readQueue();
+  const handledOrderIds = new Set(queue
+    .filter((item) => item.requiresAttention && item.ambiguousOutcome !== false)
+    .map((item) => String(item.orderId)));
+  const emitted = new Set();
+  const next = queue.flatMap((item) => {
+    const orderId = String(item.orderId);
+    if (!handledOrderIds.has(orderId)) return [item];
+    if (emitted.has(orderId)) return [];
+    emitted.add(orderId);
+    return [{
+      ...item,
+      status: "delivered",
+      alreadyHandled: true,
+      clientMutationId: globalThis.crypto?.randomUUID?.() ||
+        `mutation-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      requiresAttention: false,
+      attemptCount: 0,
+      nextAttemptAt: null,
+      lastError: null,
+      updatedAt: new Date().toISOString(),
+    }];
+  });
   writeQueue(next);
   return next;
 };
 
 export const queueKitchenUpdate = (update) => {
   const queue = readQueue();
-  const existingIndex = queue.findIndex(
-    (item) => item.orderId === update.orderId
+  const existingMutation = update.clientMutationId && queue.find(
+    (item) => item.clientMutationId === update.clientMutationId
   );
+  if (existingMutation) return existingMutation;
 
-  if (existingIndex === -1) {
-    writeQueue([...queue, {
-      ...update,
-      clientMutationId:
-        update.clientMutationId ||
-        globalThis.crypto?.randomUUID?.() ||
-        `mutation-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-      queuedAt: update.queuedAt || new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      attemptCount: Number(update.attemptCount || 0),
-      lastAttemptAt: update.lastAttemptAt || null,
-      nextAttemptAt: update.nextAttemptAt || null,
-      lastError: update.lastError || null,
-    }]);
-    return;
-  }
+  const latestForOrder = [...queue].reverse().find(
+    (item) => String(item.orderId) === String(update.orderId)
+  );
+  if (
+    latestForOrder &&
+    latestForOrder.status === update.status &&
+    (latestForOrder.pauseReason || null) === (update.pauseReason || null) &&
+    !latestForOrder.requiresAttention
+  ) return latestForOrder;
 
-  const nextQueue = [...queue];
-  nextQueue[existingIndex] = {
-    ...nextQueue[existingIndex],
+  const now = new Date().toISOString();
+  const queued = {
     ...update,
-    updatedAt: new Date().toISOString(),
-    lastError: null,
-    requiresAttention: false,
+    confirmedStatus: latestForOrder?.confirmedStatus || update.confirmedStatus,
+    clientMutationId:
+      update.clientMutationId ||
+      globalThis.crypto?.randomUUID?.() ||
+      `mutation-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    queuedAt: update.queuedAt || now,
+    updatedAt: now,
+    attemptCount: Number(update.attemptCount || 0),
+    lastAttemptAt: update.lastAttemptAt || null,
+    nextAttemptAt: update.nextAttemptAt || null,
+    lastError: update.lastError || null,
+    requiresAttention: Boolean(update.requiresAttention),
   };
-  writeQueue(nextQueue);
+  writeQueue([...queue, queued]);
+  return queued;
+};
+
+export const reconcileKitchenOrderId = (localOrderId, serverOrderId) => {
+  if (!localOrderId || !serverOrderId) return readQueue();
+  const next = readQueue().map((item) => (
+    String(item.orderId) === String(localOrderId)
+      ? {
+        ...item,
+        orderId: serverOrderId,
+        localOrderId: item.localOrderId || localOrderId,
+        updatedAt: new Date().toISOString(),
+      }
+      : item
+  ));
+  writeQueue(next);
+  return next;
 };
 
 export const reconcileKitchenUpdateSync = (snapshot, failed) => {

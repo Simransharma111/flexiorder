@@ -14,7 +14,10 @@ import { getPendingKitchenUpdates } from "../utils/offlineKitchenUpdates";
 import { getRestaurantId } from "../utils/storageScope";
 import { syncPendingKitchenUpdates, syncPendingStaffOrders } from "../utils/syncQueues";
 
-const SyncContext = createContext({ syncNow: requestBackgroundSync });
+const SyncContext = createContext({
+  syncNow: requestBackgroundSync,
+  syncKitchenNow: requestBackgroundSync,
+});
 
 export const SyncProvider = ({ children }) => {
   const { user } = useAuth();
@@ -63,6 +66,15 @@ export const SyncProvider = ({ children }) => {
     return promise;
   }, [reachability, user]);
 
+  const syncKitchenNow = useCallback((force = false) => {
+    if (!user || (typeof navigator !== "undefined" && !navigator.onLine)) {
+      return Promise.resolve();
+    }
+    return syncPendingKitchenUpdates(api, { force }).catch((error) => {
+      console.warn("Kitchen updates are waiting for connectivity", error);
+    });
+  }, [user]);
+
   useEffect(() => {
     const request = () => { syncNow(false); };
     const reconnect = () => { syncNow(true); };
@@ -77,7 +89,7 @@ export const SyncProvider = ({ children }) => {
     };
   }, [syncNow]);
 
-  return <SyncContext.Provider value={{ syncNow }}>{children}</SyncContext.Provider>;
+  return <SyncContext.Provider value={{ syncNow, syncKitchenNow }}>{children}</SyncContext.Provider>;
 };
 
 export const useSync = () => useContext(SyncContext);

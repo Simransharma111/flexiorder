@@ -1,9 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  discardKitchenUpdatesNeedingAttention,
+  getKitchenRejectedRestorations,
   getKitchenUpdatesEligibleForHandled,
   getPendingKitchenUpdates,
   markKitchenUpdatesHandled,
   queueKitchenUpdate,
+  reconcileKitchenOrderId,
   reconcileKitchenUpdateSync,
   recordKitchenUpdateFailure,
 } from "./offlineKitchenUpdates";
@@ -15,6 +18,7 @@ import {
   reconcileStaffOrderSync,
   recordStaffOrderFailure,
 } from "./offlineOrders";
+import { syncPendingKitchenUpdates, syncPendingStaffOrders } from "./syncQueues";
 
 const createStorage = () => {
   const values = new Map();
@@ -55,15 +59,18 @@ describe("offline queues", () => {
     expect(getPendingStaffOrders()).toHaveLength(1);
   });
 
-  it("keeps only the latest kitchen mutation for each order", () => {
+  it("keeps distinct kitchen transitions ordered and deduplicates repeated taps", () => {
     queueKitchenUpdate({ orderId: "order-1", status: "preparing" });
+    queueKitchenUpdate({ orderId: "order-1", status: "ready" });
     queueKitchenUpdate({ orderId: "order-1", status: "ready" });
     queueKitchenUpdate({ orderId: "order-2", status: "cancelled" });
 
     const queue = getPendingKitchenUpdates();
-    expect(queue).toHaveLength(2);
-    expect(queue.find((item) => item.orderId === "order-1")?.status).toBe("ready");
+    expect(queue).toHaveLength(3);
+    expect(queue.filter((item) => item.orderId === "order-1").map((item) => item.status))
+      .toEqual(["preparing", "ready"]);
     expect(queue[0].clientMutationId).toBeTruthy();
+    expect(queue[1].clientMutationId).not.toBe(queue[0].clientMutationId);
   });
 
   it("records failed kitchen retries without losing the mutation", () => {
@@ -85,7 +92,108 @@ describe("offline queues", () => {
     queueKitchenUpdate({ orderId: "order-1", status: "preparing" });
     const kitchenSnapshot = getPendingKitchenUpdates();
     queueKitchenUpdate({ orderId: "order-1", status: "ready" });
-    expect(reconcileKitchenUpdateSync(kitchenSnapshot, [kitchenSnapshot[0]])[0].status).toBe("ready");
+    expect(reconcileKitchenUpdateSync(kitchenSnapshot, [kitchenSnapshot[0]])
+      .map((item) => item.status)).toEqual(["preparing", "ready"]);
+  });
+
+  it("serializes a next transition added while the first request is slow", async () => {
+    let releaseFirst;
+    const firstResponse = new Promise((resolve) => { releaseFirst = resolve; });
+    const statuses = [];
+    const api = {
+      put: vi.fn(async (_url, payload) => {
+        statuses.push(payload.status);
+        if (payload.status === "preparing") await firstResponse;
+        return { data: { order: { _id: "order-1", status: payload.status } } };
+      }),
+    };
+
+    queueKitchenUpdate({ orderId: "order-1", status: "preparing" });
+    const syncing = syncPendingKitchenUpdates(api);
+    await vi.waitFor(() => expect(statuses).toEqual(["preparing"]));
+    queueKitchenUpdate({ orderId: "order-1", status: "ready" });
+    releaseFirst();
+    await syncing;
+
+    expect(statuses).toEqual(["preparing", "ready"]);
+    expect(getPendingKitchenUpdates()).toEqual([]);
+  });
+
+  it("syncs different server orders concurrently while preserving per-order order", async () => {
+    let releaseFirst;
+    const firstResponse = new Promise((resolve) => { releaseFirst = resolve; });
+    const started = [];
+    const api = {
+      put: vi.fn(async (url, payload) => {
+        started.push(`${url}:${payload.status}`);
+        if (url.endsWith("order-1") && payload.status === "preparing") await firstResponse;
+        return { data: { order: { _id: url.split("/").pop(), status: payload.status } } };
+      }),
+    };
+    queueKitchenUpdate({ orderId: "order-1", status: "preparing" });
+    queueKitchenUpdate({ orderId: "order-1", status: "ready" });
+    queueKitchenUpdate({ orderId: "order-2", status: "preparing" });
+
+    const syncing = syncPendingKitchenUpdates(api);
+    await vi.waitFor(() => expect(started).toContain("/kitchen/orders/order-2:preparing"));
+    expect(started).not.toContain("/kitchen/orders/order-1:ready");
+    releaseFirst();
+    await syncing;
+    expect(started.indexOf("/kitchen/orders/order-1:ready"))
+      .toBeGreaterThan(started.indexOf("/kitchen/orders/order-1:preparing"));
+  });
+
+  it("clears pending state when a successful PUT omits the order body", async () => {
+    queueKitchenUpdate({ orderId: "order-1", status: "ready" });
+    const result = await syncPendingKitchenUpdates({
+      put: vi.fn(async () => ({ data: { success: true } })),
+    });
+    expect(result.syncedOrders).toEqual([
+      expect.objectContaining({ _id: "order-1", status: "ready", pendingMutation: false }),
+    ]);
+    expect(getPendingKitchenUpdates()).toEqual([]);
+  });
+
+  it("keeps queue operations usable when localStorage writes fail", () => {
+    localStorage.setItem.mockImplementation(() => { throw new Error("storage full"); });
+    expect(() => queueKitchenUpdate({ orderId: "order-storage", status: "preparing" }))
+      .not.toThrow();
+    expect(getPendingKitchenUpdates()).toEqual([
+      expect.objectContaining({ orderId: "order-storage", status: "preparing" }),
+    ]);
+    expect(() => queueStaffOrder({ clientOrderId: "staff-storage", items: [] })).not.toThrow();
+    expect(getPendingStaffOrders()).toEqual([
+      expect.objectContaining({ clientOrderId: "staff-storage" }),
+    ]);
+    localStorage.setItem.mockImplementation(() => {});
+    reconcileKitchenUpdateSync(getPendingKitchenUpdates(), []);
+    reconcileStaffOrderSync(getPendingStaffOrders(), []);
+  });
+
+  it("reconciles a local order id before replaying its queued transition", async () => {
+    queueStaffOrder({ clientOrderId: "local-order", tableId: "table-1", items: [] });
+    queueKitchenUpdate({ orderId: "local-order", status: "preparing" });
+    const api = {
+      post: vi.fn(async () => ({ data: { order: { _id: "server-order", status: "pending" } } })),
+      put: vi.fn(async (url, payload) => ({ data: { order: { _id: "server-order", status: payload.status, url } } })),
+    };
+
+    await syncPendingKitchenUpdates(api);
+    expect(api.put).not.toHaveBeenCalled();
+    await syncPendingStaffOrders(api);
+    expect(getPendingKitchenUpdates()[0].orderId).toBe("server-order");
+    await syncPendingKitchenUpdates(api);
+    expect(api.put).toHaveBeenCalledWith(
+      "/kitchen/orders/server-order",
+      expect.objectContaining({ status: "preparing" }),
+    );
+  });
+
+  it("can remap every queued transition for an unsynced local order", () => {
+    queueKitchenUpdate({ orderId: "local-order", status: "preparing" });
+    queueKitchenUpdate({ orderId: "local-order", status: "ready" });
+    expect(reconcileKitchenOrderId("local-order", "server-order").map((item) => item.orderId))
+      .toEqual(["server-order", "server-order"]);
   });
 
   it("isolates offline orders between authenticated users", () => {
@@ -119,6 +227,32 @@ describe("offline queues", () => {
     const kitchenFailure = { ...recordKitchenUpdateFailure(kitchen, new Error("connection lost")), requiresAttention: true, ambiguousOutcome: true };
     reconcileKitchenUpdateSync([kitchen], [kitchenFailure]);
     expect(markKitchenUpdatesHandled()).toEqual([expect.objectContaining({ alreadyHandled: true, requiresAttention: false, status: "delivered" })]);
+  });
+
+  it("collapses handled mutation chains so delivered cannot replay backward", () => {
+    queueKitchenUpdate({ orderId: "order-1", status: "preparing" });
+    const first = getPendingKitchenUpdates()[0];
+    const failed = {
+      ...recordKitchenUpdateFailure(first, new Error("unknown outcome")),
+      requiresAttention: true,
+      ambiguousOutcome: true,
+    };
+    reconcileKitchenUpdateSync([first], [failed]);
+    queueKitchenUpdate({ orderId: "order-1", status: "ready" });
+
+    const handled = markKitchenUpdatesHandled();
+    expect(handled).toHaveLength(1);
+    expect(handled[0]).toMatchObject({ orderId: "order-1", status: "delivered", alreadyHandled: true });
+    expect(handled[0].clientMutationId).not.toBe(first.clientMutationId);
+  });
+
+  it("discards a rejected chain and exposes its confirmed restoration", () => {
+    queueKitchenUpdate({ orderId: "order-1", status: "preparing", confirmedStatus: "pending" });
+    const first = getPendingKitchenUpdates()[0];
+    reconcileKitchenUpdateSync([first], [recordKitchenUpdateFailure(first, { response: { status: 409 } })]);
+    queueKitchenUpdate({ orderId: "order-1", status: "ready" });
+    expect(getKitchenRejectedRestorations()).toEqual([{ orderId: "order-1", status: "pending" }]);
+    expect(discardKitchenUpdatesNeedingAttention()).toEqual([]);
   });
 
   it("does not mark rejected mutations as already handled", () => {

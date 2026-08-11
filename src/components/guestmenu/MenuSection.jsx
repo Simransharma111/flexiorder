@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import DishCard from "./DishCard";
-import useDialogFocus from "../../hooks/useDialogFocus";
+import SubcategoryChooser from "../menu/SubcategoryChooser";
 
 export default function MenuSection({ 
   categories, 
@@ -13,11 +13,6 @@ export default function MenuSection({
   increaseQuantity, 
   orderingEnabled = true 
 }) {
-  const [showAll, setShowAll] = useState(false);
-  const dialogRef = useRef(null);
-  const closeCategories = useCallback(() => setShowAll(false), []);
-  useDialogFocus(showAll, dialogRef, closeCategories);
-
   // Subcategory state
   const [activeSubCategory, setActiveSubCategory] = useState("All");
 
@@ -73,98 +68,59 @@ export default function MenuSection({
 
   return (
     <section className="guest-menu-section guest-visual-menu">
-      {/* Category Bar */}
-      <div className="guest-category-bar">
-        {categories.slice(0, 4).map((item) => (
+      <div className="guest-category-bar" role="group" aria-label="Categories">
+        {categories.map((item) => (
           <button 
             type="button" 
             key={item} 
-            className={activeCategory === item ? "is-active" : ""} 
-            onClick={() => setActiveCategory(item)}
+            className={activeCategory === item ? "is-active" : ""}
+            aria-pressed={activeCategory === item}
+            onClick={() => {
+              setActiveSubCategory("All");
+              setActiveCategory(item);
+            }}
           >
             {item}
           </button>
         ))}
-        {categories.length > 4 && (
-          <button type="button" className="guest-category-more" onClick={() => setShowAll(true)}>
-            More ›
-          </button>
-        )}
       </div>
 
-      {/* Subcategory Bar (only show if there are subcategories inside the active category) */}
-      {subCategories.length > 1 && (
-        <div className="guest-subcategory-bar">
-          {subCategories.map((sub) => (
-            <button
-              type="button"
-              key={sub}
-              className={activeSubCategory === sub ? "is-active" : ""}
-              onClick={() => setActiveSubCategory(sub)}
-            >
-              {sub}
-            </button>
-          ))}
-        </div>
-      )}
+      {/* Right Main Panel: Subcategory pills + Dishes */}
+      <div className="guest-menu-main-panel">
+        <SubcategoryChooser
+          key={activeCategory}
+          options={subCategories}
+          value={activeSubCategory}
+          onChange={setActiveSubCategory}
+        />
 
-      {/* List grouped by subcategory */}
-      {hasAnyDishes ? (
-        Object.entries(groupedDishes).map(([subCatName, subCatDishes]) => {
-          if (!subCatDishes.length) return null;
-          return (
-            <div key={subCatName || "other"} className="guest-subcategory-group">
-              {subCatName && <h3 className="guest-subcategory-header">{subCatName}</h3>}
-              <div className="guest-visual-list">
-                {subCatDishes.map((dish) => (
-                  <DishCard 
-                    key={dish._id} 
-                    dish={dish} 
-                    quantity={getCartQuantity(dish._id)} 
-                    onAdd={addToCart} 
-                    onDecrease={decreaseQuantity} 
-                    onIncrease={increaseQuantity} 
-                    orderingEnabled={orderingEnabled} 
-                  />
-                ))}
+        {/* List grouped by subcategory */}
+        {hasAnyDishes ? (
+          Object.entries(groupedDishes).map(([subCatName, subCatDishes]) => {
+            if (!subCatDishes.length) return null;
+            return (
+              <div key={subCatName || "other"} className="guest-subcategory-group">
+                {subCatName && <h3 className="guest-subcategory-header">{subCatName}</h3>}
+                <div className="guest-visual-list">
+                  {subCatDishes.map((dish) => (
+                    <DishCard
+                      key={dish._id}
+                      dish={dish}
+                      quantity={getCartQuantity(dish._id)}
+                      onAdd={addToCart}
+                      onDecrease={decreaseQuantity}
+                      onIncrease={increaseQuantity}
+                      orderingEnabled={orderingEnabled}
+                    />
+                  ))}
+                </div>
               </div>
-            </div>
-          );
-        })
-      ) : (
-        <p className="ops-empty-row">No dishes available</p>
-      )}
-
-      {showAll && (
-        <div className="ops-sheet-backdrop" onClick={closeCategories}>
-          <section 
-            ref={dialogRef} 
-            tabIndex={-1} 
-            className="ops-action-sheet" 
-            role="dialog" 
-            aria-modal="true" 
-            aria-label="Menu categories" 
-            onClick={(event) => event.stopPropagation()}
-          >
-            <h2>Categories</h2>
-            <div className="guest-category-picker">
-              {categories.map((item) => (
-                <button 
-                  type="button" 
-                  key={item} 
-                  className={activeCategory === item ? "is-active" : ""} 
-                  onClick={() => { setActiveCategory(item); closeCategories(); }}
-                >
-                  {item}
-                </button>
-              ))}
-            </div>
-            <button type="button" className="ops-sheet-cancel" onClick={closeCategories}>
-              Close
-            </button>
-          </section>
-        </div>
-      )}
+            );
+          })
+        ) : (
+          <p className="ops-empty-row">No dishes available</p>
+        )}
+      </div>
     </section>
   );
 }

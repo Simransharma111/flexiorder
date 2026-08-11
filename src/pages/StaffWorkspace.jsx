@@ -7,7 +7,7 @@ import { triggerLocalOrderNotification } from "../utils/fcmPush";
 import StaffOrder from "./StaffOrder";
 import Orders from "../components/ownerdashboard/Orders";
 import { getScopedStorageKey, rememberRestaurantId } from "../utils/storageScope";
-import { mergeOrders, reconcileAuthoritativeOrders } from "../utils/orderModel";
+import { mergeOrders, mergeOrderUpdate, reconcileAuthoritativeOrders } from "../utils/orderModel";
 import { getPendingKitchenUpdates } from "../utils/offlineKitchenUpdates";
 import { getHotelThemeStyle } from "../utils/hotelTheme";
 import { clearAuthSession, readStoredSession } from "../utils/session";
@@ -91,7 +91,9 @@ export default function StaffWorkspace() {
   }, [hotel?._id]);
 
   useEffect(() => {
-    const upsert = (order) => setOrders((current) => persistOrders(mergeOrders(current, [order])));
+    const upsert = (order) => setOrders((current) => persistOrders(
+      mergeOrderUpdate(current, order, getPendingKitchenUpdates())
+    ));
     const handleNewOrder = (order) => {
       upsert(order);
       triggerLocalOrderNotification(order);

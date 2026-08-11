@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   groupOrdersByLocation,
+  mergeOrderUpdate,
   mergeOrders,
   nextOrderStatus,
   orderLocation,
@@ -30,6 +31,10 @@ describe("order model", () => {
   });
 
   it("keeps kitchen ready cards stationary and lets waiter deliver", () => {
+    expect(nextOrderStatus("pending", "kitchen")).toBe("preparing");
+    expect(nextOrderStatus("preparing", "kitchen")).toBe("ready");
+    expect(nextOrderStatus("accepted", "kitchen")).toBe("ready");
+    expect(nextOrderStatus("paused", "kitchen")).toBe("preparing");
     expect(nextOrderStatus("ready", "kitchen")).toBeNull();
     expect(nextOrderStatus("ready", "waiter")).toBe("delivered");
     expect(orderLocation({ locationType: "room", locationNumber: 101 })).toBe("Room 101");
@@ -51,6 +56,27 @@ describe("order model", () => {
     expect(merged[0]).toMatchObject({ _id: "server-1", status: "accepted", pendingSync: false });
   });
 
+  it("deduplicates an id-only server update and clears completed mutation state", () => {
+    const result = mergeOrderUpdate(
+      [{
+        _id: "server-1",
+        clientOrderId: "client-1",
+        status: "ready",
+        pendingMutation: true,
+        updatedAt: "2026-08-11T12:00:00Z",
+      }],
+      { _id: "server-1", status: "ready" },
+      [],
+    );
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({
+      _id: "server-1",
+      clientOrderId: "client-1",
+      status: "ready",
+      pendingMutation: false,
+    });
+  });
+
   it("uses an authoritative snapshot while retaining queued local mutations", () => {
     const result = reconcileAuthoritativeOrders(
       [{ _id: "one", status: "ready" }, { _id: "removed", status: "pending" }],
@@ -59,6 +85,15 @@ describe("order model", () => {
     );
     expect(result).toHaveLength(1);
     expect(result[0]).toMatchObject({ _id: "one", status: "preparing", pendingMutation: true });
+  });
+
+  it("does not let a stale authoritative snapshot resurrect a delivered order", () => {
+    const result = reconcileAuthoritativeOrders(
+      [{ _id: "one", status: "delivered", updatedAt: "2026-08-11T12:00:00Z" }],
+      [{ _id: "one", status: "ready", updatedAt: "2026-08-11T12:00:01Z" }],
+      [],
+    );
+    expect(result[0].status).toBe("delivered");
   });
 
   it("does not group unrelated takeaway or unknown-location orders", () => {

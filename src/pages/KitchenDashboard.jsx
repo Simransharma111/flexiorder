@@ -10,17 +10,19 @@ import { clearAuthSession, readStoredSession } from "../utils/session";
 import { getScopedStorageKey, rememberRestaurantId } from "../utils/storageScope";
 import {
   mergeOrders,
+  mergeOrderUpdate,
   matchesOrderId,
   orderKey,
   orderLocation,
   reconcileAuthoritativeOrders,
-  replaceOrderAuthoritatively,
 } from "../utils/orderModel";
 import {
   getKitchenUpdatesNeedingAttention,
   getKitchenUpdatesEligibleForHandled,
   getKitchenUpdateErrors,
   getPendingKitchenUpdates,
+  discardKitchenUpdatesNeedingAttention,
+  getKitchenRejectedRestorations,
   markKitchenUpdatesHandled,
   queueKitchenUpdate,
   retryKitchenUpdatesNeedingAttention,
@@ -39,8 +41,8 @@ const CACHE_KEY = "flexiorder_kitchen_active_orders";
 
 export default function KitchenDashboard() {
   const navigate = useNavigate();
-  const { isOnline, status: connectionStatus, label: connectionLabel } = useConnectivity();
-  const { syncNow } = useSync();
+  const { status: connectionStatus, label: connectionLabel } = useConnectivity();
+  const { syncKitchenNow } = useSync();
   const [hotel, setHotel] = useState(null);
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -49,22 +51,10 @@ export default function KitchenDashboard() {
   const [toolsOpen, setToolsOpen] = useState(false);
   const [pendingSyncCount, setPendingSyncCount] = useState(getPendingKitchenUpdates().length);
   const [attentionCount, setAttentionCount] = useState(getKitchenUpdatesNeedingAttention().length);
-  const [errorBanner, setErrorBanner] = useState(null);
-  const [errorBannerTimer, setErrorBannerTimer] = useState(null);
   // IDs that have been in READY state for 20+ seconds and should be hidden.
   const [hiddenReadyIds, setHiddenReadyIds] = useState(new Set());
   // orderId → timer handle — persists across re-renders so timers never restart.
   const readyAutoHideTimers = useRef({});
-
-  const showErrorBanner = useCallback((message) => {
-    setErrorBanner(message);
-    setErrorBannerTimer((prev) => {
-      if (prev) clearTimeout(prev);
-      return window.setTimeout(() => setErrorBanner(null), 8000);
-    });
-  }, []);
-
-  useEffect(() => () => { if (errorBannerTimer) clearTimeout(errorBannerTimer); }, [errorBannerTimer]);
 
   // Auto-hide ready orders after 20 seconds to reduce kitchen clutter.
   useEffect(() => {
@@ -146,7 +136,7 @@ export default function KitchenDashboard() {
       setOrders((current) => cacheOrders(
         order.status === "delivered"
           ? current.filter((item) => orderKey(item) !== orderKey(order))
-          : replaceOrderAuthoritatively(current, order)
+          : mergeOrderUpdate(current, order, getPendingKitchenUpdates())
       ));
     };
     socket.on("newOrder", onNewOrder);
@@ -164,7 +154,7 @@ export default function KitchenDashboard() {
         setOrders((current) => cacheOrders(
           ["delivered", "cancelled"].includes(order.status)
             ? current.filter((item) => !matchesOrderId(item, order._id))
-            : replaceOrderAuthoritatively(current, order)
+            : mergeOrderUpdate(current, order, getPendingKitchenUpdates())
         ));
       });
       setPendingSyncCount(getPendingKitchenUpdates().length);
@@ -174,18 +164,29 @@ export default function KitchenDashboard() {
     return () => window.removeEventListener(SYNC_STATE_EVENT, handleSync);
   }, []);
 
-  const updateStatus = async (orderId, status, pauseReason = null) => {
-    let previousOrder = null;
-    const clientMutationId = globalThis.crypto?.randomUUID?.() ||
-      `mutation-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    const optimistic = { _id: orderId, status, pauseReason, updatedAt: new Date().toISOString() };
+  const updateStatus = (orderId, status, pauseReason = null) => {
+    const currentOrder = orders.find((order) => matchesOrderId(order, orderId));
+    const queued = queueKitchenUpdate({
+      orderId,
+      status,
+      pauseReason,
+      confirmedStatus: currentOrder?.status,
+    });
 
     // Apply the optimistic update synchronously so React flushes a repaint
     // before the network round-trip — eliminates perceived tap lag.
     flushSync(() => {
       setOrders((current) => {
-        previousOrder = current.find((order) => order._id === orderId) || null;
-        return cacheOrders(mergeOrders(current, [optimistic]));
+        const previousOrder = current.find((order) => matchesOrderId(order, orderId));
+        return cacheOrders(mergeOrders(current, [{
+          _id: previousOrder?._id || orderId,
+          clientOrderId: previousOrder?.clientOrderId,
+          status,
+          pauseReason,
+          pendingMutation: true,
+          clientMutationId: queued.clientMutationId,
+          updatedAt: new Date().toISOString(),
+        }]));
       });
     });
 
@@ -209,32 +210,8 @@ export default function KitchenDashboard() {
       });
     }
 
-    if (!isOnline) {
-      queueKitchenUpdate({ orderId, status, pauseReason, clientMutationId });
-      setPendingSyncCount(getPendingKitchenUpdates().length);
-      return;
-    }
-    try {
-      const response = await api.put(`/kitchen/orders/${orderId}`, { status, pauseReason, clientMutationId });
-      if (response.data?.order) {
-        setOrders((current) => cacheOrders(
-          ["delivered", "cancelled"].includes(response.data.order.status)
-            ? current.filter((order) => !matchesOrderId(order, orderId))
-            : replaceOrderAuthoritatively(current, response.data.order)
-        ));
-      }
-    } catch (error) {
-      if (!error?.response || error.response.status >= 500) {
-        queueKitchenUpdate({ orderId, status, pauseReason, clientMutationId });
-        setPendingSyncCount(getPendingKitchenUpdates().length);
-      } else {
-        if (previousOrder) {
-          setOrders((current) => cacheOrders(replaceOrderAuthoritatively(current, previousOrder)));
-        }
-        showErrorBanner(error.response?.data?.message || "Could not update order.");
-        fetchOrders();
-      }
-    }
+    setPendingSyncCount(getPendingKitchenUpdates().length);
+    syncKitchenNow();
   };
 
   const filtered = useMemo(() => {
@@ -305,13 +282,6 @@ export default function KitchenDashboard() {
         </div>
       )}
 
-      {errorBanner && (
-        <div className="ops-sync-strip needs-attention" role="alert">
-          <span>{errorBanner}</span>
-          <button type="button" onClick={() => setErrorBanner(null)}>Dismiss</button>
-        </div>
-      )}
-
       {(pendingSyncCount > 0 || attentionCount > 0) && (
         <div className={`ops-sync-strip${attentionCount ? " needs-attention" : ""}`}>
           <span>{attentionCount ? `${attentionCount} need attention` : `${pendingSyncCount} syncing`}</span>
@@ -329,8 +299,26 @@ export default function KitchenDashboard() {
                 const pending = retryKitchenUpdatesNeedingAttention();
                 setPendingSyncCount(pending.length);
                 setAttentionCount(0);
-                syncNow();
+                syncKitchenNow();
               }}>Retry</button>
+              <button type="button" onClick={() => {
+                const restorations = getKitchenRejectedRestorations();
+                const pending = discardKitchenUpdatesNeedingAttention();
+                setOrders((current) => cacheOrders(current.map((order) => {
+                  const restoration = restorations.find((item) => matchesOrderId(order, item.orderId));
+                  return restoration ? {
+                    ...order,
+                    status: restoration.status,
+                    pendingMutation: false,
+                    reverted: true,
+                    statusChangeType: "revert",
+                    updatedAt: new Date().toISOString(),
+                  } : order;
+                })));
+                setPendingSyncCount(pending.length);
+                setAttentionCount(0);
+                fetchOrders();
+              }}>Restore confirmed</button>
             </>
           )}
         </div>

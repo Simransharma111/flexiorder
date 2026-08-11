@@ -21,6 +21,7 @@ import { getRestaurantId } from "../utils/storageScope";
 import { useConnectivity } from "../context/ConnectivityContext";
 import { useSync } from "../context/SyncContext";
 import { SYNC_STATE_EVENT } from "../utils/syncQueues";
+import SubcategoryChooser from "../components/menu/SubcategoryChooser";
 
 const tableLabel = (table) => table?.type === "room"
   ? `Room ${table.tableNumber || table.locationNumber}`
@@ -38,7 +39,6 @@ export default function StaffOrder({ hotel, onOrderCreated }) {
   const [dishSearch, setDishSearch] = useState("");
   const [category, setCategory] = useState("All");
   const [activeSubCategory, setActiveSubCategory] = useState("All");
-  const [showAllCategories, setShowAllCategories] = useState(false);
   const [showGuest, setShowGuest] = useState(false);
   const [guestName, setGuestName] = useState("");
   const [guestContact, setGuestContact] = useState("");
@@ -337,28 +337,35 @@ export default function StaffOrder({ hotel, onOrderCreated }) {
           )}
 
           <label className="ops-search staff-dish-search"><FiSearch /><input value={dishSearch} onChange={(event) => setDishSearch(event.target.value)} placeholder="Search dishes" /></label>
-          <div className="staff-category-bar">
-            {categories.slice(0, 4).map((item) => (
-              <button type="button" key={item} className={category === item ? "is-active" : ""} onClick={() => setCategory(item)}>{item}</button>
-            ))}
-            {categories.length > 4 && <button type="button" onClick={() => setShowAllCategories(true)}>More ›</button>}
-          </div>
 
-          {/* Subcategory Pill Bar */}
-          {subCategories.length > 1 && (
-            <div className="guest-subcategory-bar">
-              {subCategories.map((sub) => (
+          <div className="staff-menu-filters">
+            <div className="staff-menu-filter-group">
+              <span className="staff-menu-filter-label">Category</span>
+              <div className="staff-category-bar" role="group" aria-label="Dish categories">
+              {categories.map((item) => (
                 <button
                   type="button"
-                  key={sub}
-                  className={activeSubCategory === sub ? "is-active" : ""}
-                  onClick={() => setActiveSubCategory(sub)}
+                  key={item}
+                  className={category === item ? "is-active" : ""}
+                  aria-pressed={category === item}
+                  onClick={() => {
+                    setActiveSubCategory("All");
+                    setCategory(item);
+                  }}
                 >
-                  {sub}
+                  {item}
                 </button>
               ))}
+              </div>
             </div>
-          )}
+
+            <SubcategoryChooser
+              key={category}
+              options={subCategories}
+              value={activeSubCategory}
+              onChange={setActiveSubCategory}
+            />
+          </div>
 
           <div className="staff-dish-list">
             {Object.entries(groupedMenu).map(([subCatName, subCatDishes]) => {
@@ -399,18 +406,6 @@ export default function StaffOrder({ hotel, onOrderCreated }) {
               <button type="button" onClick={placeOrder} disabled={placing}>{placing ? "Sending…" : "Place Order"}</button>
             </div>
           )}
-        </div>
-      )}
-
-      {showAllCategories && (
-        <div className="ops-sheet-backdrop" onClick={() => setShowAllCategories(false)}>
-          <section className="ops-action-sheet" onClick={(event) => event.stopPropagation()}>
-            <h2>Categories</h2>
-            <div className="staff-all-categories">
-              {categories.map((item) => <button type="button" key={item} onClick={() => { setCategory(item); setShowAllCategories(false); }}>{item}</button>)}
-            </div>
-            <button type="button" className="ops-sheet-cancel" onClick={() => setShowAllCategories(false)}>Close</button>
-          </section>
         </div>
       )}
     </section>

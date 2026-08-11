@@ -18,8 +18,8 @@ export const statusLane = (status) => {
 };
 
 export const nextOrderStatus = (status, surface = "kitchen") => {
-  if (status === "pending") return "accepted";
-  if (status === "accepted") return "preparing";
+  if (status === "pending") return "preparing";
+  if (status === "accepted") return "ready";
   if (status === "preparing") return "ready";
   if (status === "paused") return "preparing";
   if (status === "ready" && surface === "waiter") return "delivered";
@@ -81,9 +81,22 @@ const chooseOrder = (current, incoming) => {
   const incomingRank = STATUS_RANK[incoming.status] ?? -1;
   const explicitRevert = incoming.reverted === true || incoming.statusChangeType === "revert";
 
-  if (!explicitRevert && incomingRank < currentRank) return current;
-  if (incomingRank === currentRank && orderTime(incoming) < orderTime(current)) return current;
-  const merged = { ...current, ...incoming };
+  const preserveIdentityAndSync = (selected) => ({
+    ...selected,
+    _id: incoming._id || selected._id,
+    clientOrderId: incoming.clientOrderId || selected.clientOrderId,
+    localId: incoming.localId || selected.localId,
+    pendingMutation: incoming.pendingMutation ?? selected.pendingMutation,
+    pendingSync: incoming.pendingSync ?? selected.pendingSync,
+  });
+
+  if (!explicitRevert && incomingRank < currentRank) {
+    return preserveIdentityAndSync(current);
+  }
+  if (incomingRank === currentRank && orderTime(incoming) < orderTime(current)) {
+    return preserveIdentityAndSync(current);
+  }
+  const merged = preserveIdentityAndSync({ ...current, ...incoming });
   if (current.pendingSync && incoming._id && current.clientOrderId &&
       current.clientOrderId === incoming.clientOrderId) {
     merged.pendingSync = false;
@@ -92,19 +105,37 @@ const chooseOrder = (current, incoming) => {
 };
 
 export const mergeOrders = (current = [], incoming = []) => {
-  const merged = new Map();
+  const merged = [];
   [...current, ...incoming].forEach((order) => {
-    const key = orderKey(order);
-    if (!key) return;
-    merged.set(key, chooseOrder(merged.get(key), order));
+    if (!orderKey(order)) return;
+    const existingIndex = merged.findIndex((candidate) => sameOrder(candidate, order));
+    if (existingIndex === -1) merged.push(order);
+    else merged[existingIndex] = chooseOrder(merged[existingIndex], order);
   });
-  return [...merged.values()].sort((a, b) => orderTime(b) - orderTime(a));
+  return merged.sort((a, b) => orderTime(b) - orderTime(a));
 };
 
 const sameOrder = (left, right) => Boolean(
-  (left?.clientOrderId && left.clientOrderId === right?.clientOrderId) ||
-  (left?._id && left._id === right?._id)
+  [left?._id, left?.clientOrderId, left?.localId]
+    .filter(Boolean)
+    .some((leftId) => [right?._id, right?.clientOrderId, right?.localId]
+      .filter(Boolean)
+      .some((rightId) => String(leftId) === String(rightId)))
 );
+
+const hasPendingMutation = (order, currentOrder, pendingUpdates) => pendingUpdates.some(
+  (update) => matchesOrderId(order, update.orderId) || matchesOrderId(currentOrder, update.orderId)
+);
+
+export const mergeOrderUpdate = (current = [], incoming, pendingUpdates = []) => {
+  if (!incoming) return current;
+  const currentOrder = current.find((order) => sameOrder(order, incoming));
+  return mergeOrders(current, [{
+    ...incoming,
+    clientOrderId: incoming.clientOrderId || currentOrder?.clientOrderId,
+    pendingMutation: hasPendingMutation(incoming, currentOrder, pendingUpdates),
+  }]);
+};
 
 export const replaceOrderAuthoritatively = (orders = [], incoming) => {
   if (!incoming) return orders;
@@ -128,7 +159,14 @@ export const reconcileAuthoritativeOrders = (
   pendingUpdates = [],
 ) => {
   const active = Array.isArray(incoming) ? incoming : [];
-  let reconciled = mergeOrders([], active);
+  let reconciled = mergeOrders([], active.map((incomingOrder) => {
+    const currentOrder = current.find((order) => sameOrder(order, incomingOrder));
+    return chooseOrder(currentOrder, {
+      ...incomingOrder,
+      clientOrderId: incomingOrder.clientOrderId || currentOrder?.clientOrderId,
+      pendingMutation: hasPendingMutation(incomingOrder, currentOrder, pendingUpdates),
+    });
+  }));
 
   current.forEach((order) => {
     const key = orderKey(order);
@@ -142,8 +180,8 @@ export const reconcileAuthoritativeOrders = (
   });
 
   pendingUpdates.forEach((update) => {
-    const local = current.find((order) => order?._id === update.orderId);
-    const base = reconciled.find((order) => order?._id === update.orderId) || local;
+    const local = current.find((order) => matchesOrderId(order, update.orderId));
+    const base = reconciled.find((order) => matchesOrderId(order, update.orderId)) || local;
     if (!base) return;
     reconciled = replaceOrderAuthoritatively(reconciled, {
       ...base,

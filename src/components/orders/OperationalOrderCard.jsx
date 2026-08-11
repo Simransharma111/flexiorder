@@ -75,8 +75,8 @@ export default function OperationalOrderCard({
   const totalItems = countItems(items);
   const pressTimer = useRef(null);
   const longPressTriggered = useRef(false);
-  const waitingToSync = orders.some((item) => item?.pendingSync);
-  const interactive = Boolean(onPrimary) && !waitingToSync;
+  const waitingToSync = orders.some((item) => item?.pendingSync || item?.pendingMutation);
+  const interactive = Boolean(onPrimary);
   const oldest = orders.reduce((oldestOrder, currentOrder) => (
     waitingMinutes(currentOrder) > waitingMinutes(oldestOrder) ? currentOrder : oldestOrder
   ), lead);
@@ -150,7 +150,7 @@ export default function OperationalOrderCard({
           <strong>NEW ORDER</strong>
           <span>{orders.length > 1
             ? `${orders.length} separate orders`
-            : interactive ? "Tap card to accept" : "1 order"}</span>
+            : interactive ? "Tap card to prepare" : "1 order"}</span>
         </div>
       )}
       <div className="ops-order-card__head">
@@ -261,7 +261,7 @@ export default function OperationalOrderCard({
             ? " · Delivered"
             : lane === "ready"
               ? surface === "waiter" ? " · Tap to deliver" : " · Ready for pickup"
-              : waitingToSync ? " · Waiting to sync" : " · Tap to finish"}
+              : " · Tap to finish"}
         </p>
       )}
 

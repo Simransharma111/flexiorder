@@ -8,6 +8,7 @@ import {
   getKitchenUpdatesNeedingAttention,
   getPendingKitchenUpdates,
   queueKitchenUpdate,
+  reconcileKitchenOrderId,
   reconcileKitchenUpdateSync,
   recordKitchenUpdateFailure,
 } from "./offlineKitchenUpdates";
@@ -40,6 +41,7 @@ const runStaffSync = async (api, { force = false } = {}) => {
         clientOrderId: queued.clientOrderId,
         pendingSync: false,
       });
+      reconcileKitchenOrderId(queued.clientOrderId, order._id);
       if (queued.alreadyHandled && order?._id) {
         try {
           await api.put(`/kitchen/orders/${order._id}`, {
@@ -65,6 +67,7 @@ const runStaffSync = async (api, { force = false } = {}) => {
           clientOrderId: queued.clientOrderId,
           pendingSync: false,
         });
+        reconcileKitchenOrderId(queued.clientOrderId, existingOrder._id);
         if (queued.alreadyHandled) {
           queueKitchenUpdate({
             orderId: existingOrder._id,
@@ -95,25 +98,71 @@ export const syncPendingStaffOrders = (api, options = {}) => {
 };
 
 const runKitchenSync = async (api, { force = false } = {}) => {
-  const snapshot = getPendingKitchenUpdates().filter((item) => readyToRetry(item, force));
-  const failed = [];
-  const syncedOrders = [];
-  for (const update of snapshot) {
-    try {
-      const response = await api.put(`/kitchen/orders/${update.orderId}`, {
-        status: update.status,
-        pauseReason: update.pauseReason || null,
-        clientMutationId: update.clientMutationId,
-      });
-      if (response.data?.order) syncedOrders.push(response.data.order);
-    } catch (error) {
-      failed.push(recordKitchenUpdateFailure(update, error));
-    }
+  const syncedByOrder = new Map();
+  let firstPass = true;
+
+  while (true) {
+    const localOrderIds = new Set(getPendingStaffOrders().map((item) => String(item.clientOrderId)));
+    const blockedBeforeReplay = new Set();
+    const snapshot = [];
+    getPendingKitchenUpdates().forEach((item) => {
+      const orderId = String(item.orderId);
+      if (blockedBeforeReplay.has(orderId)) return;
+      if (
+        localOrderIds.has(orderId) ||
+        !readyToRetry(item, firstPass ? force : false)
+      ) {
+        blockedBeforeReplay.add(orderId);
+        return;
+      }
+      snapshot.push(item);
+    });
+    firstPass = false;
+    if (!snapshot.length) break;
+
+    const failed = [];
+    const updatesByOrder = new Map();
+    snapshot.forEach((update) => {
+      const orderId = String(update.orderId);
+      updatesByOrder.set(orderId, [...(updatesByOrder.get(orderId) || []), update]);
+    });
+    await Promise.all([...updatesByOrder.entries()].map(async ([orderId, updates]) => {
+      for (let index = 0; index < updates.length; index += 1) {
+        const update = updates[index];
+        try {
+          const response = await api.put(`/kitchen/orders/${update.orderId}`, {
+            status: update.status,
+            pauseReason: update.pauseReason || null,
+            clientMutationId: update.clientMutationId,
+          });
+          const responseOrder = response.data?.order || {
+            _id: update.orderId,
+            status: update.status,
+            pauseReason: update.pauseReason || null,
+          };
+          syncedByOrder.set(orderId, {
+            order: responseOrder,
+            clientOrderId: update.localOrderId || responseOrder.clientOrderId,
+          });
+        } catch (error) {
+          failed.push(recordKitchenUpdateFailure(update, error));
+          failed.push(...updates.slice(index + 1));
+          break;
+        }
+      }
+    }));
+    reconcileKitchenUpdateSync(snapshot, failed);
   }
-  reconcileKitchenUpdateSync(snapshot, failed);
+
+  const pending = getPendingKitchenUpdates();
+  const syncedOrders = [...syncedByOrder.entries()].map(([orderId, synced]) => ({
+    ...synced.order,
+    clientOrderId: synced.clientOrderId,
+    pendingMutation: pending.some((item) => String(item.orderId) === orderId),
+  }));
   const result = {
     syncedOrders,
-    pending: getPendingKitchenUpdates().length,
+    pending: pending.length,
     attention: getKitchenUpdatesNeedingAttention().length,
   };
   notify("kitchen-updates", result);

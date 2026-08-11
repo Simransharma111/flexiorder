@@ -2,18 +2,27 @@ import { getScopedStorageKey } from "./storageScope";
 
 const STORAGE_KEY = "flexiorder_pending_staff_orders";
 const currentStorageKey = () => getScopedStorageKey(STORAGE_KEY);
+const memoryQueues = new Map();
 
 const readQueue = () => {
+  const key = currentStorageKey();
   try {
-    const parsed = JSON.parse(localStorage.getItem(currentStorageKey()) || "[]");
+    const stored = localStorage.getItem(key);
+    const parsed = JSON.parse(stored ?? JSON.stringify(memoryQueues.get(key) || []));
     return Array.isArray(parsed) ? parsed : [];
   } catch {
-    return [];
+    return memoryQueues.get(key) || [];
   }
 };
 
 const writeQueue = (orders) => {
-  localStorage.setItem(currentStorageKey(), JSON.stringify(orders));
+  const key = currentStorageKey();
+  try {
+    localStorage.setItem(key, JSON.stringify(orders));
+    memoryQueues.delete(key);
+  } catch {
+    memoryQueues.set(key, orders);
+  }
 };
 
 const errorMessage = (error) => (

@@ -4,6 +4,7 @@ import {
   hotel,
   installSession,
   kitchenOrder,
+  mockGuestMenu,
   mockStaffWorkspace,
 } from "./helpers";
 
@@ -12,10 +13,16 @@ test("waiter saves an offline order and automatically syncs it after reconnectio
   await mockStaffWorkspace(page);
 
   const submitted = [];
+  const statusUpdates = [];
   await page.route("**/orders", async (route) => {
     if (route.request().method() !== "POST") return route.fallback();
     submitted.push(route.request().postDataJSON());
     return fulfillJson(route, { success: true, order: { _id: "synced-order" } }, 201);
+  });
+  await page.route("**/kitchen/orders/synced-order", async (route) => {
+    const body = route.request().postDataJSON();
+    statusUpdates.push(body);
+    return fulfillJson(route, { order: { _id: "synced-order", status: body.status } });
   });
 
   await page.goto("/owner/order");
@@ -30,7 +37,11 @@ test("waiter saves an offline order and automatically syncs it after reconnectio
 
   await expect(page.getByLabel("Offline")).toBeVisible();
   await expect(page.getByText("Syncing", { exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: /^Accept Table 8 order/ })).toHaveCount(0);
+  await page.getByRole("button", { name: /^Accept Table 8 order/ }).click();
+  await expect(page.locator(".ops-order-card--preparing")).toBeVisible();
+  await page.getByRole("button", { name: /^Finish Table 8 order/ }).click();
+  await expect(page.locator(".ops-order-card--ready")).toBeVisible();
+  await page.getByRole("button", { name: /^Deliver Table 8 order/ }).click();
   const queued = await page.evaluate(() => {
     const key = Object.keys(localStorage).find((item) => item.startsWith("flexiorder_pending_staff_orders:"));
     return JSON.parse(localStorage.getItem(key) || "[]");
@@ -41,14 +52,24 @@ test("waiter saves an offline order and automatically syncs it after reconnectio
     items: [{ menuId: "dish-paneer", quantity: 1 }],
   });
   expect(queued[0].payload.clientOrderId).toBeTruthy();
+  const queuedStatus = await page.evaluate(() => {
+    const key = Object.keys(localStorage).find((item) => item.startsWith("flexiorder_pending_kitchen_updates:"));
+    return JSON.parse(localStorage.getItem(key) || "[]");
+  });
+  expect(queuedStatus.map((item) => item.status)).toEqual(["preparing", "ready", "delivered"]);
+  expect(queuedStatus.every((item) => item.orderId === queued[0].clientOrderId)).toBe(true);
 
   await context.setOffline(false);
   await expect.poll(() => submitted.length).toBe(1);
+  await expect.poll(() => statusUpdates.length).toBe(3);
+  expect(statusUpdates.map((item) => item.status)).toEqual(["preparing", "ready", "delivered"]);
   expect(submitted[0].clientOrderId).toBe(queued[0].clientOrderId);
   await expect.poll(async () => page.evaluate(() => {
     const key = Object.keys(localStorage).find((item) => item.startsWith("flexiorder_pending_staff_orders:"));
     return JSON.parse(localStorage.getItem(key) || "[]").length;
   })).toBe(0);
+  await page.getByRole("tab", { name: "History" }).click();
+  await expect(page.getByRole("button", { name: "More options for Table 8" })).toHaveCount(1);
 });
 
 test("kitchen advances an order from new to preparing to ready with one tap", async ({ page }) => {
@@ -80,14 +101,13 @@ test("kitchen advances an order from new to preparing to ready with one tap", as
   await expect(newCard.getByText("Less spicy, please", { exact: true })).toBeVisible();
 
   await orderCard.click();
-  await expect.poll(() => statuses).toEqual(["accepted"]);
-  await expect(page.locator(".ops-order-card__new-banner")).toHaveCount(0);
   await expect(page.locator(".ops-order-card--preparing")).toBeVisible();
+  await expect.poll(() => statuses).toEqual(["preparing"]);
+  await expect(page.locator(".ops-order-card__new-banner")).toHaveCount(0);
   orderCard = page.getByRole("button", { name: /^Finish Table 8 order/ });
   await orderCard.click();
-  await expect.poll(() => statuses).toEqual(["accepted", "preparing"]);
-  await orderCard.click();
-  await expect.poll(() => statuses).toEqual(["accepted", "preparing", "ready"]);
+  await expect(page.locator(".ops-order-card--ready")).toBeVisible();
+  await expect.poll(() => statuses).toEqual(["preparing", "ready"]);
 
   const readyColumn = page.getByRole("heading", { name: /READY/ }).locator("../..");
   await expect(readyColumn.getByText("Table 8")).toBeVisible();
@@ -167,15 +187,99 @@ test("kitchen queues a status change offline and replays it with a mutation id",
     return JSON.parse(localStorage.getItem(key) || "[]");
   });
   expect(queued).toHaveLength(1);
-  expect(queued[0]).toMatchObject({ orderId: "order-00008", status: "accepted" });
+  expect(queued[0]).toMatchObject({ orderId: "order-00008", status: "preparing" });
   expect(queued[0].clientMutationId).toBeTruthy();
 
   await context.setOffline(false);
   await expect.poll(() => updates.length).toBe(1);
   expect(updates[0]).toMatchObject({
-    status: "accepted",
+    status: "preparing",
     clientMutationId: queued[0].clientMutationId,
   });
+});
+
+test("a slow save does not block the next distinct kitchen transition", async ({ page }) => {
+  await installSession(page, "staff");
+  let releasePreparing;
+  const preparingResponse = new Promise((resolve) => { releasePreparing = resolve; });
+  const statuses = [];
+  let currentOrder = kitchenOrder();
+
+  await page.route("**/hotel/me", (route) => fulfillJson(route, hotel));
+  await page.route("**/kitchen/orders", (route) => fulfillJson(route, { orders: [currentOrder] }));
+  await page.route("**/kitchen/orders/order-00008", async (route) => {
+    const body = route.request().postDataJSON();
+    statuses.push(body.status);
+    if (body.status === "preparing") await preparingResponse;
+    currentOrder = { ...currentOrder, status: body.status, updatedAt: new Date().toISOString() };
+    return fulfillJson(route, { order: currentOrder });
+  });
+
+  await page.goto("/kitchen");
+  await page.getByRole("button", { name: /^Accept Table 8 order/ }).click();
+  const finish = page.getByRole("button", { name: /^Finish Table 8 order/ });
+  await expect(finish).toBeVisible();
+  await expect(page.getByText("Syncing", { exact: true })).toBeVisible();
+  await finish.click();
+  await expect(page.locator(".ops-order-card--ready")).toBeVisible();
+  await expect(page.locator(".ops-order-card--ready").getByText("Syncing", { exact: true })).toBeVisible();
+  expect(statuses).toEqual(["preparing"]);
+
+  releasePreparing();
+  await expect.poll(() => statuses).toEqual(["preparing", "ready"]);
+  await expect(page.locator(".ops-order-card--ready").getByText("Syncing", { exact: true })).toHaveCount(0);
+});
+
+test("kitchen ready cards remain non-interactive", async ({ page }) => {
+  await installSession(page, "staff");
+  await page.route("**/hotel/me", (route) => fulfillJson(route, hotel));
+  await page.route("**/kitchen/orders", (route) => fulfillJson(route, {
+    orders: [kitchenOrder({ status: "ready", readyAt: new Date().toISOString() })],
+  }));
+
+  await page.goto("/kitchen");
+  await expect(page.locator(".ops-order-card--ready")).toBeVisible();
+  await expect(page.locator(".ops-order-card--ready .ops-order-card__primary-action")).toHaveCount(0);
+});
+
+test("paused orders resume preparing with one tap", async ({ page }) => {
+  await installSession(page, "staff");
+  const statuses = [];
+  const pausedOrder = kitchenOrder({ status: "paused" });
+  await page.route("**/hotel/me", (route) => fulfillJson(route, hotel));
+  await page.route("**/kitchen/orders", (route) => fulfillJson(route, { orders: [pausedOrder] }));
+  await page.route("**/kitchen/orders/order-00008", async (route) => {
+    const body = route.request().postDataJSON();
+    statuses.push(body.status);
+    return fulfillJson(route, { order: { ...pausedOrder, status: body.status } });
+  });
+
+  await page.goto("/kitchen");
+  await page.getByRole("button", { name: "More actions for paused Table 8" }).click();
+  await expect(page.getByRole("dialog", { name: "Actions for Table 8" })).toBeVisible();
+  await page.getByRole("button", { name: "Close" }).click();
+  await page.getByRole("button", { name: "Resume preparing Table 8 order" }).click();
+  await expect(page.locator(".ops-order-card--preparing")).toBeVisible();
+  await expect.poll(() => statuses).toEqual(["preparing"]);
+});
+
+test("terminal status rejection offers restore confirmed recovery", async ({ page }) => {
+  await installSession(page, "staff");
+  const pendingOrder = kitchenOrder();
+  await page.route("**/hotel/me", (route) => fulfillJson(route, hotel));
+  await page.route("**/kitchen/orders", (route) => fulfillJson(route, { orders: [pendingOrder] }));
+  await page.route("**/kitchen/orders/order-00008", (route) => fulfillJson(route, {
+    message: "Transition rejected",
+  }, 409));
+
+  await page.goto("/kitchen");
+  await page.getByRole("button", { name: /^Accept Table 8 order/ }).click();
+  await expect(page.locator(".ops-order-card--preparing")).toBeVisible();
+  await expect(page.getByText("1 need attention")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Retry" })).toBeVisible();
+  await page.getByRole("button", { name: "Restore confirmed" }).click();
+  await expect(page.locator(".ops-order-card--new")).toBeVisible();
+  await expect(page.getByText("1 need attention")).toHaveCount(0);
 });
 
 test("delivered leaves active orders immediately and history exposes full details", async ({ page }) => {
@@ -225,7 +329,7 @@ test("Simple mode keeps workspace switching but hides optional staff controls", 
     },
   };
   await page.route("**/hotel/me", (route) => fulfillJson(route, simpleHotel));
-  await page.route("**/kitchen/orders?type=kitchen", (route) => fulfillJson(route, { orders: [] }));
+  await page.route(/\/kitchen\/orders(?:\?.*)?$/, (route) => fulfillJson(route, { orders: [] }));
   await page.route("**/menu/hotel-1", (route) => fulfillJson(route, []));
   await page.route("**/table", (route) => fulfillJson(route, { tables: [] }));
 
@@ -255,4 +359,79 @@ test("waiter and kitchen keep Refresh outside their right-side overflow menus", 
   await expect(page.getByRole("button", { name: "More kitchen options" })).toBeVisible();
   await page.getByRole("button", { name: "More kitchen options" }).click();
   await expect(page.locator(".ops-tools-sheet").getByRole("button", { name: /^Refresh/ })).toHaveCount(0);
+});
+
+test("waiter subcategories use a compact chooser and filter the full dish list", async ({ page }) => {
+  await installSession(page, "staff");
+  const menu = [
+    { _id: "dish-paneer", name: "Paneer Tikka", price: 250, category: "Starters", subCategory: "Grill", foodType: "veg", isAvailable: true },
+    { _id: "dish-naan", name: "Butter Naan", price: 60, category: "Starters", subCategory: "Breads", foodType: "veg", isAvailable: true },
+  ];
+  await page.route("**/hotel/me", (route) => fulfillJson(route, hotel));
+  await page.route(/\/kitchen\/orders(?:\?.*)?$/, (route) => fulfillJson(route, { orders: [] }));
+  await page.route("**/menu/hotel-1", (route) => fulfillJson(route, menu));
+  await page.route("**/table", (route) => fulfillJson(route, { tables: [{ _id: "table-8", tableNumber: "8", type: "table" }] }));
+
+  await page.goto("/owner/order");
+  await page.getByRole("tab", { name: "Take Order" }).click();
+  await page.getByRole("button", { name: "Table 8" }).click();
+  const chooser = page.locator(".staff-menu-step .menu-subcategory-trigger");
+  await expect(chooser).toHaveAttribute("aria-expanded", "false");
+  await chooser.click();
+  await page.keyboard.press("End");
+  await expect(page.getByRole("button", { name: "Breads" })).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(chooser).toBeFocused();
+  await chooser.click();
+  await page.locator(".staff-dish-search input").click();
+  await expect(chooser).toHaveAttribute("aria-expanded", "false");
+  await chooser.click();
+  await page.getByRole("button", { name: "Breads" }).click();
+  await expect(chooser).toHaveAttribute("aria-expanded", "false");
+  await expect(chooser).toContainText("Breads");
+  await expect(page.getByRole("button", { name: "Add Butter Naan" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Add Paneer Tikka" })).toHaveCount(0);
+  await expect(page.locator(".staff-menu-step .guest-menu-sidebar")).toHaveCount(0);
+});
+
+test("customer ordering pause does not block permitted staff ordering", async ({ page }) => {
+  await installSession(page, "staff");
+  await mockStaffWorkspace(page);
+  await page.unroute("**/hotel/me");
+  await page.route("**/hotel/me", (route) => fulfillJson(route, {
+    ...hotel,
+    orderingEnabled: false,
+    featureSettings: { staffCapabilities: { changeOrdering: true } },
+  }));
+
+  await page.goto("/owner/order");
+  await page.getByRole("tab", { name: "Take Order" }).click();
+  await page.getByRole("button", { name: "Table 8" }).click();
+  await expect(page.getByRole("button", { name: "Add Paneer Tikka" })).toBeVisible();
+});
+
+test("customer visual and simple menus use the same compact subcategory chooser", async ({ page }) => {
+  const menu = [
+    { _id: "dish-paneer", name: "Paneer Tikka", price: 250, category: "Starters", subCategory: "Grill", foodType: "veg", isAvailable: true },
+    { _id: "dish-naan", name: "Butter Naan", price: 60, category: "Starters", subCategory: "Breads", foodType: "veg", isAvailable: true },
+  ];
+  await mockGuestMenu(page, { dishes: menu });
+
+  await page.goto("/qr/qr-123");
+  const chooser = page.locator(".guest-menu-main-panel .menu-subcategory-trigger");
+  await expect(page.locator(".guest-menu-sidebar")).toHaveCount(0);
+  await expect(page.locator(".guest-category-bar").getByRole("button", { name: "All", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await chooser.click();
+  await page.getByPlaceholder("Search dishes...").click();
+  await expect(chooser).toHaveAttribute("aria-expanded", "false");
+  await chooser.click();
+  await page.getByRole("button", { name: "Breads" }).click();
+  await expect(chooser).toContainText("Breads");
+  await expect(page.getByText("Butter Naan", { exact: true })).toBeVisible();
+  await expect(page.getByText("Paneer Tikka", { exact: true })).toHaveCount(0);
+
+  await page.unroute("**/qr/menu/qr-123");
+  await mockGuestMenu(page, { hotel: { menuMode: "simple" }, dishes: menu });
+  await page.reload();
+  await expect(page.getByRole("button", { name: /Subcategory All/ })).toBeVisible();
 });

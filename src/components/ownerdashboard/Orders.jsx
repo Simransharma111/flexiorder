@@ -1,33 +1,33 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FiSearch, FiShoppingBag } from "react-icons/fi";
-import api from "../../api/axios";
 import KitchenBoard from "../kitchen/KitchenBoard";
 import OrderCard from "./OrderCard";
 import useDialogFocus from "../../hooks/useDialogFocus";
 import {
   mergeOrders,
+  mergeOrderUpdate,
+  matchesOrderId,
   orderKey,
   orderLocation,
   reconcileAuthoritativeOrders,
-  replaceOrderAuthoritatively,
 } from "../../utils/orderModel";
 import {
   getKitchenUpdatesNeedingAttention,
   getKitchenUpdatesEligibleForHandled,
   getKitchenUpdateErrors,
   getPendingKitchenUpdates,
+  discardKitchenUpdatesNeedingAttention,
+  getKitchenRejectedRestorations,
   markKitchenUpdatesHandled,
   queueKitchenUpdate,
   retryKitchenUpdatesNeedingAttention,
 } from "../../utils/offlineKitchenUpdates";
-import { useConnectivity } from "../../context/ConnectivityContext";
 import { useSync } from "../../context/SyncContext";
 import { SYNC_STATE_EVENT } from "../../utils/syncQueues";
 import { flushSync } from "react-dom";
 
 export default function Orders({ orders = [], refresh, onOrdersChange }) {
-  const { isOnline } = useConnectivity();
-  const { syncNow } = useSync();
+  const { syncKitchenNow } = useSync();
   const [activeView, setActiveView] = useState("active");
   const [search, setSearch] = useState("");
   const [historyActionOrder, setHistoryActionOrder] = useState(null);
@@ -46,23 +46,11 @@ export default function Orders({ orders = [], refresh, onOrdersChange }) {
   const [localOrders, setLocalOrders] = useState(() => mergeOrders([], orders));
   const [pendingSyncCount, setPendingSyncCount] = useState(getPendingKitchenUpdates().length);
   const [attentionCount, setAttentionCount] = useState(getKitchenUpdatesNeedingAttention().length);
-  const [errorBanner, setErrorBanner] = useState(null);
-  const errorBannerTimerRef = useRef(null);
   // Delivered orders accumulate for the session so History persists across polls.
   const [sessionDeliveries, setSessionDeliveries] = useState([]);
   // IDs currently visible in the Delivered lane (auto-hidden after 20 seconds).
   const [visibleDeliveredIds, setVisibleDeliveredIds] = useState(new Set());
   const deliveredAutoHideTimers = useRef({});
-
-  const showErrorBanner = useCallback((message) => {
-    setErrorBanner(message);
-    if (errorBannerTimerRef.current) clearTimeout(errorBannerTimerRef.current);
-    errorBannerTimerRef.current = window.setTimeout(() => setErrorBanner(null), 8000);
-  }, []);
-
-  useEffect(() => () => {
-    if (errorBannerTimerRef.current) clearTimeout(errorBannerTimerRef.current);
-  }, []);
 
   // Start 20-second auto-hide timer for each new entry in sessionDeliveries.
   useEffect(() => {
@@ -116,7 +104,28 @@ export default function Orders({ orders = [], refresh, onOrdersChange }) {
     const handleSync = (event) => {
       if (event.detail?.kind !== "kitchen-updates") return;
       event.detail.syncedOrders?.forEach((order) => {
-        publishOrders((current) => replaceOrderAuthoritatively(current, order));
+        publishOrders((current) => mergeOrderUpdate(current, order, getPendingKitchenUpdates()));
+        setSessionDeliveries((current) => {
+          const hasDelivery = current.some((delivery) =>
+            matchesOrderId(delivery, order._id) || matchesOrderId(delivery, order.clientOrderId));
+          return hasDelivery || order.status === "delivered"
+            ? mergeOrders(current, [order])
+            : current;
+        });
+        if (order.clientOrderId && order._id && String(order.clientOrderId) !== String(order._id)) {
+          const localId = order.clientOrderId;
+          if (deliveredAutoHideTimers.current[localId]) {
+            clearTimeout(deliveredAutoHideTimers.current[localId]);
+            delete deliveredAutoHideTimers.current[localId];
+          }
+          setVisibleDeliveredIds((current) => {
+            if (!current.has(localId)) return current;
+            const next = new Set(current);
+            next.delete(localId);
+            next.add(order._id);
+            return next;
+          });
+        }
       });
       setPendingSyncCount(getPendingKitchenUpdates().length);
       setAttentionCount(getKitchenUpdatesNeedingAttention().length);
@@ -128,24 +137,32 @@ export default function Orders({ orders = [], refresh, onOrdersChange }) {
     };
   }, [publishOrders, refresh]);
 
-  const updateStatus = async (orderId, status, pauseReason = null) => {
+  const updateStatus = (orderId, status, pauseReason = null) => {
     let previousOrder = null;
-    const clientMutationId = globalThis.crypto?.randomUUID?.() ||
-      `mutation-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    const optimistic = {
-      _id: orderId,
+    const currentOrder = localOrders.find((order) => matchesOrderId(order, orderId));
+    const queued = queueKitchenUpdate({
+      orderId,
       status,
       pauseReason,
-      updatedAt: new Date().toISOString(),
-      ...(status === "preparing" ? {
-        reverted: true,
-        statusChangeType: "revert",
-      } : {}),
-    };
+      confirmedStatus: currentOrder?.status,
+    });
     flushSync(() => {
       publishOrders((current) => {
-        previousOrder = current.find((order) => order._id === orderId) || null;
-        return mergeOrders(current, [optimistic]);
+        previousOrder = current.find((order) => order._id === orderId || order.clientOrderId === orderId) || null;
+        return mergeOrders(current, [{
+          _id: previousOrder?._id || orderId,
+          clientOrderId: previousOrder?.clientOrderId,
+          status,
+          pauseReason,
+          pendingMutation: true,
+          clientMutationId: queued.clientMutationId,
+          updatedAt: new Date().toISOString(),
+          ...(["delivered", "cancelled"].includes(previousOrder?.status) &&
+            !["delivered", "cancelled"].includes(status) ? {
+              reverted: true,
+              statusChangeType: "revert",
+            } : {}),
+        }]);
       });
     });
 
@@ -172,36 +189,8 @@ export default function Orders({ orders = [], refresh, onOrdersChange }) {
       });
     }
 
-    if (!isOnline) {
-      queueKitchenUpdate({ orderId, status, pauseReason, clientMutationId });
-      setPendingSyncCount(getPendingKitchenUpdates().length);
-      return;
-    }
-    try {
-      const response = await api.put(`/kitchen/orders/${orderId}`, { status, pauseReason, clientMutationId });
-      if (response.data?.order) {
-        publishOrders((current) => replaceOrderAuthoritatively(current, response.data.order));
-        // Update the session delivery snapshot with the server-confirmed data.
-        if (response.data.order.status === "delivered") {
-          setSessionDeliveries((prev) => [
-            ...prev.filter((o) => o._id !== orderId),
-            response.data.order,
-          ]);
-        }
-      }
-      else refresh?.();
-    } catch (error) {
-      if (!error?.response || error.response.status >= 500) {
-        queueKitchenUpdate({ orderId, status, pauseReason, clientMutationId });
-        setPendingSyncCount(getPendingKitchenUpdates().length);
-      } else {
-        if (previousOrder) {
-          publishOrders((current) => replaceOrderAuthoritatively(current, previousOrder));
-        }
-        showErrorBanner(error.response?.data?.message || "Could not update order.");
-        refresh?.();
-      }
-    }
+    setPendingSyncCount(getPendingKitchenUpdates().length);
+    syncKitchenNow();
   };
 
   // Active board: all non-cancelled, non-delivered orders.
@@ -227,9 +216,9 @@ export default function Orders({ orders = [], refresh, onOrdersChange }) {
     const localHistory = localOrders.filter(
       (order) => ["delivered", "cancelled"].includes(order.status)
     );
-    const liveIds = new Set(localHistory.map((o) => o._id));
     // Session deliveries that were reconciled away from localOrders (auto-hidden) still show in history.
-    const sessionHistory = sessionDeliveries.filter((o) => !liveIds.has(o._id));
+    const sessionHistory = sessionDeliveries.filter((delivery) => !localHistory.some((order) =>
+      matchesOrderId(order, delivery._id) || matchesOrderId(order, delivery.clientOrderId)));
     return [...localHistory, ...sessionHistory].sort(
       (a, b) => new Date(b.deliveredAt || b.updatedAt || 0) - new Date(a.deliveredAt || a.updatedAt || 0)
     );
@@ -266,12 +255,6 @@ export default function Orders({ orders = [], refresh, onOrdersChange }) {
         <button type="button" role="tab" aria-selected={activeView === "active"} className={activeView === "active" ? "is-active" : ""} onClick={() => setActiveView("active")}>Active</button>
         <button type="button" role="tab" aria-selected={activeView === "history"} className={activeView === "history" ? "is-active" : ""} onClick={() => setActiveView("history")}>History</button>
       </div>
-      {errorBanner && (
-        <div className="ops-sync-strip needs-attention" role="alert">
-          <span>{errorBanner}</span>
-          <button type="button" onClick={() => setErrorBanner(null)}>Dismiss</button>
-        </div>
-      )}
       {(pendingSyncCount > 0 || attentionCount > 0) && (
         <div className={`ops-sync-strip${attentionCount ? " needs-attention" : ""}`}>
           <span>{attentionCount ? `${attentionCount} need attention` : `${pendingSyncCount} syncing`}</span>
@@ -289,8 +272,26 @@ export default function Orders({ orders = [], refresh, onOrdersChange }) {
                 const pending = retryKitchenUpdatesNeedingAttention();
                 setPendingSyncCount(pending.length);
                 setAttentionCount(0);
-                syncNow();
+                syncKitchenNow();
               }}>Retry</button>
+              <button type="button" onClick={() => {
+                const restorations = getKitchenRejectedRestorations();
+                const pending = discardKitchenUpdatesNeedingAttention();
+                publishOrders((current) => current.map((order) => {
+                  const restoration = restorations.find((item) => matchesOrderId(order, item.orderId));
+                  return restoration ? {
+                    ...order,
+                    status: restoration.status,
+                    pendingMutation: false,
+                    reverted: true,
+                    statusChangeType: "revert",
+                    updatedAt: new Date().toISOString(),
+                  } : order;
+                }));
+                setPendingSyncCount(pending.length);
+                setAttentionCount(0);
+                refresh?.();
+              }}>Restore confirmed</button>
             </>
           )}
         </div>

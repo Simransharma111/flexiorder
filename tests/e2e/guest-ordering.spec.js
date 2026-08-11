@@ -76,6 +76,25 @@ test.describe("customer QR ordering", () => {
     await expect(page.getByRole("button", { name: /View Cart/ })).toHaveCount(0);
   });
 
+  test("uses the configured GST percentage consistently", async ({ page }) => {
+    await mockGuestMenu(page, { hotel: { gstEnabled: true, gstPercentage: 12 } });
+    await page.goto("/qr/qr-123");
+    await page.getByRole("button", { name: "Add Paneer Tikka" }).click();
+    await page.getByRole("button", { name: /View Cart/ }).click();
+    await expect(page.getByText("GST (12%)")).toBeVisible();
+    await expect(page.getByText("₹302.40", { exact: true })).toBeVisible();
+
+  });
+
+  test("removes GST when it is disabled", async ({ page }) => {
+    await mockGuestMenu(page, { hotel: { gstEnabled: false, gstPercentage: 12 } });
+    await page.goto("/qr/qr-123");
+    await page.getByRole("button", { name: "Add Paneer Tikka" }).click();
+    await page.getByRole("button", { name: /View Cart/ }).click();
+    await expect(page.getByText(/GST \(/)).toHaveCount(0);
+    await expect(page.getByText("Total", { exact: true }).locator("..").getByText("₹270.00", { exact: true })).toBeVisible();
+  });
+
   test("uses the warmed menu cache offline and remains view-only", async ({ page }) => {
     await mockGuestMenu(page);
     await page.goto("/qr/qr-123");

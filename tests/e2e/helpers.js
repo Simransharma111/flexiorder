@@ -101,9 +101,11 @@ export const mockGuestMenu = async (page, overrides = {}) => {
 
 export const mockStaffWorkspace = async (page, orders = []) => {
   await page.route("**/hotel/me", (route) => fulfillJson(route, hotel));
-  await page.route("**/kitchen/orders?type=kitchen", (route) => fulfillJson(route, {
-    orders,
-  }));
+  await page.route(/\/kitchen\/orders(?:\?.*)?$/, (route) => (
+    route.request().method() === "GET"
+      ? fulfillJson(route, { orders })
+      : route.fallback()
+  ));
   await page.route("**/menu/hotel-1", (route) => fulfillJson(route, dishes));
   await page.route("**/table", (route) => fulfillJson(route, {
     tables: [table, { _id: "room-101", tableNumber: "101", type: "room" }],

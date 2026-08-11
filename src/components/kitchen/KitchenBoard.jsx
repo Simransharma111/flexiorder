@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { FiMoreVertical } from "react-icons/fi";
 import OperationalOrderCard from "../orders/OperationalOrderCard";
 import { groupOrdersByLocation, nextOrderStatus } from "../../utils/orderModel";
 import useDialogFocus from "../../hooks/useDialogFocus";
@@ -44,7 +45,6 @@ export default function KitchenBoard({
 
   const primaryAction = (_lead, orders) => {
     orders
-      .filter((order) => !order.pendingSync)
       .forEach((order) => {
         const next = nextOrderStatus(order.status, surface);
         if (next) {
@@ -59,7 +59,7 @@ export default function KitchenBoard({
   }, []);
 
   const runAction = (status) => {
-    if (!actionGroup || actionGroup.orders.some((order) => order.pendingSync)) return;
+    if (!actionGroup) return;
     updateGroup(actionGroup.orders, status, reason.trim() || null);
     closeActions();
   };
@@ -113,9 +113,24 @@ export default function KitchenBoard({
       {pausedOrders.length > 0 && (
         <div className="ops-paused-groups" aria-label="Paused orders">
           {groupOrdersByLocation(pausedOrders).map((group) => (
-            <button type="button" className="ops-paused-strip" key={group.key} onClick={() => setActionGroup(group)}>
-              {group.location} · {group.orders.length} paused · Review
-            </button>
+            <div className="ops-paused-group" key={group.key}>
+              <button
+                type="button"
+                className="ops-paused-strip"
+                aria-label={`Resume preparing ${group.location} ${group.orders.length > 1 ? "orders" : "order"}`}
+                onClick={() => updateGroup(group.orders, "preparing")}
+              >
+                {group.location} · {group.orders.length} paused · Tap to resume
+              </button>
+              <button
+                type="button"
+                className="ops-paused-options"
+                aria-label={`More actions for paused ${group.location}`}
+                onClick={() => setActionGroup(group)}
+              >
+                <FiMoreVertical aria-hidden="true" />
+              </button>
+            </div>
           ))}
         </div>
       )}
@@ -127,9 +142,7 @@ export default function KitchenBoard({
               <h2>{actionGroup.location}</h2>
               <p>Choose an action for {actionGroup.orders.length > 1 ? "these orders" : "this order"}.</p>
             </div>
-            {actionGroup.orders.some((order) => order.pendingSync) ? (
-              <p>This order is saved on this device. Actions unlock after it syncs.</p>
-            ) : <><textarea value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Reason or note (optional)" />
+            <><textarea value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Reason or note (optional)" />
             <div className="ops-action-sheet__actions">
               {actionGroup.orders[0]?.status === "delivered" ? (
                 <>
@@ -150,7 +163,7 @@ export default function KitchenBoard({
                   <button type="button" className="is-danger" onClick={() => runAction("cancelled")}>Cancel order</button>
                 </>
               )}
-            </div></>}
+            </div></>
             <button type="button" className="ops-sheet-cancel" onClick={closeActions}>Close</button>
           </section>
         </div>
