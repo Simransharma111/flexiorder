@@ -1,6 +1,15 @@
 import { useCallback, useEffect, useState, useMemo } from "react";
-import { FiDownload, FiRefreshCw, FiTrendingUp, FiShoppingBag, FiCreditCard, FiClock, FiCheckCircle } from "react-icons/fi";
+import { FiDownload, FiRefreshCw, FiTrendingUp, FiShoppingBag, FiCreditCard, FiClock, FiCheckCircle, FiSearch } from "react-icons/fi";
 import api from "../api/axios";
+import {
+  analyticsComparison,
+  buildAnalyticsChartData,
+  calculateAnalyticsStats,
+  calculatePopularDishes,
+  filterAnalyticsOrders,
+  previousAnalyticsRange,
+  resolveAnalyticsRange,
+} from "../utils/analyticsRanges";
 import {
   Area,
   AreaChart,
@@ -15,6 +24,14 @@ import {
 
 const currency = (value) => `₹${Math.round(Number(value) || 0).toLocaleString("en-IN")}`;
 
+const dateInputValue = (date) => [
+  date.getFullYear(),
+  String(date.getMonth() + 1).padStart(2, "0"),
+  String(date.getDate()).padStart(2, "0"),
+].join("-");
+
+const monthInputValue = (date) => dateInputValue(date).slice(0, 7);
+
 export default function AnalyticsDashboard({ orders = [], advancedEnabled = false }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -22,8 +39,13 @@ export default function AnalyticsDashboard({ orders = [], advancedEnabled = fals
   
   // Selected metric tab: "revenue" | "orders" | "aov" | "dishes"
   const [selectedMetric, setSelectedMetric] = useState("revenue");
-  // Selected timeframe: "daily" | "weekly" | "quarterly"
-  const [timeframe, setTimeframe] = useState("daily");
+  const [rangeMode, setRangeMode] = useState("monthly");
+  const [selectedMonth, setSelectedMonth] = useState(() => monthInputValue(new Date()));
+  const [selectedQuarter, setSelectedQuarter] = useState(() => Math.floor(new Date().getMonth() / 3) + 1);
+  const [selectedYear, setSelectedYear] = useState(() => new Date().getFullYear());
+  const [customStart, setCustomStart] = useState(() => dateInputValue(new Date()));
+  const [customEnd, setCustomEnd] = useState(() => dateInputValue(new Date()));
+  const [search, setSearch] = useState("");
 
   const fetchAnalytics = useCallback(async () => {
     setLoading(true);
@@ -60,163 +82,50 @@ export default function AnalyticsDashboard({ orders = [], advancedEnabled = fals
     }
   };
 
-  // Helper to parse dates safely
-  const getOrderDate = (order) => new Date(order.createdAt || order.queuedAt || order.updatedAt || 0);
+  const range = useMemo(() => resolveAnalyticsRange({
+    mode: rangeMode,
+    month: selectedMonth,
+    quarter: selectedQuarter,
+    year: selectedYear,
+    startDate: customStart,
+    endDate: customEnd,
+  }), [customEnd, customStart, rangeMode, selectedMonth, selectedQuarter, selectedYear]);
 
-  // Filter out cancelled orders
-  const validOrders = useMemo(() => {
-    return orders.filter(o => o.status !== "cancelled");
-  }, [orders]);
-
-  // Aggregate Metrics based on timeframe
-  const filteredOrdersForTimeframe = useMemo(() => {
-    const now = new Date();
-    return validOrders.filter(order => {
-      const date = getOrderDate(order);
-      const diffTime = Math.abs(now - date);
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-      
-      if (timeframe === "daily") {
-        // Today
-        return date.toDateString() === now.toDateString();
-      } else if (timeframe === "weekly") {
-        // Last 7 days
-        return diffDays <= 7;
-      } else if (timeframe === "quarterly") {
-        // Last 90 days
-        return diffDays <= 90;
-      }
-      return true;
-    });
-  }, [validOrders, timeframe]);
-
-  // Calculate high level stats from current timeframe
-  const stats = useMemo(() => {
-    const totalOrders = filteredOrdersForTimeframe.length;
-    const totalRevenue = filteredOrdersForTimeframe.reduce((sum, o) => sum + Number(o.totalAmount || o.total || 0), 0);
-    const avgOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0;
-    
-    const pendingOrders = filteredOrdersForTimeframe.filter(o => ["pending", "accepted", "preparing", "paused"].includes(o.status)).length;
-    const completedOrders = filteredOrdersForTimeframe.filter(o => o.status === "delivered").length;
-
-    return {
-      totalRevenue,
-      totalOrders,
-      avgOrderValue,
-      pendingOrders,
-      completedOrders
-    };
-  }, [filteredOrdersForTimeframe]);
-
-  // Generate Chart Data based on timeframe
-  const chartData = useMemo(() => {
-    if (timeframe === "daily") {
-      // Group by Hour for today
-      const hours = Array.from({ length: 24 }, (_, i) => ({
-        name: `${i}:00`,
-        revenue: 0,
-        orders: 0,
-        hour: i
-      }));
-      
-      filteredOrdersForTimeframe.forEach(order => {
-        const date = getOrderDate(order);
-        const hour = date.getHours();
-        const amount = Number(order.totalAmount || order.total || 0);
-        hours[hour].revenue += amount;
-        hours[hour].orders += 1;
-      });
-
-      return hours.map(h => ({
-        ...h,
-        aov: h.orders > 0 ? Math.round(h.revenue / h.orders) : 0
-      }));
-    } else if (timeframe === "weekly") {
-      // Group by last 7 Days
-      const days = [];
-      for (let i = 6; i >= 0; i--) {
-        const d = new Date();
-        d.setDate(d.getDate() - i);
-        days.push({
-          dateStr: d.toDateString(),
-          name: d.toLocaleDateString([], { weekday: "short", day: "numeric" }),
-          revenue: 0,
-          orders: 0
-        });
-      }
-
-      filteredOrdersForTimeframe.forEach(order => {
-        const date = getOrderDate(order);
-        const dateStr = date.toDateString();
-        const bucket = days.find(day => day.dateStr === dateStr);
-        if (bucket) {
-          bucket.revenue += Number(order.totalAmount || order.total || 0);
-          bucket.orders += 1;
-        }
-      });
-
-      return days.map(d => ({
-        ...d,
-        aov: d.orders > 0 ? Math.round(d.revenue / d.orders) : 0
-      }));
-    } else {
-      // Quarterly - Group by Week (last 12 weeks)
-      const weeks = [];
-      for (let i = 11; i >= 0; i--) {
-        const start = new Date();
-        start.setDate(start.getDate() - (i * 7 + start.getDay()));
-        const end = new Date(start);
-        end.setDate(end.getDate() + 6);
-        weeks.push({
-          start,
-          end,
-          name: `${start.toLocaleDateString([], { month: "short", day: "numeric" })}`,
-          revenue: 0,
-          orders: 0
-        });
-      }
-
-      filteredOrdersForTimeframe.forEach(order => {
-        const date = getOrderDate(order);
-        const bucket = weeks.find(w => date >= w.start && date <= w.end);
-        if (bucket) {
-          bucket.revenue += Number(order.totalAmount || order.total || 0);
-          bucket.orders += 1;
-        }
-      });
-
-      return weeks.map(w => ({
-        ...w,
-        aov: w.orders > 0 ? Math.round(w.revenue / w.orders) : 0
-      }));
-    }
-  }, [filteredOrdersForTimeframe, timeframe]);
-
-  // Group popular dishes for the current timeframe
-  const popularDishes = useMemo(() => {
-    const counts = {};
-    filteredOrdersForTimeframe.forEach(order => {
-      const items = Array.isArray(order.items) ? order.items : [];
-      items.forEach(item => {
-        const name = item.name || "Unknown Item";
-        const qty = Number(item.quantity || 1);
-        if (!counts[name]) counts[name] = 0;
-        counts[name] += qty;
-      });
-    });
-
-    return Object.entries(counts)
-      .map(([name, qty]) => ({ name, qty }))
-      .sort((a, b) => b.qty - a.qty)
-      .slice(0, 7);
-  }, [filteredOrdersForTimeframe]);
+  const previousRange = useMemo(() => previousAnalyticsRange(range), [range]);
+  const filteredOrdersForTimeframe = useMemo(
+    () => filterAnalyticsOrders(orders, range, search),
+    [orders, range, search],
+  );
+  const previousOrders = useMemo(
+    () => filterAnalyticsOrders(orders, previousRange, search),
+    [orders, previousRange, search],
+  );
+  const stats = useMemo(
+    () => calculateAnalyticsStats(filteredOrdersForTimeframe),
+    [filteredOrdersForTimeframe],
+  );
+  const previousStats = useMemo(
+    () => calculateAnalyticsStats(previousOrders),
+    [previousOrders],
+  );
+  const chartData = useMemo(
+    () => buildAnalyticsChartData(filteredOrdersForTimeframe, range),
+    [filteredOrdersForTimeframe, range],
+  );
+  const chartUsesWeeklyBuckets = Boolean(
+    range.start && range.end && (range.end.getTime() - range.start.getTime()) > 45 * 24 * 60 * 60 * 1000,
+  );
+  const popularDishes = useMemo(
+    () => calculatePopularDishes(filteredOrdersForTimeframe),
+    [filteredOrdersForTimeframe],
+  );
 
   const metrics = [
-    { key: "revenue", label: "Revenue", value: currency(stats.totalRevenue), icon: FiCreditCard },
-    { key: "orders", label: "Orders", value: stats.totalOrders, icon: FiShoppingBag },
-    { key: "aov", label: "Average Order", value: currency(stats.avgOrderValue), icon: FiTrendingUp },
-    { key: "pending", label: "Pending", value: stats.pendingOrders, icon: FiClock },
-    { key: "completed", label: "Completed", value: stats.completedOrders, icon: FiCheckCircle },
+    { key: "revenue", label: "Revenue", value: currency(stats.totalRevenue), comparison: analyticsComparison(stats.totalRevenue, previousStats.totalRevenue), icon: FiCreditCard },
+    { key: "orders", label: "Orders", value: stats.totalOrders, comparison: analyticsComparison(stats.totalOrders, previousStats.totalOrders), icon: FiShoppingBag },
+    { key: "aov", label: "Average Order", value: currency(stats.avgOrderValue), comparison: analyticsComparison(stats.avgOrderValue, previousStats.avgOrderValue), icon: FiTrendingUp },
+    { key: "pending", label: "Pending", value: stats.pendingOrders, comparison: analyticsComparison(stats.pendingOrders, previousStats.pendingOrders), lowerIsBetter: true, icon: FiClock },
+    { key: "completed", label: "Completed", value: stats.completedOrders, comparison: analyticsComparison(stats.completedOrders, previousStats.completedOrders), icon: FiCheckCircle },
   ];
 
   if (loading && !data && orders.length === 0) {
@@ -230,44 +139,141 @@ export default function AnalyticsDashboard({ orders = [], advancedEnabled = fals
           <h1>Analytics</h1>
           <p>Real-time performance metrics and sales trends</p>
         </div>
-        <div className="flex gap-2 items-center">
-          {/* Timeframe selector */}
-          <div className="flex bg-white/10 p-1 rounded-xl text-xs font-semibold gap-1">
-            {[
-              ["daily", "Daily"],
-              ["weekly", "Weekly"],
-              ["quarterly", "Quarterly"]
-            ].map(([val, label]) => (
-              <button
-                key={val}
-                type="button"
-                className={`px-3 py-1.5 rounded-lg transition-all ${
-                  timeframe === val 
-                    ? "bg-white text-black font-bold shadow" 
-                    : "text-white/70 hover:text-white"
-                }`}
-                onClick={() => setTimeframe(val)}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-          <button 
-            type="button" 
-            className="ops-icon-button" 
-            aria-label="Refresh analytics" 
-            onClick={fetchAnalytics} 
-            disabled={loading}
-          >
-            <FiRefreshCw className={loading ? "animate-spin" : ""} />
-          </button>
-        </div>
+        <button
+          type="button"
+          className="ops-icon-button"
+          aria-label="Refresh analytics"
+          onClick={fetchAnalytics}
+          disabled={loading}
+        >
+          <FiRefreshCw className={loading ? "animate-spin" : ""} />
+        </button>
       </header>
 
       {error && orders.length === 0 && (
         <div className="ops-inline-error" role="alert">{error}</div>
       )}
 
+      <section className="analytics-chart-card grid gap-4" aria-label="Analytics filters">
+        <div className="flex flex-wrap gap-2" role="group" aria-label="Date range type">
+          {[
+            ["custom", "Custom"],
+            ["monthly", "Monthly"],
+            ["quarterly", "Quarterly"],
+          ].map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              aria-pressed={rangeMode === value}
+              className={`min-h-11 rounded-lg border px-4 text-sm font-bold transition ${
+                rangeMode === value
+                  ? "border-orange-500 bg-orange-500 text-white"
+                  : "border-white/20 bg-white/5 text-white/80 hover:bg-white/10"
+              }`}
+              onClick={() => setRangeMode(value)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(240px,1.4fr)]">
+          <div className="grid gap-3 sm:grid-cols-2">
+            {rangeMode === "monthly" && (
+              <label className="grid gap-1 text-xs font-bold text-white/70">
+                Month
+                <input
+                  type="month"
+                  value={selectedMonth}
+                  onChange={(event) => setSelectedMonth(event.target.value)}
+                  className="min-h-11 rounded-lg border border-white/20 bg-white/10 px-3 text-sm text-white [color-scheme:dark]"
+                />
+              </label>
+            )}
+
+            {rangeMode === "quarterly" && (
+              <>
+                <label className="grid gap-1 text-xs font-bold text-white/70">
+                  Quarter
+                  <select
+                    value={selectedQuarter}
+                    onChange={(event) => setSelectedQuarter(Number(event.target.value))}
+                    className="min-h-11 rounded-lg border border-white/20 bg-slate-900 px-3 text-sm text-white"
+                  >
+                    {[1, 2, 3, 4].map((quarter) => <option key={quarter} value={quarter}>Q{quarter}</option>)}
+                  </select>
+                </label>
+                <label className="grid gap-1 text-xs font-bold text-white/70">
+                  Year
+                  <input
+                    type="number"
+                    min="1900"
+                    max="9999"
+                    value={selectedYear}
+                    onChange={(event) => setSelectedYear(event.target.value)}
+                    onBlur={() => {
+                      const year = Number(selectedYear);
+                      if (!Number.isInteger(year) || year < 1900 || year > 9999) {
+                        setSelectedYear(new Date().getFullYear());
+                      }
+                    }}
+                    className="min-h-11 rounded-lg border border-white/20 bg-white/10 px-3 text-sm text-white"
+                  />
+                </label>
+              </>
+            )}
+
+            {rangeMode === "custom" && (
+              <>
+                <label className="grid gap-1 text-xs font-bold text-white/70">
+                  Start date
+                  <input
+                    type="date"
+                    value={customStart}
+                    onChange={(event) => setCustomStart(event.target.value)}
+                    className="min-h-11 rounded-lg border border-white/20 bg-white/10 px-3 text-sm text-white [color-scheme:dark]"
+                  />
+                </label>
+                <label className="grid gap-1 text-xs font-bold text-white/70">
+                  End date
+                  <input
+                    type="date"
+                    value={customEnd}
+                    min={customStart || undefined}
+                    onChange={(event) => setCustomEnd(event.target.value)}
+                    className="min-h-11 rounded-lg border border-white/20 bg-white/10 px-3 text-sm text-white [color-scheme:dark]"
+                  />
+                </label>
+              </>
+            )}
+          </div>
+
+          <label className="grid gap-1 text-xs font-bold text-white/70">
+            Search by name or order
+            <span className="flex min-h-11 items-center gap-2 rounded-lg border border-white/20 bg-white/10 px-3 focus-within:border-orange-400">
+              <FiSearch aria-hidden="true" />
+              <input
+                type="search"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Guest, dish, order ID, table or room"
+                className="min-w-0 flex-1 bg-transparent text-sm text-white outline-none placeholder:text-white/40"
+              />
+            </span>
+          </label>
+        </div>
+
+        {range.error ? (
+          <div className="ops-inline-error" role="alert">{range.error}</div>
+        ) : (
+          <p className="text-xs text-white/60" role="status">
+            Showing {filteredOrdersForTimeframe.length} {filteredOrdersForTimeframe.length === 1 ? "order" : "orders"} for {range.label}. Comparing with {previousRange?.label}.
+          </p>
+        )}
+      </section>
+
+      {!range.error && (
+        <>
       {/* Interactive Metric Cards */}
       <div className="analytics-metrics cursor-pointer">
         {metrics.map((m) => {
@@ -296,6 +302,17 @@ export default function AnalyticsDashboard({ orders = [], advancedEnabled = fals
               <strong className="text-white text-2xl font-black mt-2 tracking-tight block">
                 {m.value}
               </strong>
+              <small className={`text-[11px] font-semibold ${
+                m.comparison.percent === null
+                  ? "text-white/45"
+                  : m.comparison.percent === 0
+                    ? "text-white/60"
+                    : (m.lowerIsBetter ? m.comparison.percent < 0 : m.comparison.percent > 0)
+                      ? "text-emerald-400"
+                      : "text-rose-400"
+              }`}>
+                {m.comparison.label}
+              </small>
             </article>
           );
         })}
@@ -309,10 +326,10 @@ export default function AnalyticsDashboard({ orders = [], advancedEnabled = fals
               {selectedMetric === "revenue" ? "Revenue Trends" : selectedMetric === "orders" ? "Order Volume" : "Average Order Value (AOV)"}
             </h2>
             <p className="text-white/60 text-xs">
-              {timeframe === "daily" ? "Today's hourly break-down" : timeframe === "weekly" ? "Last 7 days break-down" : "Last 12 weeks break-down"}
+              {range.error ? "Choose a valid reporting period" : `${range.label} · ${chartUsesWeeklyBuckets ? "Weekly" : "Daily"} breakdown`}
             </p>
           </div>
-          {advancedEnabled && <button type="button" onClick={downloadCSV} className="text-xs bg-white/10 hover:bg-white/20 text-white px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition"><FiDownload /> Export CSV</button>}
+          {advancedEnabled && <button type="button" onClick={downloadCSV} className="text-xs bg-white/10 hover:bg-white/20 text-white px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition"><FiDownload /> Export today&apos;s CSV</button>}
         </div>
 
         {chartData.some(d => d.revenue > 0 || d.orders > 0) ? (
@@ -421,6 +438,8 @@ export default function AnalyticsDashboard({ orders = [], advancedEnabled = fals
           <div className="analytics-empty py-16 flex flex-col items-center justify-center text-white/40"><FiTrendingUp size={36} /><strong className="text-white mt-2 block">No dish performance yet</strong><span>Popular dishes will appear after orders are completed.</span></div>
         )}
       </article>
+        </>
+      )}
     </section>
   );
 }
