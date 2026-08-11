@@ -14,6 +14,7 @@ import { useCart } from "../context/CartContext";
 import { useEffect, useState } from "react";
 import api from "../api/axios";
 import { useConnectivity } from "../context/ConnectivityContext";
+import { getSchedulePickerBounds, validateScheduledOrderTime } from "../utils/scheduleWindow";
 
 const getHotelPricing = (hotel) => {
   const enabled = Boolean(
@@ -54,6 +55,7 @@ export default function CartPage() {
   const [placingOrder, setPlacingOrder] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
+  const [scheduleClock, setScheduleClock] = useState(() => new Date());
   // Track whether the host has paused QR ordering.
   const [orderingEnabled, setOrderingEnabled] = useState(true);
 
@@ -84,6 +86,12 @@ export default function CartPage() {
         });
     }
   }, [qrId, setCartSession]);
+
+  useEffect(() => {
+    if (orderType !== "schedule") return undefined;
+    const intervalId = window.setInterval(() => setScheduleClock(new Date()), 30 * 1000);
+    return () => window.clearInterval(intervalId);
+  }, [orderType]);
 
   const subtotal = Number(totalPrice || 0);
   const originalSubtotal = cartItems.reduce(
@@ -122,23 +130,14 @@ export default function CartPage() {
     );
   }
 
-  // =========================================================
-  // MINIMUM SCHEDULE TIME
-  // =========================================================
-
-  const getMinDateTime = () => {
-    const date = new Date();
-
-    date.setHours(date.getHours() + 1);
-
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, "0");
-    const day = String(date.getDate()).padStart(2, "0");
-    const hours = String(date.getHours()).padStart(2, "0");
-    const minutes = String(date.getMinutes()).padStart(2, "0");
-
-    return `${year}-${month}-${day}T${hours}:${minutes}`;
-  };
+  const schedulePickerBounds = getSchedulePickerBounds(scheduleClock);
+  const scheduleTimeLabel = (value) => new Date(value).toLocaleString([], {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
 
   // =========================================================
   // EMPTY CART
@@ -204,21 +203,10 @@ export default function CartPage() {
       return;
     }
 
-    if (orderType === "schedule" && !scheduledFor) {
-      setErrorMessage("Please select a schedule time.");
-      return;
-    }
-
-    if (orderType === "schedule" && scheduledFor) {
-      const selectedTime = new Date(scheduledFor).getTime();
-
-      const minimumTime =
-        Date.now() + 60 * 60 * 1000;
-
-      if (selectedTime < minimumTime) {
-        setErrorMessage(
-          "Scheduled orders must be at least 1 hour in advance."
-        );
+    if (orderType === "schedule") {
+      const scheduleValidation = validateScheduledOrderTime(scheduledFor);
+      if (!scheduleValidation.valid) {
+        setErrorMessage(scheduleValidation.error);
         return;
       }
     }
@@ -306,6 +294,14 @@ export default function CartPage() {
             ? scheduledFor
             : null,
       };
+
+      if (orderType === "schedule") {
+        const finalScheduleValidation = validateScheduledOrderTime(scheduledFor);
+        if (!finalScheduleValidation.valid) {
+          setErrorMessage(finalScheduleValidation.error);
+          return;
+        }
+      }
 
       // =====================================================
       // CREATE ORDER
@@ -700,9 +696,10 @@ export default function CartPage() {
             </button>
 
             <button
-              onClick={() =>
-                setOrderType("schedule")
-              }
+              onClick={() => {
+                setScheduleClock(new Date());
+                setOrderType("schedule");
+              }}
               disabled={placingOrder}
               className={`p-4 rounded-xl border text-left ${
                 orderType === "schedule"
@@ -725,13 +722,16 @@ export default function CartPage() {
           {orderType === "schedule" && (
             <div className="mt-4">
 
-              <label className="text-sm font-semibold">
+              <label htmlFor="scheduled-order-time" className="text-sm font-semibold">
                 Select date & time
               </label>
 
               <input
+                id="scheduled-order-time"
                 type="datetime-local"
-                min={getMinDateTime()}
+                min={schedulePickerBounds.min}
+                max={schedulePickerBounds.max}
+                aria-describedby="scheduled-order-window"
                 value={scheduledFor}
                 onChange={(e) =>
                   setScheduledFor(
@@ -742,8 +742,9 @@ export default function CartPage() {
                 className="w-full mt-2 border border-gray-200 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-orange-400"
               />
 
-              <p className="text-xs text-gray-500 mt-2">
-                Scheduled orders must be at least 1 hour in advance.
+              <p id="scheduled-order-window" className="text-xs text-gray-500 mt-2">
+                Available from {scheduleTimeLabel(schedulePickerBounds.min)} to {scheduleTimeLabel(schedulePickerBounds.max)}.
+                Times outside this range cannot be scheduled.
               </p>
 
             </div>
