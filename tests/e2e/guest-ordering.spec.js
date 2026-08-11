@@ -16,14 +16,15 @@ test.describe("customer QR ordering", () => {
   test("shows the available menu, discount, dietary details, and places an order with GST", async ({ page }) => {
     await mockGuestMenu(page);
 
-    let submittedOrder;
+    const submittedOrders = [];
     await page.route("**/orders", async (route) => {
       if (route.request().method() !== "POST") return route.fallback();
-      submittedOrder = route.request().postDataJSON();
+      const submittedOrder = route.request().postDataJSON();
+      submittedOrders.push(submittedOrder);
       return fulfillJson(route, {
         success: true,
         order: {
-          _id: "order-created",
+          _id: "order-created-" + submittedOrders.length,
           status: "pending",
           ...submittedOrder,
         },
@@ -51,7 +52,7 @@ test.describe("customer QR ordering", () => {
     await page.getByRole("button", { name: /Place Order/ }).click();
 
     await expect(page.getByRole("heading", { name: "Order Placed!" })).toBeVisible();
-    expect(submittedOrder).toMatchObject({
+    expect(submittedOrders[0]).toMatchObject({
       tableId: table._id,
       guestName: "Aarav",
       guestContact: "9876543210",
@@ -63,8 +64,63 @@ test.describe("customer QR ordering", () => {
       totalAmount: 283.5,
       orderType: "now",
     });
+    expect(submittedOrders[0].clientOrderId).toBeTruthy();
+
+    await expect(page).toHaveURL(/\/qr\/qr-123/);
+    await expect(page.getByRole("region", { name: "Your active orders" })).toContainText("Received");
+    await expect(page.getByRole("button", { name: /View Cart/ })).toHaveCount(0);
+
+    await page.getByRole("button", { name: "Add Paneer Tikka" }).click();
+    await expect(page.getByRole("button", { name: /View Cart/ })).toContainText("1 items");
+    await page.getByRole("button", { name: /View Cart/ }).click();
+    await page.getByRole("button", { name: /Place Order/ }).click();
+    await expect(page.getByRole("heading", { name: "Order Placed!" })).toBeVisible();
+
+    expect(submittedOrders).toHaveLength(2);
+    expect(submittedOrders[1].items).toEqual([{ menuId: "dish-paneer", quantity: 1 }]);
+    expect(submittedOrders[1].clientOrderId).not.toBe(submittedOrders[0].clientOrderId);
   });
 
+
+  test("deduplicates rapid customer submission taps while the request is slow", async ({ page }) => {
+    await mockGuestMenu(page);
+    let postCount = 0;
+    await page.route("**/orders", async (route) => {
+      if (route.request().method() !== "POST") return route.fallback();
+      postCount += 1;
+      const payload = route.request().postDataJSON();
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      return fulfillJson(route, {
+        order: { _id: "slow-order", status: "pending", ...payload },
+      });
+    });
+
+    await page.goto("/qr/qr-123");
+    await page.getByRole("button", { name: "Add Paneer Tikka" }).click();
+    await page.getByRole("button", { name: /View Cart/ }).click();
+    await page.getByRole("button", { name: /Place Order/ }).dblclick();
+
+    await expect(page.getByRole("heading", { name: "Order Placed!" })).toBeVisible();
+    expect(postCount).toBe(1);
+  });
+
+  test("keeps the full cart when customer submission fails", async ({ page }) => {
+    await mockGuestMenu(page);
+    await page.route("**/orders", async (route) => {
+      if (route.request().method() !== "POST") return route.fallback();
+      return fulfillJson(route, { success: false, message: "Kitchen cannot receive this order." });
+    });
+
+    await page.goto("/qr/qr-123");
+    await page.getByRole("button", { name: "Add Paneer Tikka" }).click();
+    await page.getByRole("button", { name: /View Cart/ }).click();
+    await page.getByRole("button", { name: /Place Order/ }).click();
+
+    await expect(page.getByText("Kitchen cannot receive this order.")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Your Cart" })).toBeVisible();
+    await expect(page.getByText("Paneer Tikka")).toBeVisible();
+    await expect(page.getByRole("button", { name: /Place Order/ })).toBeEnabled();
+  });
   test("keeps the menu viewable but removes ordering controls when the host pauses ordering", async ({ page }) => {
     await mockGuestMenu(page, { hotel: { orderingEnabled: false } });
 

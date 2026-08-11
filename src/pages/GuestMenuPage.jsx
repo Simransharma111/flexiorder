@@ -2,10 +2,12 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 
 import {
+  useLocation,
   useNavigate,
   useParams,
 } from "react-router-dom";
@@ -19,11 +21,17 @@ import SimpleMenuSection from "../components/guestmenu/SimpleMenuSection";
 import FeaturedSection from "../components/guestmenu/FeaturedSection";
 import ActiveOrder from "../components/guestmenu/ActiveOrder";
 import ScheduleModal from "../components/guestmenu/ScheduleModal";
-import { getDishPricing } from "../utils/pricing";
 import { sortDishesForDisplay } from "../utils/menuOrdering";
 import { getHotelThemeStyle } from "../utils/hotelTheme";
 import { buildCategoryList, categoryKey } from "../utils/menuCategories";
 import { useConnectivity } from "../context/ConnectivityContext";
+import { useCart } from "../context/CartContext";
+import {
+  mergeGuestActiveOrders,
+  readGuestActiveOrders,
+  sameGuestOrder,
+  writeGuestActiveOrders,
+} from "../utils/guestOrderState";
 
 import {
   FiSearch,
@@ -43,6 +51,7 @@ const {
 
 
 const navigate = useNavigate();
+const location = useLocation();
 const { isOnline } = useConnectivity();
 
 
@@ -84,7 +93,15 @@ const [activeCategory,setActiveCategory]=useState("All");
 // CART
 // =====================================================
 
-const [cart,setCart]=useState([]);
+const {
+  cartItems: cart,
+  cartCount,
+  totalPrice: cartTotal,
+  addToCart: addDishToCart,
+  decreaseQty,
+  increaseQty,
+  setCartSession,
+} = useCart();
 
 
 // =====================================================
@@ -94,13 +111,29 @@ const [cart,setCart]=useState([]);
 const [
  activeOrders,
  setActiveOrders
-]=useState([]);
+]=useState(() => readGuestActiveOrders(qrId));
+const activeOrderRequestRef = useRef(0);
 
 
 const [
  orderLoading,
  setOrderLoading
 ]=useState(false);
+
+
+useEffect(() => {
+  if (!qrId) return;
+  activeOrderRequestRef.current += 1;
+  setTable(null);
+  setCartSession(qrId);
+  const cached = readGuestActiveOrders(qrId);
+  const receivedOrder = location.state?.receivedOrder;
+  const initial = receivedOrder
+    ? [receivedOrder, ...cached.filter((order) => !sameGuestOrder(order, receivedOrder))]
+    : cached;
+  setActiveOrders(initial);
+  writeGuestActiveOrders(qrId, initial);
+}, [location.state, qrId, setCartSession]);
 
 
 // =====================================================
@@ -161,6 +194,7 @@ dishes: res.data?.dishes || [],
 
 }
 catch(err){
+
 
 console.log(
 "MENU ERROR",
@@ -228,6 +262,8 @@ if(
 
 
 
+const requestId = ++activeOrderRequestRef.current;
+
 try{
 
 
@@ -249,33 +285,24 @@ res.data ||
 
 
 
-const active =
-orders.filter(
-(order)=>
-order.status!=="delivered" &&
-order.status!=="cancelled"
-);
+if (requestId !== activeOrderRequestRef.current) return;
 
 
 
-setActiveOrders(active);
-
-
-
-localStorage.setItem(
-
-`activeOrders_${qrId}`,
-
-JSON.stringify(
-active
-)
-
-);
+setActiveOrders((current) => {
+  const merged = mergeGuestActiveOrders(orders, current);
+  const visible = merged.filter((order) =>
+    order.status !== "delivered" && order.status !== "cancelled");
+  writeGuestActiveOrders(qrId, visible);
+  return visible;
+});
 
 
 
 }
 catch(err){
+
+if (requestId !== activeOrderRequestRef.current) return;
 
 console.log(
 "ORDER FETCH ERROR",
@@ -283,20 +310,12 @@ err
 );
 
 
-try {
-  const cached = JSON.parse(
-    localStorage.getItem(`activeOrders_${qrId}`) || "[]"
-  );
-  setActiveOrders(Array.isArray(cached) ? cached : []);
-} catch (cacheError) {
-  console.warn("CACHED ORDER ERROR", cacheError);
-  setActiveOrders([]);
-}
+setActiveOrders(readGuestActiveOrders(qrId));
 
 }
 finally{
 
-setOrderLoading(false);
+if (requestId === activeOrderRequestRef.current) setOrderLoading(false);
 
 }
 
@@ -334,71 +353,6 @@ return()=>clearInterval(interval);
 
 
 
-// =====================================================
-// LOAD CART
-// =====================================================
-
-
-useEffect(()=>{
-
-
-if(!qrId)
-return;
-
-
-const saved =
-localStorage.getItem(
-`cart_${qrId}`
-);
-
-
-
-if(saved){
-
-setCart(
-JSON.parse(saved)
-);
-
-}
-else{
-
-setCart([]);
-
-}
-
-
-},[
-qrId
-]);
-
-
-
-// =====================================================
-// SAVE CART
-// =====================================================
-
-
-useEffect(()=>{
-
-
-if(!qrId)
-return;
-
-
-localStorage.setItem(
-
-`cart_${qrId}`,
-
-JSON.stringify(cart)
-
-);
-
-
-
-},[
-cart,
-qrId
-]);
 // =====================================================
 // FILTER DISHES
 // =====================================================
@@ -581,252 +535,16 @@ dish.isNewArrival
 // CART HELPERS
 // =====================================================
 
+const getCartQuantity = (dishId) =>
+  cart.find((item) => item._id === dishId)?.quantity || 0;
 
-const getCartQuantity=(dishId)=>{
-
-
-const item =
-cart.find(
-(item)=>
-item._id===dishId
-);
-
-
-
-return item?.quantity || 0;
-
-
+const addToCart = (dish) => {
+  if (!orderingEnabled || dish.isAvailable === false) return;
+  addDishToCart(dish);
 };
 
-
-
-
-// =====================================================
-// ADD TO CART
-// =====================================================
-
-
-const addToCart=(dish)=>{
-
-  // Never allow cart mutations when ordering is disabled.
-  if(!orderingEnabled) return;
-
-  if(
-    dish.isAvailable===false
-  )
-    return;
-
-const {
-  basePrice,
-  discountValue,
-  finalPrice,
-} = getDishPricing(dish);
-
-
-
-setCart((prev)=>{
-
-
-const existing =
-prev.find(
-(item)=>
-item._id===dish._id
-);
-
-
-
-if(existing){
-
-
-return prev.map(
-(item)=>
-
-item._id===dish._id
-
-?
-
-{
-...item,
-quantity:
-item.quantity+1
-}
-
-:
-
-item
-
-);
-
-
-}
-
-
-
-return [
-
-...prev,
-
-{
-
-_id:dish._id,
-
-name:dish.name,
-
-description:
-dish.description,
-
-price:finalPrice,
-originalPrice:basePrice,
-discountType:dish.discountType || "percentage",
-discountValue,
-
-image:dish.image,
-
-foodType:
-dish.foodType,
-
-quantity:1
-
-}
-
-];
-
-
-
-});
-
-
-};
-
-
-
-
-// =====================================================
-// REMOVE / DECREASE
-// =====================================================
-
-
-const decreaseQuantity=(dishId)=>{
-
-
-setCart((prev)=>{
-
-
-const item =
-prev.find(
-(item)=>
-item._id===dishId
-);
-
-
-
-if(!item)
-return prev;
-
-
-
-if(item.quantity<=1){
-
-
-return prev.filter(
-(item)=>
-item._id!==dishId
-);
-
-
-}
-
-
-
-return prev.map(
-(item)=>
-
-item._id===dishId
-
-?
-
-{
-...item,
-quantity:item.quantity-1
-}
-
-:
-
-item
-
-);
-
-
-
-});
-
-
-};
-
-
-
-
-
-// =====================================================
-// INCREASE
-// =====================================================
-
-
-const increaseQuantity=(dishId)=>{
-
-
-const dish =
-dishes.find(
-(item)=>
-item._id===dishId
-);
-
-
-
-if(dish){
-
-addToCart(dish);
-
-}
-
-
-};
-
-
-
-
-// =====================================================
-// CART COUNT + TOTAL
-// =====================================================
-
-
-const cartCount =
-cart.reduce(
-(total,item)=>
-total +
-Number(item.quantity || 0),
-0
-);
-
-
-
-const cartTotal =
-cart.reduce(
-(total,item)=>
-
-total +
-
-(
-Number(item.price || 0)
-
-*
-
-Number(item.quantity || 0)
-
-),
-
-0
-);
+const decreaseQuantity = (dishId) => decreaseQty(dishId);
+const increaseQuantity = (dishId) => increaseQty(dishId);
 
 const rawGstRate = Number(hotel?.gstPercentage ?? hotel?.gstRate ?? hotel?.gst?.percentage ?? 0);
 const gstRate = Number.isFinite(rawGstRate) && rawGstRate > 0 ? rawGstRate : 0;

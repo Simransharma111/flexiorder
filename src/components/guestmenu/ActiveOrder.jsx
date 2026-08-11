@@ -38,6 +38,11 @@ export default function ActiveOrder({ orders, loading, table }) {
             <div className="guest-active-order__items">
               {order.items?.map((item, index) => <span key={item._id || item.menuId || `${item.name}-${index}`}><b>{item.quantity || 1} ×</b> {item.name || item.menu?.name || "Dish"}</span>)}
             </div>
+            {order.guestHandoffUntil && !order.guestHandoffConfirmed && (
+              <p className="guest-active-order__sync" role="status">
+                <FiLoader className="animate-spin" aria-hidden="true" /> Refreshing status…
+              </p>
+            )}
             <p><FiClock /> {waitingMinutes(order)} min</p>
           </article>
         ))}

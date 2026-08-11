@@ -11,10 +11,11 @@ import {
 
 import { useNavigate, useParams } from "react-router-dom";
 import { useCart } from "../context/CartContext";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import api from "../api/axios";
 import { useConnectivity } from "../context/ConnectivityContext";
 import { getSchedulePickerBounds, validateScheduledOrderTime } from "../utils/scheduleWindow";
+import { mergeGuestOrderItems, saveGuestOrderHandoff } from "../utils/guestOrderState";
 
 const getHotelPricing = (hotel) => {
   const enabled = Boolean(
@@ -53,6 +54,7 @@ export default function CartPage() {
   const [gstRate, setGstRate] = useState(0);
   const [unavailableIds, setUnavailableIds] = useState([]);
   const [placingOrder, setPlacingOrder] = useState(false);
+  const placingInFlight = useRef(false);
   const [successMessage, setSuccessMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const [scheduleClock, setScheduleClock] = useState(() => new Date());
@@ -175,6 +177,8 @@ export default function CartPage() {
   // =========================================================
 
   const handlePlaceOrder = async () => {
+    if (placingInFlight.current) return;
+
     setErrorMessage("");
     setSuccessMessage("");
 
@@ -210,6 +214,10 @@ export default function CartPage() {
         return;
       }
     }
+
+    const clientOrderId = globalThis.crypto?.randomUUID?.() ||
+      "guest-" + Date.now() + "-" + Math.random().toString(36).slice(2);
+    placingInFlight.current = true;
 
     try {
       setPlacingOrder(true);
@@ -271,6 +279,7 @@ export default function CartPage() {
       // =====================================================
 
       const orderData = {
+        clientOrderId,
         tableId,
 
         guestName:
@@ -317,78 +326,41 @@ export default function CartPage() {
       // SUCCESS
       // =====================================================
 
-      if (
-        response.data?.success ||
-        response.status === 201
-      ) {
-        const createdOrder =
-          response.data?.order;
-
-        setSuccessMessage(
-          orderType === "schedule"
-            ? "Scheduled order placed successfully!"
-            : "Order placed successfully!"
-        );
-
-        // ===================================================
-        // SAVE ACTIVE ORDER
-        // ===================================================
-
-        if (createdOrder?._id) {
-          localStorage.setItem(
-            `activeOrder_${qrId}`,
-            createdOrder._id
-          );
-
-          // Latest order
-          localStorage.setItem(
-            `latestOrder_${qrId}`,
-            JSON.stringify(createdOrder)
-          );
-
-          // =================================================
-          // PREVIOUS ORDERS
-          // =================================================
-
-          const previousOrdersKey =
-            `previousOrders_${qrId}`;
-
-          const oldOrders =
-            JSON.parse(
-              localStorage.getItem(
-                previousOrdersKey
-              )
-            ) || [];
-
-          const updatedOrders = [
-            createdOrder,
-            ...oldOrders,
-          ];
-
-          localStorage.setItem(
-            previousOrdersKey,
-            JSON.stringify(
-              updatedOrders.slice(0, 20)
-            )
-          );
-        }
-
-        // ===================================================
-        // CLEAR CART
-        // ===================================================
-
-        clearCart();
-
-        // ===================================================
-        // RETURN TO MENU
-        // ===================================================
-
-        setTimeout(() => {
-          navigate(`/qr/${qrId}`, {
-            replace: true,
-          });
-        }, 1800);
+      const responseBody = response.data;
+      if (responseBody?.success === false) {
+        throw new Error(responseBody.message || "Order was not accepted.");
       }
+      const createdOrder = responseBody?.order ||
+        (responseBody?._id ? responseBody : null);
+      const submittedItems = cartItems.map((item) => ({
+        menuId: item._id,
+        name: item.name,
+        quantity: Number(item.quantity),
+      }));
+      const receivedOrder = {
+        status: "pending",
+        createdAt: new Date().toISOString(),
+        ...orderData,
+        ...createdOrder,
+        _id: createdOrder?._id || clientOrderId,
+        clientOrderId: createdOrder?.clientOrderId || clientOrderId,
+        items: mergeGuestOrderItems(createdOrder?.items, submittedItems),
+      };
+
+      const handoff = saveGuestOrderHandoff(qrId, receivedOrder);
+      setSuccessMessage(
+        orderType === "schedule"
+          ? "Scheduled order placed successfully!"
+          : "Order placed successfully!"
+      );
+      clearCart();
+
+      setTimeout(() => {
+        navigate("/qr/" + qrId, {
+          replace: true,
+          state: { receivedOrder: handoff },
+        });
+      }, 1800);
 
     } catch (error) {
       console.error(
@@ -404,6 +376,7 @@ export default function CartPage() {
       setErrorMessage(message);
 
     } finally {
+      placingInFlight.current = false;
       setPlacingOrder(false);
     }
   };

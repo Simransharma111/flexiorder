@@ -1,10 +1,13 @@
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
+import { getDishPricing } from "../utils/pricing";
 
 const CartContext = createContext(null);
 
@@ -23,35 +26,7 @@ export const useCart = () => {
 export default function CartProvider({ children }) {
   const [cartKey, setCartKey] = useState(null);
   const [cartItems, setCartItems] = useState([]);
-
-  // ==========================================
-  // LOAD CART
-  // ==========================================
-
-  useEffect(() => {
-    if (!cartKey) {
-      setCartItems([]);
-      return;
-    }
-
-    try {
-      const savedCart =
-        localStorage.getItem(cartKey);
-
-      if (savedCart) {
-        setCartItems(JSON.parse(savedCart));
-      } else {
-        setCartItems([]);
-      }
-    } catch (error) {
-      console.error(
-        "Failed to load cart:",
-        error
-      );
-
-      setCartItems([]);
-    }
-  }, [cartKey]);
+  const cartKeyRef = useRef(null);
 
   // ==========================================
   // SAVE CART
@@ -77,11 +52,25 @@ export default function CartProvider({ children }) {
   // SET CART SESSION
   // ==========================================
 
-  const setCartSession = (qrId) => {
+  const setCartSession = useCallback((qrId) => {
     if (!qrId) return;
 
-    setCartKey(`cart_${qrId}`);
-  };
+    const nextKey = `cart_${qrId}`;
+    if (cartKeyRef.current === nextKey) return;
+
+    let nextItems = [];
+    try {
+      const savedCart = localStorage.getItem(nextKey);
+      const parsed = savedCart ? JSON.parse(savedCart) : [];
+      nextItems = Array.isArray(parsed) ? parsed : [];
+    } catch (error) {
+      console.error("Failed to load cart:", error);
+    }
+
+    cartKeyRef.current = nextKey;
+    setCartKey(nextKey);
+    setCartItems(nextItems);
+  }, []);
 
   // ==========================================
   // ADD TO CART
@@ -106,15 +95,7 @@ export default function CartProvider({ children }) {
         );
       }
 
-      const basePrice = Number(dish.price || 0);
-      const discountValue = Number(
-        dish.discountValue ?? dish.discount ?? 0
-      );
-      const discountAmount =
-        dish.discountType === "fixed"
-          ? discountValue
-          : basePrice * discountValue / 100;
-      const finalPrice = Math.max(0, basePrice - discountAmount);
+      const { basePrice, discountValue, finalPrice } = getDishPricing(dish);
 
       return [
         ...prev,
@@ -189,10 +170,15 @@ export default function CartProvider({ children }) {
   // ==========================================
 
   const clearCart = () => {
+    const keyToClear = cartKeyRef.current || cartKey;
     setCartItems([]);
 
-    if (cartKey) {
-      localStorage.removeItem(cartKey);
+    if (keyToClear) {
+      try {
+        localStorage.removeItem(keyToClear);
+      } catch (error) {
+        console.error("Failed to clear cart:", error);
+      }
     }
   };
 
