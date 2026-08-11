@@ -36,6 +36,23 @@ export const matchesOrderId = (order, id) => Boolean(
   )
 );
 
+export const getReadyOrderIds = (orders = [], snapshotIds = null, blockedIds = []) => {
+  const frozenIds = Array.isArray(snapshotIds) ? snapshotIds.map(String) : null;
+  const blocked = (Array.isArray(blockedIds) ? blockedIds : []).map(String);
+  const seen = new Set();
+  return (Array.isArray(orders) ? orders : []).flatMap((order) => {
+    const key = orderKey(order);
+    const aliases = [order?._id, order?.clientOrderId, order?.localId]
+      .filter(Boolean)
+      .map(String);
+    if (!key || order?.status !== "ready" || blocked.some((id) => matchesOrderId(order, id))) return [];
+    if (frozenIds && !frozenIds.some((id) => matchesOrderId(order, id))) return [];
+    if (aliases.some((id) => seen.has(id))) return [];
+    aliases.forEach((id) => seen.add(id));
+    return [key];
+  });
+};
+
 const normalizedOrderType = (order) => String(
   order?.orderType || order?.type || order?.serviceType || ""
 ).toLowerCase().replace(/[\s_-]/g, "");

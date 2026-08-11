@@ -113,12 +113,14 @@ export const markKitchenUpdatesHandled = () => {
   return next;
 };
 
-export const queueKitchenUpdate = (update) => {
-  const queue = readQueue();
+const mutationId = () => globalThis.crypto?.randomUUID?.() ||
+  `mutation-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+const appendKitchenUpdate = (queue, update) => {
   const existingMutation = update.clientMutationId && queue.find(
     (item) => item.clientMutationId === update.clientMutationId
   );
-  if (existingMutation) return existingMutation;
+  if (existingMutation) return { queue, queued: existingMutation };
 
   const latestForOrder = [...queue].reverse().find(
     (item) => String(item.orderId) === String(update.orderId)
@@ -128,16 +130,13 @@ export const queueKitchenUpdate = (update) => {
     latestForOrder.status === update.status &&
     (latestForOrder.pauseReason || null) === (update.pauseReason || null) &&
     !latestForOrder.requiresAttention
-  ) return latestForOrder;
+  ) return { queue, queued: latestForOrder };
 
   const now = new Date().toISOString();
   const queued = {
     ...update,
     confirmedStatus: latestForOrder?.confirmedStatus || update.confirmedStatus,
-    clientMutationId:
-      update.clientMutationId ||
-      globalThis.crypto?.randomUUID?.() ||
-      `mutation-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    clientMutationId: update.clientMutationId || mutationId(),
     queuedAt: update.queuedAt || now,
     updatedAt: now,
     attemptCount: Number(update.attemptCount || 0),
@@ -146,7 +145,26 @@ export const queueKitchenUpdate = (update) => {
     lastError: update.lastError || null,
     requiresAttention: Boolean(update.requiresAttention),
   };
-  writeQueue([...queue, queued]);
+  return { queue: [...queue, queued], queued };
+};
+
+export const queueKitchenUpdates = (updates = []) => {
+  let queue = readQueue();
+  const queued = [];
+  (Array.isArray(updates) ? updates : []).forEach((update) => {
+    if (!update?.orderId || !update?.status) return;
+    const result = appendKitchenUpdate(queue, update);
+    queue = result.queue;
+    if (!queued.some((item) => item.clientMutationId === result.queued.clientMutationId)) {
+      queued.push(result.queued);
+    }
+  });
+  writeQueue(queue);
+  return queued;
+};
+
+export const queueKitchenUpdate = (update) => {
+  const [queued] = queueKitchenUpdates([update]);
   return queued;
 };
 

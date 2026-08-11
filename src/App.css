@@ -722,9 +722,13 @@ img {
   scrollbar-width: thin;
 }
 .ops-lane__empty { margin: 0; padding: 10px; color: var(--ops-muted); font-size: 13px; }
-.ops-orders-switch { width: max-content; display: flex; gap: 3px; margin: 0 8px 8px; border: 1px solid var(--ops-border); border-radius: 9px; background: var(--ops-card); padding: 3px; }
+.ops-orders-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0 8px 8px; }
+.ops-orders-switch { width: max-content; display: flex; gap: 3px; margin: 0; border: 1px solid var(--ops-border); border-radius: 9px; background: var(--ops-card); padding: 3px; }
 .ops-orders-switch button { min-height: 36px; border: 0; border-radius: 6px; background: transparent; padding: 0 15px; color: var(--ops-muted); font-size: 12px; font-weight: 800; }
 .ops-orders-switch button.is-active { background: var(--primary); color: var(--theme-on-primary, #fff); }
+.ops-deliver-all { min-height: 44px; border: 1px solid #15803d; border-radius: 9px; background: #ecfdf5; padding: 0 12px; color: #166534; font-size: 12px; font-weight: 850; }
+.ops-deliver-all:disabled { border-color: var(--ops-border); background: var(--ops-subtle); color: var(--ops-muted); cursor: not-allowed; }
+.ops-orders-announcement { margin: 0 8px 8px; border: 1px solid #a7f3d0; border-radius: 8px; background: #ecfdf5; padding: 8px 10px; color: #166534; font-size: 12px; }
 .ops-order-history { display: grid; gap: 8px; padding: 0 8px 8px; }
 .ops-order-history > article { border: 1px solid var(--ops-border); border-radius: 10px; background: var(--ops-card); }
 .ops-history-more { width: 42px; height: 42px; flex: 0 0 42px; display: grid; place-items: center; border: 0; border-radius: 8px; background: transparent; color: var(--ops-muted); }
@@ -745,10 +749,30 @@ img {
 .ops-history-item:last-child, .ops-history-money span:last-child, .ops-history-timeline li:last-child { border-bottom: 0; }
 .ops-history-money { display: grid; }
 .ops-history-money .is-total { font-size: 15px; font-weight: 850; }
+.ops-history-financial-note { margin-top: 8px !important; color: var(--ops-muted); font-size: 10px; }
 .ops-history-note { border-color: #f2d08a !important; background: var(--ops-note); }
 .ops-history-timeline { margin: 0; padding: 0; list-style: none; }
 .ops-history-timeline time { color: var(--ops-muted); font-size: 10px; }
 .ops-history-empty svg { width: 24px; height: 24px; }
+.ops-receipt-actions { display: grid; gap: 10px; }
+.ops-receipt-actions__head p,
+.ops-receipt-actions__hint,
+.ops-receipt-actions__status { color: var(--ops-muted); font-size: 11px; }
+.ops-receipt-actions__buttons { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; }
+.ops-receipt-actions__buttons button,
+.ops-receipt-confirm button { min-height: 48px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; border: 1px solid var(--ops-border); border-radius: 9px; background: var(--ops-card); padding: 7px; color: var(--ops-ink); font-size: 11px; font-weight: 800; }
+.ops-receipt-actions__buttons button:first-child { border-color: var(--primary); color: var(--primary); }
+.ops-receipt-confirm { display: grid; gap: 7px; border: 1px solid var(--ops-border); border-radius: 9px; background: var(--ops-subtle); padding: 10px; }
+.ops-receipt-confirm p { font-size: 13px; }
+.ops-receipt-confirm small { color: var(--ops-muted); line-height: 1.4; }
+.ops-receipt-confirm > div { display: grid; grid-template-columns: 1fr auto; gap: 7px; }
+.ops-receipt-confirm > div button:first-child { background: var(--primary); color: var(--theme-on-primary, #fff); }
+.ops-receipt-actions__status { border-left: 3px solid var(--primary); padding-left: 8px; }
+@media (max-width: 430px) {
+  .ops-orders-toolbar { align-items: stretch; flex-direction: column; }
+  .ops-deliver-all { width: 100%; }
+  .ops-receipt-actions__buttons { grid-template-columns: 1fr; }
+}
 .ops-paused-groups { display: grid; gap: 5px; padding: 0 8px 8px; }
 .ops-paused-group { display: grid; grid-template-columns: minmax(0, 1fr) 48px; gap: 5px; }
 .ops-paused-group .ops-paused-strip { width: 100%; }

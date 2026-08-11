@@ -420,6 +420,193 @@ test("delivered leaves active orders immediately and history exposes full detail
   await expect(page.getByRole("heading", { name: "Timing" })).toBeVisible();
 });
 
+test("waiter delivers every snapshotted Ready order once and excludes other lanes", async ({ page }) => {
+  await installSession(page, "staff");
+  const orders = [
+    kitchenOrder({ _id: "ready-8", clientOrderId: "local-ready-8", status: "ready", orderNumber: "8001" }),
+    kitchenOrder({ _id: "ready-9", status: "ready", orderNumber: "9001", locationNumber: "9" }),
+    kitchenOrder({ _id: "preparing-10", status: "preparing", orderNumber: "10001", locationNumber: "10" }),
+  ];
+  const updates = [];
+  await mockStaffWorkspace(page, orders);
+  await page.route("**/kitchen/orders/*", async (route) => {
+    const body = route.request().postDataJSON();
+    const id = route.request().url().split("/").pop();
+    updates.push({ id, ...body });
+    const order = orders.find((item) => item._id === id);
+    return fulfillJson(route, { order: { ...order, status: body.status, deliveredAt: new Date().toISOString() } });
+  });
+
+  await page.goto("/owner/order");
+  const deliverAll = page.getByRole("button", { name: "Deliver all ready orders (2)" });
+  await expect(deliverAll).toBeVisible();
+  await deliverAll.click();
+  const dialog = page.getByRole("dialog", { name: "Deliver 2 ready orders?" });
+  await expect(dialog).toContainText("2 locations");
+  await dialog.getByRole("button", { name: "Confirm delivery of 2" }).evaluate((button) => {
+    button.click();
+    button.click();
+  });
+
+  await expect(page.getByRole("tab", { name: "History" })).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByRole("button", { name: "More options for Table 8" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "More options for Table 9" })).toBeVisible();
+  await expect.poll(() => updates).toHaveLength(2);
+  expect(updates.map((item) => `${item.id}:${item.status}`).sort()).toEqual([
+    "ready-8:delivered",
+    "ready-9:delivered",
+  ]);
+  expect(new Set(updates.map((item) => item.clientMutationId)).size).toBe(2);
+
+  await page.getByRole("tab", { name: "Active" }).click();
+  await expect(page.getByRole("button", { name: /Table 10 order/ })).toBeVisible();
+});
+
+test("bulk delivery keeps successes in History and restores only a rejected order", async ({ page }) => {
+  await installSession(page, "staff");
+  const orders = [
+    kitchenOrder({ _id: "bulk-success", status: "ready", locationNumber: "8" }),
+    kitchenOrder({ _id: "bulk-rejected", status: "ready", locationNumber: "9" }),
+  ];
+  await mockStaffWorkspace(page, orders);
+  await page.route("**/kitchen/orders/*", async (route) => {
+    const id = route.request().url().split("/").pop();
+    const body = route.request().postDataJSON();
+    if (id === "bulk-rejected") {
+      return fulfillJson(route, { message: "Delivery rejected for Table 9" }, 409);
+    }
+    const order = orders.find((item) => item._id === id);
+    return fulfillJson(route, { order: { ...order, status: body.status, deliveredAt: new Date().toISOString() } });
+  });
+
+  await page.goto("/owner/order");
+  await page.getByRole("button", { name: "Deliver all ready orders (2)" }).click();
+  await page.getByRole("button", { name: "Confirm delivery of 2" }).click();
+  await expect(page.getByText("1 need attention")).toBeVisible();
+  await expect(page.getByText("Delivery rejected for Table 9")).toBeVisible();
+  await expect(page.getByRole("button", { name: "More options for Table 8" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "More options for Table 9" })).toBeVisible();
+
+  await page.getByRole("button", { name: "Restore confirmed" }).click();
+  await expect(page.getByText("1 need attention")).toHaveCount(0);
+  await page.getByRole("tab", { name: "Active" }).click();
+  await expect(page.getByRole("button", { name: /^Deliver Table 9 order/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Deliver Table 8 order/ })).toHaveCount(0);
+  await page.getByRole("tab", { name: "History" }).click();
+  await expect(page.getByRole("button", { name: "More options for Table 8" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "More options for Table 9" })).toHaveCount(0);
+});
+
+test("delivered history shares one paperless receipt truthfully and retains PDF fallback", async ({ page }) => {
+  await installSession(page, "staff");
+  const deliveredOrder = kitchenOrder({
+    _id: "receipt-order-8",
+    orderNumber: "R-8001",
+    status: "delivered",
+    guestName: "Aarav",
+    guestContact: "98765 43210",
+    subtotal: 300,
+    discountAmount: 30,
+    gstRate: 5,
+    gstAmount: 13.5,
+    totalAmount: 283.5,
+    deliveredAt: new Date().toISOString(),
+    items: [{ name: "Paneer Tikka", quantity: 1, price: 300 }],
+  });
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "canShare", { configurable: true, value: () => true });
+    Object.defineProperty(navigator, "share", {
+      configurable: true,
+      value: async (payload) => {
+        window.__receiptShare = {
+          title: payload.title,
+          text: payload.text,
+          fileNames: payload.files.map((file) => file.name),
+        };
+      },
+    });
+  });
+  await mockStaffWorkspace(page, [deliveredOrder]);
+
+  await page.goto("/owner/order");
+  await page.getByRole("tab", { name: "History" }).click();
+  await page.getByRole("button", { name: "More options for Table 8" }).click();
+  await page.getByRole("button", { name: "View full details" }).click();
+  const details = page.getByRole("dialog", { name: "Order details for Table 8" });
+  await details.getByRole("button", { name: "Share receipt" }).click();
+  await expect(details.getByText("+919876543210", { exact: true })).toBeVisible();
+  await details.getByRole("button", { name: "Confirm and open share" }).click();
+  await expect(details.getByText("Share opened. Confirm delivery in the app you selected.")).toBeVisible();
+  const shared = await page.evaluate(() => window.__receiptShare);
+  expect(shared.fileNames).toEqual(["order-receipt-R-8001.pdf"]);
+  expect(shared.text).toContain("Paneer Tikka");
+  expect(shared.text).not.toContain("Sent");
+
+  const downloadPromise = page.waitForEvent("download");
+  await details.getByRole("button", { name: "Download PDF" }).click();
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toBe("order-receipt-R-8001.pdf");
+});
+
+test("receipt sharing reports cancellation and unsupported platforms without claiming sent", async ({ page }) => {
+  await installSession(page, "staff");
+  const deliveredOrder = kitchenOrder({
+    _id: "receipt-fallback",
+    status: "delivered",
+    guestContact: "+44 20 7946 0958",
+    totalAmount: 180,
+    deliveredAt: new Date().toISOString(),
+    items: [{ name: "Hakka Noodles", quantity: 1, price: 180 }],
+  });
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "canShare", { configurable: true, value: () => true });
+    Object.defineProperty(navigator, "share", {
+      configurable: true,
+      value: async () => { throw new DOMException("cancelled", "AbortError"); },
+    });
+  });
+  await mockStaffWorkspace(page, [deliveredOrder]);
+
+  await page.goto("/owner/order");
+  await page.getByRole("tab", { name: "History" }).click();
+  await page.getByRole("button", { name: "More options for Table 8" }).click();
+  await page.getByRole("button", { name: "View full details" }).click();
+  const details = page.getByRole("dialog", { name: "Order details for Table 8" });
+  await details.getByRole("button", { name: "Share receipt" }).click();
+  await expect(details.getByText("+442079460958", { exact: true })).toBeVisible();
+  await details.getByRole("button", { name: "Confirm and open share" }).click();
+  await expect(details.getByText("Share cancelled. Nothing was marked as sent.")).toBeVisible();
+
+  await page.evaluate(() => {
+    Object.defineProperty(navigator, "canShare", { configurable: true, value: () => false });
+  });
+  await details.getByRole("button", { name: "Confirm and open share" }).click();
+  await expect(details.getByText("File sharing is unavailable here. Use Download PDF or Print.")).toBeVisible();
+  await details.getByRole("button", { name: "Print" }).click();
+  await expect(details.getByText("Print view opened.")).toBeVisible();
+});
+
+test("history with no valid guest number keeps receipt download and print available", async ({ page }) => {
+  await installSession(page, "staff");
+  await mockStaffWorkspace(page, [kitchenOrder({
+    _id: "receipt-no-contact",
+    status: "delivered",
+    guestContact: "12345",
+    totalAmount: 120,
+    deliveredAt: new Date().toISOString(),
+  })]);
+
+  await page.goto("/owner/order");
+  await page.getByRole("tab", { name: "History" }).click();
+  await page.getByRole("button", { name: "More options for Table 8" }).click();
+  await page.getByRole("button", { name: "View full details" }).click();
+  const details = page.getByRole("dialog", { name: "Order details for Table 8" });
+  await expect(details.getByRole("button", { name: "Share receipt" })).toHaveCount(0);
+  await expect(details.getByText("A valid guest number is unavailable. Download and Print still work.")).toBeVisible();
+  await expect(details.getByRole("button", { name: "Download PDF" })).toBeVisible();
+  await expect(details.getByRole("button", { name: "Print" })).toBeVisible();
+});
+
 test("Simple mode keeps workspace switching but hides optional staff controls", async ({ page }) => {
   await installSession(page, "staff");
   const simpleHotel = {

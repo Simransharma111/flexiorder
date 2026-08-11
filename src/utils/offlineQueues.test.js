@@ -6,6 +6,7 @@ import {
   getPendingKitchenUpdates,
   markKitchenUpdatesHandled,
   queueKitchenUpdate,
+  queueKitchenUpdates,
   reconcileKitchenOrderId,
   reconcileKitchenUpdateSync,
   recordKitchenUpdateFailure,
@@ -71,6 +72,28 @@ describe("offline queues", () => {
       .toEqual(["preparing", "ready"]);
     expect(queue[0].clientMutationId).toBeTruthy();
     expect(queue[1].clientMutationId).not.toBe(queue[0].clientMutationId);
+  });
+
+  it("queues a bulk status update with one durable write and one stable id per order", () => {
+    localStorage.setItem.mockClear();
+    const queued = queueKitchenUpdates([
+      { orderId: "ready-1", status: "delivered", confirmedStatus: "ready" },
+      { orderId: "ready-2", status: "delivered", confirmedStatus: "ready" },
+      { orderId: "ready-1", status: "delivered", confirmedStatus: "ready" },
+    ]);
+
+    expect(localStorage.setItem).toHaveBeenCalledTimes(1);
+    expect(queued).toHaveLength(2);
+    expect(new Set(queued.map((item) => item.clientMutationId)).size).toBe(2);
+    expect(getPendingKitchenUpdates()).toEqual(queued);
+
+    const replayed = queueKitchenUpdates([
+      { orderId: "ready-1", status: "delivered", confirmedStatus: "ready" },
+      { orderId: "ready-2", status: "delivered", confirmedStatus: "ready" },
+    ]);
+    expect(replayed.map((item) => item.clientMutationId))
+      .toEqual(queued.map((item) => item.clientMutationId));
+    expect(getPendingKitchenUpdates()).toHaveLength(2);
   });
 
   it("records failed kitchen retries without losing the mutation", () => {

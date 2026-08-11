@@ -2,8 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FiSearch, FiShoppingBag } from "react-icons/fi";
 import KitchenBoard from "../kitchen/KitchenBoard";
 import OrderCard from "./OrderCard";
+import OrderReceiptActions from "../orders/OrderReceiptActions";
 import useDialogFocus from "../../hooks/useDialogFocus";
 import {
+  getReadyOrderIds,
   mergeOrders,
   mergeOrderUpdate,
   matchesOrderId,
@@ -20,29 +22,47 @@ import {
   getKitchenRejectedRestorations,
   markKitchenUpdatesHandled,
   queueKitchenUpdate,
+  queueKitchenUpdates,
   retryKitchenUpdatesNeedingAttention,
 } from "../../utils/offlineKitchenUpdates";
 import { useSync } from "../../context/SyncContext";
 import { SYNC_STATE_EVENT } from "../../utils/syncQueues";
 import { flushSync } from "react-dom";
+import { buildOrderReceipt } from "../../utils/orderReceipt";
 
-export default function Orders({ orders = [], refresh, onOrdersChange, godModeEnabled = false }) {
+export default function Orders({
+  orders = [],
+  refresh,
+  onOrdersChange,
+  godModeEnabled = false,
+  allowBulkDelivery = false,
+  hotel = null,
+}) {
   const { syncKitchenNow } = useSync();
   const [activeView, setActiveView] = useState("active");
   const [search, setSearch] = useState("");
   const [historyActionOrder, setHistoryActionOrder] = useState(null);
   const [historyActionOpenedAt, setHistoryActionOpenedAt] = useState(0);
   const [historyDetailOrder, setHistoryDetailOrder] = useState(null);
+  const [bulkSnapshotIds, setBulkSnapshotIds] = useState(null);
+  const [bulkSubmitting, setBulkSubmitting] = useState(false);
+  const [bulkAnnouncement, setBulkAnnouncement] = useState("");
   const historyDialogRef = useRef(null);
   const historyDetailDialogRef = useRef(null);
+  const bulkDialogRef = useRef(null);
+  const bulkDispatchingRef = useRef(false);
   const closeHistoryActions = useCallback(() => setHistoryActionOrder(null), []);
   const closeHistoryDetails = useCallback(() => setHistoryDetailOrder(null), []);
+  const closeBulkConfirmation = useCallback(() => {
+    if (!bulkDispatchingRef.current) setBulkSnapshotIds(null);
+  }, []);
   const openHistoryActions = useCallback((order) => {
     setHistoryActionOpenedAt(Date.now());
     setHistoryActionOrder(order);
   }, []);
   useDialogFocus(Boolean(historyActionOrder), historyDialogRef, closeHistoryActions);
   useDialogFocus(Boolean(historyDetailOrder), historyDetailDialogRef, closeHistoryDetails);
+  useDialogFocus(Boolean(bulkSnapshotIds), bulkDialogRef, closeBulkConfirmation);
   const [localOrders, setLocalOrders] = useState(() => mergeOrders([], orders));
   const [pendingSyncCount, setPendingSyncCount] = useState(getPendingKitchenUpdates().length);
   const [attentionCount, setAttentionCount] = useState(getKitchenUpdatesNeedingAttention().length);
@@ -193,6 +213,79 @@ export default function Orders({ orders = [], refresh, onOrdersChange, godModeEn
     syncKitchenNow();
   };
 
+  const attentionOrderIds = getKitchenUpdatesNeedingAttention().map((item) => item.orderId);
+  const readyOrderIds = useMemo(
+    () => getReadyOrderIds(localOrders, null, attentionOrderIds),
+    [attentionOrderIds, localOrders],
+  );
+  const revalidatedBulkIds = useMemo(
+    () => getReadyOrderIds(localOrders, bulkSnapshotIds, attentionOrderIds),
+    [attentionOrderIds, bulkSnapshotIds, localOrders],
+  );
+  const bulkLocations = useMemo(() => new Set(revalidatedBulkIds.map((id) => {
+    const order = localOrders.find((item) => matchesOrderId(item, id));
+    return order ? orderLocation(order) : "";
+  }).filter(Boolean)).size, [localOrders, revalidatedBulkIds]);
+
+  const openBulkConfirmation = () => {
+    if (!allowBulkDelivery || bulkDispatchingRef.current || !readyOrderIds.length) return;
+    setBulkAnnouncement("");
+    setBulkSnapshotIds([...readyOrderIds]);
+  };
+
+  const deliverBulkSnapshot = () => {
+    if (!allowBulkDelivery || bulkDispatchingRef.current || !bulkSnapshotIds) return;
+    const eligibleIds = getReadyOrderIds(
+      localOrders,
+      bulkSnapshotIds,
+      getKitchenUpdatesNeedingAttention().map((item) => item.orderId),
+    );
+    if (!eligibleIds.length) {
+      setBulkAnnouncement("No snapshotted orders are still Ready.");
+      setBulkSnapshotIds(null);
+      return;
+    }
+
+    bulkDispatchingRef.current = true;
+    setBulkSubmitting(true);
+    const now = new Date().toISOString();
+    const sourceOrders = eligibleIds.map((id) =>
+      localOrders.find((order) => matchesOrderId(order, id))).filter(Boolean);
+    const queued = queueKitchenUpdates(sourceOrders.map((order) => ({
+      orderId: order._id || orderKey(order),
+      localOrderId: order.clientOrderId && String(order.clientOrderId) !== String(order._id)
+        ? order.clientOrderId
+        : undefined,
+      status: "delivered",
+      confirmedStatus: "ready",
+    })));
+    const queuedByOrder = new Map(queued.map((item) => [String(item.orderId), item]));
+    const optimisticOrders = sourceOrders.map((order) => {
+      const queuedUpdate = queuedByOrder.get(String(order._id || orderKey(order)));
+      return {
+        ...order,
+        status: "delivered",
+        deliveredAt: now,
+        updatedAt: now,
+        pendingMutation: true,
+        clientMutationId: queuedUpdate?.clientMutationId,
+      };
+    });
+
+    flushSync(() => {
+      publishOrders((current) => mergeOrders(current, optimisticOrders));
+      setSessionDeliveries((current) => mergeOrders(current, optimisticOrders));
+      setBulkSnapshotIds(null);
+      setActiveView("history");
+    });
+    setPendingSyncCount(getPendingKitchenUpdates().length);
+    const skipped = bulkSnapshotIds.length - optimisticOrders.length;
+    setBulkAnnouncement(`${optimisticOrders.length} ${optimisticOrders.length === 1 ? "order" : "orders"} moved to History${skipped > 0 ? ` · ${skipped} no longer Ready` : ""}. Synchronization continues separately.`);
+    syncKitchenNow();
+    setBulkSubmitting(false);
+    bulkDispatchingRef.current = false;
+  };
+
   // Active board: all non-cancelled, non-delivered orders.
   const activeOrders = useMemo(() => localOrders.filter(
     (order) => !["cancelled", "delivered"].includes(order.status)
@@ -251,10 +344,24 @@ export default function Orders({ orders = [], refresh, onOrdersChange, godModeEn
 
   return (
     <section className="ops-waiter-orders">
-      <div className="ops-orders-switch" role="tablist" aria-label="Order views">
-        <button type="button" role="tab" aria-selected={activeView === "active"} className={activeView === "active" ? "is-active" : ""} onClick={() => setActiveView("active")}>Active</button>
-        <button type="button" role="tab" aria-selected={activeView === "history"} className={activeView === "history" ? "is-active" : ""} onClick={() => setActiveView("history")}>History</button>
+      <div className="ops-orders-toolbar">
+        <div className="ops-orders-switch" role="tablist" aria-label="Order views">
+          <button type="button" role="tab" aria-selected={activeView === "active"} className={activeView === "active" ? "is-active" : ""} onClick={() => setActiveView("active")}>Active</button>
+          <button type="button" role="tab" aria-selected={activeView === "history"} className={activeView === "history" ? "is-active" : ""} onClick={() => setActiveView("history")}>History</button>
+        </div>
+        {allowBulkDelivery && activeView === "active" && (
+          <button
+            type="button"
+            className="ops-deliver-all"
+            onClick={openBulkConfirmation}
+            disabled={!readyOrderIds.length || bulkSubmitting}
+            aria-label={`Deliver all ready orders${readyOrderIds.length ? ` (${readyOrderIds.length})` : ""}`}
+          >
+            Deliver all ready{readyOrderIds.length ? ` (${readyOrderIds.length})` : ""}
+          </button>
+        )}
       </div>
+      {bulkAnnouncement && <p className="ops-orders-announcement" role="status">{bulkAnnouncement}</p>}
       {(pendingSyncCount > 0 || attentionCount > 0) && (
         <div className={`ops-sync-strip${attentionCount ? " needs-attention" : ""}`}>
           <span>{attentionCount ? `${attentionCount} need attention` : `${pendingSyncCount} syncing`}</span>
@@ -277,6 +384,21 @@ export default function Orders({ orders = [], refresh, onOrdersChange, godModeEn
               <button type="button" onClick={() => {
                 const restorations = getKitchenRejectedRestorations();
                 const pending = discardKitchenUpdatesNeedingAttention();
+                const restoredAliases = new Set(restorations.flatMap((restoration) => {
+                  const delivery = sessionDeliveries.find((order) =>
+                    matchesOrderId(order, restoration.orderId));
+                  return [
+                    restoration.orderId,
+                    delivery?._id,
+                    delivery?.clientOrderId,
+                    delivery?.localId,
+                  ].filter(Boolean).map(String);
+                }));
+                restoredAliases.forEach((id) => {
+                  if (!deliveredAutoHideTimers.current[id]) return;
+                  clearTimeout(deliveredAutoHideTimers.current[id]);
+                  delete deliveredAutoHideTimers.current[id];
+                });
                 publishOrders((current) => current.map((order) => {
                   const restoration = restorations.find((item) => matchesOrderId(order, item.orderId));
                   return restoration ? {
@@ -288,6 +410,13 @@ export default function Orders({ orders = [], refresh, onOrdersChange, godModeEn
                     updatedAt: new Date().toISOString(),
                   } : order;
                 }));
+                setSessionDeliveries((current) => current.filter((delivery) =>
+                  !restorations.some((item) => matchesOrderId(delivery, item.orderId))));
+                setVisibleDeliveredIds((current) => {
+                  const next = new Set(current);
+                  restoredAliases.forEach((id) => next.delete(id));
+                  return next;
+                });
                 setPendingSyncCount(pending.length);
                 setAttentionCount(0);
                 refresh?.();
@@ -340,14 +469,34 @@ export default function Orders({ orders = [], refresh, onOrdersChange, godModeEn
         <OrderHistoryDetails
           dialogRef={historyDetailDialogRef}
           order={historyDetailOrder}
+          hotel={hotel}
           onClose={closeHistoryDetails}
         />
+      )}
+
+      {bulkSnapshotIds && (
+        <div className="ops-sheet-backdrop" onClick={closeBulkConfirmation}>
+          <section ref={bulkDialogRef} tabIndex={-1} className="ops-action-sheet" role="dialog" aria-modal="true" aria-labelledby="deliver-all-title" onClick={(event) => event.stopPropagation()}>
+            <h2 id="deliver-all-title">Deliver {revalidatedBulkIds.length} ready {revalidatedBulkIds.length === 1 ? "order" : "orders"}?</h2>
+            <p>{bulkLocations} {bulkLocations === 1 ? "location" : "locations"} will move to History now. Each order will synchronize separately.</p>
+            {revalidatedBulkIds.length !== bulkSnapshotIds.length && (
+              <p role="status">Ready count changed from {bulkSnapshotIds.length} to {revalidatedBulkIds.length}. Only orders still Ready will be delivered.</p>
+            )}
+            <div className="ops-action-sheet__actions">
+              <button type="button" onClick={deliverBulkSnapshot} disabled={!revalidatedBulkIds.length || bulkSubmitting}>
+                {bulkSubmitting ? "Saving…" : `Confirm delivery of ${revalidatedBulkIds.length}`}
+              </button>
+            </div>
+            <button type="button" className="ops-sheet-cancel" onClick={closeBulkConfirmation} disabled={bulkSubmitting}>Keep orders Ready</button>
+          </section>
+        </div>
       )}
     </section>
   );
 }
 
 const formatMoney = (value) => Number.isFinite(Number(value))
+  && value !== null && value !== ""
   ? `₹${Number(value).toFixed(2)}`
   : "—";
 
@@ -355,21 +504,13 @@ const formatDateTime = (value) => value
   ? new Date(value).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })
   : "—";
 
-function OrderHistoryDetails({ dialogRef, order, onClose }) {
-  const items = Array.isArray(order.items) ? order.items : [];
-  const calculatedSubtotal = items.reduce(
-    (sum, item) => sum + Number(item.price || item.finalPrice || 0) * Number(item.quantity || 0),
-    0
-  );
-  const subtotal = order.subtotal ?? order.originalSubtotal ?? calculatedSubtotal;
-  const discount = order.discountAmount ?? order.discount ?? 0;
-  const gstRate = order.gstRate ?? order.gstPercentage ?? 0;
-  const gstAmount = order.gstAmount ?? order.taxAmount ?? 0;
-  const total = order.totalAmount ?? order.total ?? (Number(subtotal) - Number(discount) + Number(gstAmount));
+function OrderHistoryDetails({ dialogRef, order, hotel, onClose }) {
+  const receipt = buildOrderReceipt(order, hotel);
+  const { subtotal, subtotalLabel, discount, gstRate, gstAmount, total, note: financialNote } = receipt.financials;
   const note = order.note || order.notes || order.specialInstructions || order.instructions;
   const cancellationReason = order.cancelReason || order.cancellationReason ||
     (order.status === "cancelled" ? order.pauseReason : "");
-  const contact = order.guestContact || order.guestPhone || order.contact || order.phone;
+  const contact = receipt.order.contact;
   const timeline = [
     ["Placed", order.createdAt || order.queuedAt],
     ["Accepted", order.acceptedAt],
@@ -390,10 +531,11 @@ function OrderHistoryDetails({ dialogRef, order, onClose }) {
           {order.guestName && <div><dt>Customer</dt><dd>{order.guestName}</dd></div>}
           {contact && <div><dt>Contact</dt><dd>{contact}</dd></div>}
         </dl>
-        <section><h3>Items</h3>{items.map((item, index) => <div className="ops-history-item" key={`${item.menuId || item._id || item.name}-${index}`}><span>{Number(item.quantity || 1)} × {item.name || item.menu?.name || "Dish"}</span><b>{formatMoney(Number(item.price || item.finalPrice || 0) * Number(item.quantity || 1))}</b></div>)}</section>
+        <section><h3>Items</h3>{receipt.items.map((item, index) => <div className="ops-history-item" key={`${item.key}-${index}`}><span>{item.quantity} × {item.name}</span><b>{formatMoney(item.lineTotal)}</b></div>)}</section>
         {note && <section className="ops-history-note"><h3>Instructions</h3><p>{note}</p></section>}
         {cancellationReason && <section className="ops-history-note"><h3>Cancellation reason</h3><p>{cancellationReason}</p></section>}
-        <section><h3>Amount</h3><div className="ops-history-money"><span>Subtotal <b>{formatMoney(subtotal)}</b></span>{Number(discount) > 0 && <span>Discount <b>− {formatMoney(discount)}</b></span>}{Number(gstAmount) > 0 && <span>GST ({gstRate}%) <b>{formatMoney(gstAmount)}</b></span>}<span className="is-total">Total <b>{formatMoney(total)}</b></span></div></section>
+        <section><h3>Amount</h3><div className="ops-history-money"><span>{subtotalLabel} <b>{formatMoney(subtotal)}</b></span>{Number(discount) > 0 && <span>Discount recorded <b>− {formatMoney(discount)}</b></span>}{Number(gstAmount) > 0 && <span>{Number(gstRate) > 0 ? `GST (${gstRate}%)` : "GST recorded"} <b>{formatMoney(gstAmount)}</b></span>}<span className="is-total">Total <b>{formatMoney(total)}</b></span></div>{financialNote && <p className="ops-history-financial-note">{financialNote}</p>}</section>
+        {order.status === "delivered" && <OrderReceiptActions order={order} hotel={hotel} />}
         <section><h3>Timing</h3><ol className="ops-history-timeline">{timeline.map(([label, value]) => <li key={`${label}-${value}`}><span>{label}</span><time>{formatDateTime(value)}</time></li>)}</ol></section>
         <button type="button" className="ops-sheet-cancel" onClick={onClose}>Close</button>
       </section>

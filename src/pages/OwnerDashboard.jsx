@@ -660,6 +660,8 @@ loading={loadingOrders}
 
 godModeEnabled={getFeatureSettings(hotel).godModeEnabled}
 
+hotel={hotel}
+
 primaryColor={primaryColor}
 
 />

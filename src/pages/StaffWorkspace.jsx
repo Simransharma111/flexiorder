@@ -211,6 +211,8 @@ export default function StaffWorkspace() {
             refresh={fetchData}
             onOrdersChange={setOrders}
             godModeEnabled={featureSettings.godModeEnabled}
+            allowBulkDelivery
+            hotel={hotel}
           />
         </div>
       </div>

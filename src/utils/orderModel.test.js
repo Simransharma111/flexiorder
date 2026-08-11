@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  getReadyOrderIds,
   groupOrdersByLocation,
   mergeOrderUpdate,
   mergeOrders,
@@ -18,6 +19,31 @@ describe("order model", () => {
   it("deduplicates socket and polling copies", () => {
     expect(mergeOrders([{ _id: "1", status: "pending" }], [{ _id: "1", status: "accepted" }]))
       .toEqual([{ _id: "1", status: "accepted" }]);
+  });
+
+  it("freezes and revalidates only unblocked ready order identities", () => {
+    const initial = [
+      { _id: "ready-1", status: "ready" },
+      { _id: "ready-2", clientOrderId: "local-ready-2", status: "ready" },
+      { _id: "preparing-1", status: "preparing" },
+      { _id: "attention-1", status: "ready" },
+    ];
+    const frozen = getReadyOrderIds(initial, null, ["attention-1"]);
+    expect(frozen).toEqual(["ready-1", "local-ready-2"]);
+
+    const changed = [
+      { _id: "ready-1", status: "delivered" },
+      { _id: "ready-2", clientOrderId: "local-ready-2", status: "ready" },
+      { _id: "new-ready", status: "ready" },
+    ];
+    expect(getReadyOrderIds(changed, frozen)).toEqual(["local-ready-2"]);
+  });
+
+  it("deduplicates ready records that expose different aliases for one order", () => {
+    expect(getReadyOrderIds([
+      { _id: "server-ready", clientOrderId: "local-ready", status: "ready" },
+      { _id: "local-ready", status: "ready" },
+    ])).toEqual(["local-ready"]);
   });
 
   it("groups separate records by location without losing order boundaries", () => {
