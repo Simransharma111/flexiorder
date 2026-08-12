@@ -365,20 +365,28 @@ const completeOperation = (restaurant, snapshot, serverDish = null) => {
 
 const replayOperation = async (api, operation) => {
   if (operation.type === "create") {
-    const response = await api.post("/menu/dish", buildDishFormData(operation.fields, {
-      image: operation.image,
-      clientMutationId: operation.clientMutationId,
-      clientDishId: operation.dishId,
-    }));
+    const response = await api.post(
+      "/menu/dish",
+      buildDishFormData(operation.fields, {
+        image: operation.image,
+        clientMutationId: operation.clientMutationId,
+        clientDishId: operation.dishId,
+        restaurant: operation.restaurantId,
+      })
+    );
     const dish = normalizeDishResponse(response.data);
     if (!dish?._id) throw new Error("The server did not confirm the new dish.");
     return dish;
   }
   if (operation.type === "update") {
-    const response = await api.put(`/menu/dish/${operation.dishId}`, buildDishFormData(operation.fields, {
-      image: operation.image,
-      clientMutationId: operation.clientMutationId,
-    }));
+    const response = await api.put(
+      `/menu/dish/${operation.dishId}`,
+      buildDishFormData(operation.fields, {
+        image: operation.image,
+        clientMutationId: operation.clientMutationId,
+        restaurant: operation.restaurantId,
+      })
+    );
     return normalizeDishResponse(response.data) || { ...operation.previousDish, ...operation.fields, _id: operation.dishId };
   }
   try {

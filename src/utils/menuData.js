@@ -278,6 +278,7 @@ export const buildDishFormData = (
     image = null,
     clientMutationId,
     clientDishId,
+    restaurant = null,
   } = {}
 ) => {
   const form = new FormData();
@@ -299,37 +300,52 @@ export const buildDishFormData = (
   /*
    * CATEGORY
    *
-   * Always send categoryId as the Mongo ID.
+   * Preserve both the server-backed category id and the plain category label.
+   * Some flows create custom category names without a stored Mongo id, so
+   * the serializer must allow either representation.
    */
-  const resolvedCategoryId =
-    categoryId(
-      fields.categoryId
-    );
+  const rawCategory = fields.category ?? fields.categoryId ?? fields.categoryName ?? "";
 
-  if (!resolvedCategoryId) {
-    throw new Error(
-      "Please select a valid category."
-    );
-  }
-
-  form.append(
-    "categoryId",
-    resolvedCategoryId
-  );
+  let resolvedCategoryId =
+    categoryId(fields.categoryId) || categoryId(fields.category);
 
   const resolvedCategoryName =
-    categoryName(
-      fields.categoryName
-    );
+    categoryName(fields.categoryName || fields.category);
 
-  if (resolvedCategoryName) {
-    form.append(
-      "categoryName",
-      resolvedCategoryName
-    );
+  // If we don't have an id but have a name, attempt to resolve it from the
+  // local cached menu for the restaurant (used by background sync).
+  if (!resolvedCategoryId && resolvedCategoryName && restaurant) {
+    try {
+      // derive storage key and read cache
+      // keep this local to avoid importing heavy modules
+      const cacheKey = `flexiorder_menu:${encodeURIComponent(String(restaurant))}`;
+      const cached = JSON.parse(localStorage.getItem(cacheKey) || "null");
+      const dishes = Array.isArray(cached?.dishes) ? cached.dishes : [];
+      for (const d of dishes) {
+        const cat = d?.categoryId && typeof d.categoryId === "object" ? d.categoryId : d?.category;
+        if (!cat) continue;
+        const name = categoryName(cat);
+        if (name && name.toLowerCase() === resolvedCategoryName.toLowerCase()) {
+          resolvedCategoryId = categoryId(cat) || resolvedCategoryId;
+          if (resolvedCategoryId) break;
+        }
+      }
+    } catch (err) {
+      // fallback: ignore resolution failure
+    }
   }
 
-  form.delete("category");
+  const serializedCategory = resolvedCategoryId || resolvedCategoryName || "";
+
+  if (!serializedCategory) {
+    throw new Error("Please select a valid category.");
+  }
+
+  // send a field named `category` (used by tests and some server expectations)
+  form.append("category", serializedCategory);
+
+  if (resolvedCategoryId) form.append("categoryId", resolvedCategoryId);
+  if (resolvedCategoryName) form.append("categoryName", resolvedCategoryName);
 
   const tags =
     Array.isArray(fields.tags)

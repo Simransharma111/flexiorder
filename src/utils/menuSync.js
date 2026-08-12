@@ -7,10 +7,7 @@ import {
   normalizeMenuResponse,
 } from "./menuData";
 
-import {
-  categoryId,
-  categoryName,
-} from "./menuCategories";
+import { categoryId } from "./menuCategories";
 
 import {
   getRestaurantId,
@@ -1260,21 +1257,15 @@ const replayOperation = async (
     operation.type ===
     "create"
   ) {
-    const response =
-      await api.post(
-        "/menu/dish",
-        buildDishFormData(
-          operation.fields,
-          {
-            image:
-              operation.image,
-            clientMutationId:
-              operation.clientMutationId,
-            clientDishId:
-              operation.dishId,
-          }
-        )
-      );
+    const response = await api.post(
+      "/menu/dish",
+      buildDishFormData(operation.fields, {
+        image: operation.image,
+        clientMutationId: operation.clientMutationId,
+        clientDishId: operation.dishId,
+        restaurant: operation.restaurantId,
+      })
+    );
 
     const dish =
       normalizeDishResponse(
@@ -1297,19 +1288,14 @@ const replayOperation = async (
     operation.type ===
     "update"
   ) {
-    const response =
-      await api.put(
-        `/menu/dish/${operation.dishId}`,
-        buildDishFormData(
-          operation.fields,
-          {
-            image:
-              operation.image,
-            clientMutationId:
-              operation.clientMutationId,
-          }
-        )
-      );
+    const response = await api.put(
+      `/menu/dish/${operation.dishId}`,
+      buildDishFormData(operation.fields, {
+        image: operation.image,
+        clientMutationId: operation.clientMutationId,
+        restaurant: operation.restaurantId,
+      })
+    );
 
     return (
       normalizeDishResponse(

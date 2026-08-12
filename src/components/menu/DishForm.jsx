@@ -1,945 +1,1121 @@
-import { useEffect, useState } from "react";
-import api from "../../api/axios";
-import { FiX, FiImage } from "react-icons/fi";
+import { useEffect, useMemo, useState } from "react";
+import {
+  FiX,
+  FiImage,
+  FiStar,
+} from "react-icons/fi";
+import {
+  dishFieldsFromForm,
+  readImageForStorage,
+} from "../../utils/menuData.js";
+import {
+  categoryKey,
+  categoryName,
+} from "../../utils/menuCategories";
+
+const EMPTY_FORM = {
+  name: "",
+  description: "",
+  category: "Main Course",
+  foodType: "veg",
+  containsEgg: false,
+  price: "",
+  discountType: "percentage",
+  discountValue: "",
+  prepTime: "",
+
+  isAvailable: true,
+  isRecommended: false,
+  isBestseller: false,
+
+  featured: false,
+  todaySpecial: false,
+  isPopular: false,
+  isNewArrival: false,
+  chefChoice: false,
+
+  spiceLevel: "",
+  tags: [],
+  displayOrder: 0,
+};
+
+const AVAILABLE_TAGS = [
+  "Spicy",
+  "Chef's Choice",
+  "Best Seller",
+  "Healthy",
+  "Jain Friendly",
+];
 
 export default function DishForm({
+  hotelId,
   categories = [],
-  editingDish,
-  onSaved,
-  onCancel
+  dish = null,
+  editingId = null,
+  advancedEnabled = false,
+  loading = false,
+  onSubmit,
+  onCancel,
 }) {
-  const [loading, setLoading] = useState(false);
+  const [formData, setFormData] = useState(EMPTY_FORM);
   const [imageFile, setImageFile] = useState(null);
   const [imagePreview, setImagePreview] = useState("");
+  const [error, setError] = useState("");
 
-  const [subCategories, setSubCategories] = useState([]);
+  const isEditing = Boolean(editingId);
 
-  const initialState = {
-    name: "",
-    description: "",
-    category: "",
-    subcategory: "",
-    foodType: "veg",
-    price: "",
-    prepTime: "",
-    isAvailable: true,
-    isRecommended: false,
-    isBestseller: false,
-    featured: false,
-    todaySpecial: false,
-    isPopular: false,
-    isNewArrival: false,
-    chefChoice: false,
-    spiceLevel: "",
-    tags: [],
-    displayOrder: 0
-  };
-
-  const [formData, setFormData] = useState(initialState);
-
-  // =============================
-  // LOAD EDIT DATA
-  // =============================
+  const categoryOptions = useMemo(() => {
+    return categories
+      .filter(
+        (category) =>
+          categoryKey(category) !== "all"
+      )
+      .map((category) =>
+        categoryName(category)
+      )
+      .filter(Boolean);
+  }, [categories]);
 
   useEffect(() => {
-    if (!editingDish) {
-      setFormData(initialState);
-      setSubCategories([]);
+    if (!dish) {
+      setFormData({
+        ...EMPTY_FORM,
+        category:
+          categoryOptions.includes("Main Course")
+            ? "Main Course"
+            : categoryOptions[0] || "Main Course",
+      });
+
       setImageFile(null);
       setImagePreview("");
+      setError("");
       return;
     }
 
-    const categoryId =
-      editingDish.categoryId?._id ||
-      editingDish.categoryId ||
-      editingDish.category?._id ||
-      editingDish.category ||
-      "";
-
-    const category = categories.find(
-      item => item._id === categoryId
-    );
-
-    setSubCategories(
-      category?.subCategories || []
-    );
+    const existingCategory =
+      categoryName(dish.category) ||
+      "Main Course";
 
     setFormData({
-      name: editingDish.name || "",
-
-      description:
-        editingDish.description || "",
-
-      category: categoryId,
-
-      subcategory:
-        editingDish.subCategory ||
-        editingDish.subcategory ||
-        "",
+      name: dish.name || "",
+      description: dish.description || "",
+      category: existingCategory,
 
       foodType:
-        editingDish.foodType || "veg",
+        dish.foodType === "nonveg"
+          ? "nonveg"
+          : "veg",
+
+      containsEgg:
+        dish.containsEgg ?? false,
 
       price:
-        editingDish.price ?? "",
+        dish.price ?? "",
+
+      discountType:
+        dish.discountType || "percentage",
+
+      discountValue:
+        dish.discountValue ?? "",
 
       prepTime:
-        editingDish.prepTime ?? "",
+        dish.prepTime ?? "",
 
       isAvailable:
-        editingDish.isAvailable ?? true,
+        dish.isAvailable ?? true,
 
       isRecommended:
-        editingDish.isRecommended ?? false,
+        dish.isRecommended ?? false,
 
       isBestseller:
-        editingDish.isBestseller ?? false,
+        dish.isBestseller ?? false,
 
       featured:
-        editingDish.featured ?? false,
+        dish.featured ?? false,
 
       todaySpecial:
-        editingDish.todaySpecial ?? false,
+        dish.todaySpecial ?? false,
 
       isPopular:
-        editingDish.isPopular ?? false,
+        dish.isPopular ?? false,
 
       isNewArrival:
-        editingDish.isNewArrival ?? false,
+        dish.isNewArrival ?? false,
 
       chefChoice:
-        editingDish.chefChoice ?? false,
+        dish.chefChoice ?? false,
 
       spiceLevel:
-        editingDish.spiceLevel || "",
+        dish.spiceLevel || "",
 
       tags:
-        Array.isArray(editingDish.tags)
-          ? editingDish.tags
+        Array.isArray(dish.tags)
+          ? dish.tags
           : [],
 
       displayOrder:
-        editingDish.displayOrder ?? 0
+        dish.displayOrder ?? 0,
     });
 
-    setImagePreview(
-      editingDish.image || ""
-    );
-  }, [editingDish, categories]);
+    setImageFile(null);
+    setImagePreview(dish.image || "");
+    setError("");
+  }, [dish, categoryOptions]);
 
-  // =============================
-  // INPUT
-  // =============================
+  useEffect(() => {
+    return () => {
+      if (
+        imagePreview &&
+        imagePreview.startsWith("blob:")
+      ) {
+        URL.revokeObjectURL(imagePreview);
+      }
+    };
+  }, [imagePreview]);
 
-  const handleChange = e => {
+  const handleChange = (event) => {
     const {
       name,
-      value
-    } = e.target;
+      value,
+      type,
+      checked,
+    } = event.target;
 
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
+    setFormData((previous) => ({
+      ...previous,
+      [name]:
+        type === "checkbox"
+          ? checked
+          : value,
     }));
+
+    setError("");
   };
 
-  // =============================
-  // CATEGORY CHANGE
-  // =============================
-
-  const changeCategory = e => {
-    const id = e.target.value;
-
-    const selected = categories.find(
-      category => category._id === id
-    );
-
-    const subs =
-      selected?.subCategories || [];
-
-    setSubCategories(subs);
-
-    setFormData(prev => ({
-      ...prev,
-      category: id,
-      subcategory: ""
+  const handleCheckbox = (name, value) => {
+    setFormData((previous) => ({
+      ...previous,
+      [name]: value,
     }));
+
+    setError("");
   };
 
-  // =============================
-  // CHECKBOX
-  // =============================
-
-  const toggle = name => {
-    setFormData(prev => ({
-      ...prev,
-      [name]: !prev[name]
+  const handleFoodType = (foodType) => {
+    setFormData((previous) => ({
+      ...previous,
+      foodType,
+      containsEgg:
+        foodType === "nonveg"
+          ? false
+          : previous.containsEgg,
     }));
+
+    setError("");
   };
 
-  // =============================
-  // IMAGE
-  // =============================
+  const toggleTag = (tag) => {
+    setFormData((previous) => {
+      const exists =
+        previous.tags.includes(tag);
 
-  const handleImageChange = e => {
-    const file = e.target.files?.[0];
+      return {
+        ...previous,
+        tags: exists
+          ? previous.tags.filter(
+              (item) => item !== tag
+            )
+          : [...previous.tags, tag],
+      };
+    });
+  };
 
-    if (!file) return;
+  const handleImageChange = (event) => {
+    const file =
+      event.target.files?.[0] || null;
+
+    if (!file) {
+      setImageFile(null);
+      return;
+    }
+
+    if (!file.type.startsWith("image/")) {
+      setError(
+        "Please select a valid image file."
+      );
+      event.target.value = "";
+      return;
+    }
+
+    const maxSize =
+      5 * 1024 * 1024;
+
+    if (file.size > maxSize) {
+      setError(
+        "Image must be smaller than 5 MB."
+      );
+      event.target.value = "";
+      return;
+    }
+
+    if (
+      imagePreview &&
+      imagePreview.startsWith("blob:")
+    ) {
+      URL.revokeObjectURL(imagePreview);
+    }
+
+    const preview =
+      URL.createObjectURL(file);
 
     setImageFile(file);
-
-    setImagePreview(
-      URL.createObjectURL(file)
-    );
+    setImagePreview(preview);
+    setError("");
   };
 
-  // =============================
-  // TAGS
-  // =============================
+  const validate = () => {
+    const name =
+      formData.name.trim();
 
-  const handleTagsChange = e => {
-    const value = e.target.value;
+    const category =
+      String(
+        formData.category || ""
+      ).trim();
 
-    setFormData(prev => ({
-      ...prev,
-      tags: value
-        .split(",")
-        .map(tag => tag.trim())
-        .filter(Boolean)
-    }));
+    const price =
+      Number(formData.price);
+
+    const prepTime =
+      Number(formData.prepTime);
+
+    if (!hotelId) {
+      return "Hotel information is missing. Please refresh the page.";
+    }
+
+    if (!name) {
+      return "Dish name is required.";
+    }
+
+    if (!category) {
+      return "Please choose or enter a category.";
+    }
+
+    if (
+      category.toLowerCase() ===
+      "all"
+    ) {
+      return '“All” is reserved for viewing the complete menu. Please choose another category.';
+    }
+
+    if (
+      formData.price === "" ||
+      !Number.isFinite(price) ||
+      price < 0
+    ) {
+      return "Please enter a valid price.";
+    }
+
+    if (
+      formData.prepTime === "" ||
+      !Number.isFinite(prepTime) ||
+      prepTime < 0
+    ) {
+      return "Please enter a valid preparation time.";
+    }
+
+    const discountValue =
+      Number(formData.discountValue || 0);
+
+    if (
+      formData.discountValue !== "" &&
+      (!Number.isFinite(discountValue) ||
+        discountValue < 0)
+    ) {
+      return "Please enter a valid discount.";
+    }
+
+    if (
+      formData.discountType ===
+        "percentage" &&
+      discountValue > 100
+    ) {
+      return "Percentage discount cannot be greater than 100%.";
+    }
+
+    return "";
   };
 
-  // =============================
-  // SAVE
-  // =============================
+  const handleSubmit = async (event) => {
+    event.preventDefault();
 
-  const handleSubmit = async e => {
-    e.preventDefault();
+    if (loading) return;
 
-    if (!formData.name.trim()) {
-      alert("Dish name is required");
-      return;
-    }
+    const validationError =
+      validate();
 
-    if (!formData.category) {
-      alert("Please select a category");
-      return;
-    }
-
-    if (!formData.price) {
-      alert("Price is required");
+    if (validationError) {
+      setError(validationError);
       return;
     }
 
     try {
-      setLoading(true);
+      setError("");
 
-      const form = new FormData();
-
-      form.append(
-        "name",
-        formData.name.trim()
-      );
-
-      form.append(
-        "description",
-        formData.description || ""
-      );
-
-      // IMPORTANT:
-      // Backend expects categoryId
-      form.append(
-        "categoryId",
-        formData.category
-      );
-
-      // IMPORTANT:
-      // Backend expects subCategory
-      form.append(
-        "subCategory",
-        formData.subcategory || ""
-      );
-
-      form.append(
-        "price",
-        formData.price
-      );
-
-      form.append(
-        "prepTime",
-        formData.prepTime || "15"
-      );
-
-      form.append(
-        "foodType",
-        formData.foodType
-      );
-
-      form.append(
-        "isAvailable",
-        String(formData.isAvailable)
-      );
-
-      form.append(
-        "isRecommended",
-        String(formData.isRecommended)
-      );
-
-      form.append(
-        "isBestseller",
-        String(formData.isBestseller)
-      );
-
-      form.append(
-        "featured",
-        String(formData.featured)
-      );
-
-      form.append(
-        "todaySpecial",
-        String(formData.todaySpecial)
-      );
-
-      form.append(
-        "isPopular",
-        String(formData.isPopular)
-      );
-
-      form.append(
-        "isNewArrival",
-        String(formData.isNewArrival)
-      );
-
-      form.append(
-        "chefChoice",
-        String(formData.chefChoice)
-      );
-
-      form.append(
-        "spiceLevel",
-        formData.spiceLevel || ""
-      );
-
-      form.append(
-        "tags",
-        formData.tags.join(",")
-      );
-
-      form.append(
-        "displayOrder",
-        String(formData.displayOrder || 0)
-      );
-
-      if (imageFile) {
-        form.append(
-          "image",
-          imageFile
-        );
-      }
-
-      const token =
-        localStorage.getItem("token");
-
-      const config = {
-        headers: {
-          Authorization:
-            `Bearer ${token}`
-        }
+      const cleanFormData = {
+        ...formData,
+        name: formData.name.trim(),
+        description:
+          formData.description.trim(),
+        category:
+          String(formData.category).trim(),
+        price: Number(formData.price),
+        prepTime: Number(formData.prepTime),
+        discountValue:
+          formData.discountValue === ""
+            ? 0
+            : Number(
+                formData.discountValue
+              ),
+        displayOrder:
+          Number(formData.displayOrder) ||
+          0,
+        tags: Array.isArray(
+          formData.tags
+        )
+          ? formData.tags
+          : [],
       };
 
-      if (editingDish) {
-        await api.put(
-          `/menu/dish/${editingDish._id}`,
-          form,
-          config
+      /*
+       * IMPORTANT
+       *
+       * category is deliberately passed
+       * as a NAME.
+       *
+       * Example:
+       * "Main Course"
+       *
+       * NOT:
+       * ObjectId
+       *
+       * NOT:
+       * { _id, name }
+       */
+      const fields =
+        dishFieldsFromForm(
+          cleanFormData,
+          cleanFormData.category
         );
-      } else {
-        await api.post(
-          "/menu/dish",
-          form,
-          config
-        );
+
+      /*
+       * readImageForStorage is used here
+       * rather than inside OwnerMenuManager.
+       *
+       * This keeps all form/image handling
+       * inside DishForm.
+       */
+      let image = null;
+
+      if (imageFile) {
+        image =
+          await readImageForStorage(
+            imageFile
+          );
       }
 
-      alert(
-        editingDish
-          ? "Dish updated successfully"
-          : "Dish added successfully"
-      );
-
-      onSaved();
-
+      await onSubmit({
+        formData: cleanFormData,
+        imageFile: image,
+        fields,
+      });
     } catch (err) {
       console.error(
-        "DISH SAVE ERROR:",
-        err.response?.data || err
+        "DISH FORM SUBMIT ERROR:",
+        err
       );
 
-      alert(
-        err.response?.data?.message ||
-        "Dish save failed"
+      setError(
+        err?.response?.data?.message ||
+          err?.message ||
+          "The dish could not be saved."
       );
-
-    } finally {
-      setLoading(false);
     }
   };
 
-  // =============================
-  // CHECKBOX ITEM
-  // =============================
-
-  const renderCheckOption = (name, label) => (
-    <label
-      className="
-        flex
-        items-center
-        gap-2
-        cursor-pointer
-        text-sm
-        text-gray-700
-      "
-    >
-      <input
-        type="checkbox"
-        checked={formData[name]}
-        onChange={() => toggle(name)}
-        className="w-4 h-4"
-      />
-
-      {label}
-    </label>
-  );
-
-  // =============================
-  // UI
-  // =============================
-
   return (
-    <div
-      className="
-        fixed
-        inset-0
-        z-50
-        bg-black/50
-        flex
-        items-center
-        justify-center
-        p-4
-      "
-    >
-      <div
-        className="
-          bg-white
-          rounded-2xl
-          shadow-2xl
-          w-full
-          max-w-3xl
-          max-h-[90vh]
-          overflow-y-auto
-        "
-      >
+    <div className="ops-menu-dish-editor bg-white border border-gray-200 rounded-2xl shadow-sm mb-8">
 
-        {/* HEADER */}
+      {/* HEADER */}
+      <div className="flex items-center justify-between p-5 border-b border-gray-200">
+        <div>
+          <h2 className="text-lg font-bold">
+            {isEditing
+              ? "Edit Dish"
+              : "Add New Dish"}
+          </h2>
 
-        <div
-          className="
-            sticky
-            top-0
-            bg-white
-            border-b
-            px-6
-            py-4
-            flex
-            items-center
-            justify-between
-            z-10
-          "
-        >
-          <div>
-            <h2 className="text-xl font-bold text-gray-900">
-              {editingDish
-                ? "Edit Dish"
-                : "Add Dish"}
-            </h2>
-
-            <p className="text-sm text-gray-500 mt-1">
-              Add your dish details
-            </p>
-          </div>
-
-          <button
-            type="button"
-            onClick={onCancel}
-            className="
-              w-9
-              h-9
-              rounded-lg
-              bg-gray-100
-              hover:bg-gray-200
-              flex
-              items-center
-              justify-center
-            "
-          >
-            <FiX />
-          </button>
+          <p className="text-xs text-gray-500 mt-1">
+            Add dish information and display settings
+          </p>
         </div>
 
-        {/* FORM */}
-
-        <form
-          onSubmit={handleSubmit}
-          className="p-6 space-y-5"
+        <button
+          type="button"
+          onClick={onCancel}
+          disabled={loading}
+          className="w-9 h-9 rounded-lg hover:bg-gray-100 flex items-center justify-center disabled:opacity-50"
+          aria-label="Close form"
         >
+          <FiX />
+        </button>
+      </div>
 
-          {/* IMAGE */}
+      {/* ERROR */}
+      {error && (
+        <div className="mx-5 mt-5 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {error}
+        </div>
+      )}
 
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-2">
-              Dish Image
-            </label>
+      <form
+        onSubmit={handleSubmit}
+        className="ops-menu-dish-form p-5"
+      >
 
-            <div className="flex items-center gap-4">
-
-              <label
-                className="
-                  w-28
-                  h-28
-                  rounded-xl
-                  border-2
-                  border-dashed
-                  border-gray-300
-                  flex
-                  flex-col
-                  items-center
-                  justify-center
-                  cursor-pointer
-                  hover:border-orange-400
-                  overflow-hidden
-                "
-              >
-                {imagePreview ? (
-                  <img
-                    src={imagePreview}
-                    alt="Preview"
-                    className="
-                      w-full
-                      h-full
-                      object-cover
-                    "
-                  />
-                ) : (
-                  <>
-                    <FiImage
-                      size={24}
-                      className="text-gray-400"
-                    />
-
-                    <span className="text-xs text-gray-400 mt-1">
-                      Upload
-                    </span>
-                  </>
-                )}
-
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={handleImageChange}
-                  className="hidden"
-                />
-              </label>
-
-              {imageFile && (
-                <div className="text-sm text-gray-500">
-                  {imageFile.name}
-                </div>
-              )}
-
-            </div>
-          </div>
+        {/* BASIC DETAILS */}
+        <div className="grid md:grid-cols-2 gap-4">
 
           {/* NAME */}
-
           <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-1">
+            <label
+              htmlFor="dish-name"
+              className="block text-sm font-semibold mb-1"
+            >
               Dish Name
             </label>
 
             <input
+              id="dish-name"
               name="name"
+              type="text"
+              placeholder="e.g. Paneer Butter Masala"
               value={formData.name}
               onChange={handleChange}
-              placeholder="Example: Paneer Tikka"
+              className="w-full border border-gray-200 rounded-lg px-3 py-3 outline-none focus:ring-2 focus:ring-orange-400"
+              disabled={loading}
               required
-              className="
-                w-full
-                border
-                border-gray-300
-                rounded-lg
-                px-3
-                py-3
-                outline-none
-                focus:border-orange-500
-              "
             />
           </div>
 
-          {/* DESCRIPTION */}
-
+          {/* PRICE */}
           <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-1">
-              Description
+            <label
+              htmlFor="dish-price"
+              className="block text-sm font-semibold mb-1"
+            >
+              Price
             </label>
 
-            <textarea
-              name="description"
-              value={formData.description}
-              onChange={handleChange}
-              rows="3"
-              placeholder="Describe the dish..."
-              className="
-                w-full
-                border
-                border-gray-300
-                rounded-lg
-                px-3
-                py-3
-                outline-none
-                focus:border-orange-500
-              "
-            />
-          </div>
-
-          {/* CATEGORY + SUBCATEGORY */}
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1">
-                Category
-              </label>
-
-              <select
-                value={formData.category}
-                onChange={changeCategory}
-                required
-                className="
-                  w-full
-                  border
-                  border-gray-300
-                  rounded-lg
-                  px-3
-                  py-3
-                  outline-none
-                  focus:border-orange-500
-                  bg-white
-                "
-              >
-                <option value="">
-                  Select Category
-                </option>
-
-                {categories.map(category => (
-                  <option
-                    key={category._id}
-                    value={category._id}
-                  >
-                    {category.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1">
-                Subcategory
-              </label>
-
-              <select
-                name="subcategory"
-                value={formData.subcategory}
-                onChange={handleChange}
-                disabled={
-                  subCategories.length === 0
-                }
-                className="
-                  w-full
-                  border
-                  border-gray-300
-                  rounded-lg
-                  px-3
-                  py-3
-                  outline-none
-                  focus:border-orange-500
-                  bg-white
-                  disabled:bg-gray-100
-                  disabled:text-gray-400
-                "
-              >
-                <option value="">
-                  {subCategories.length > 0
-                    ? "Select Subcategory"
-                    : "No subcategories"}
-                </option>
-
-                {subCategories.map(sub => (
-                  <option
-                    key={sub}
-                    value={sub}
-                  >
-                    {sub}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-          </div>
-
-          {/* PRICE + PREP TIME */}
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1">
-                Price
-              </label>
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">
+                ₹
+              </span>
 
               <input
+                id="dish-price"
                 type="number"
                 name="price"
+                min="0"
+                step="0.01"
+                placeholder="250"
                 value={formData.price}
                 onChange={handleChange}
-                placeholder="₹ 250"
-                min="0"
+                className="w-full border border-gray-200 rounded-lg pl-8 pr-3 py-3 outline-none focus:ring-2 focus:ring-orange-400"
+                disabled={loading}
                 required
-                className="
-                  w-full
-                  border
-                  border-gray-300
-                  rounded-lg
-                  px-3
-                  py-3
-                  outline-none
-                  focus:border-orange-500
-                "
               />
             </div>
+          </div>
 
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1">
-                Preparation Time
-              </label>
+          {/* DISCOUNT */}
+          <div>
+            <label className="block text-sm font-semibold mb-1">
+              Discount
+              <span className="text-gray-400 font-normal">
+                {" "}
+                (optional)
+              </span>
+            </label>
+
+            <div className="flex gap-2">
+              <select
+                name="discountType"
+                value={formData.discountType}
+                onChange={handleChange}
+                disabled={loading}
+                className="w-28 rounded-lg border border-gray-200 px-3 py-3 outline-none focus:ring-2 focus:ring-orange-400"
+              >
+                <option value="percentage">
+                  %
+                </option>
+
+                <option value="fixed">
+                  ₹
+                </option>
+              </select>
 
               <input
                 type="number"
-                name="prepTime"
-                value={formData.prepTime}
+                min="0"
+                step="0.01"
+                name="discountValue"
+                placeholder="Amount"
+                value={
+                  formData.discountValue
+                }
                 onChange={handleChange}
-                placeholder="15 minutes"
-                min="1"
-                className="
-                  w-full
-                  border
-                  border-gray-300
-                  rounded-lg
-                  px-3
-                  py-3
-                  outline-none
-                  focus:border-orange-500
-                "
+                disabled={loading}
+                className="min-w-0 flex-1 rounded-lg border border-gray-200 px-3 py-3 outline-none focus:ring-2 focus:ring-orange-400"
               />
             </div>
-
           </div>
 
-          {/* FOOD TYPE + SPICE */}
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1">
-                Food Type
-              </label>
-
-              <select
-                name="foodType"
-                value={formData.foodType}
-                onChange={handleChange}
-                className="
-                  w-full
-                  border
-                  border-gray-300
-                  rounded-lg
-                  px-3
-                  py-3
-                  bg-white
-                "
-              >
-                <option value="veg">
-                  Vegetarian
-                </option>
-
-                <option value="nonveg">
-                  Non Vegetarian
-                </option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1">
-                Spice Level
-              </label>
-
-              <select
-                name="spiceLevel"
-                value={formData.spiceLevel}
-                onChange={handleChange}
-                className="
-                  w-full
-                  border
-                  border-gray-300
-                  rounded-lg
-                  px-3
-                  py-3
-                  bg-white
-                "
-              >
-                <option value="">
-                  Not specified
-                </option>
-
-                <option value="mild">
-                  Mild
-                </option>
-
-                <option value="medium">
-                  Medium
-                </option>
-
-                <option value="hot">
-                  Hot
-                </option>
-              </select>
-            </div>
-
-          </div>
-
-          {/* TAGS */}
-
+          {/* CATEGORY */}
           <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-1">
-              Tags
+            <label
+              htmlFor="dish-category"
+              className="block text-sm font-semibold mb-1"
+            >
+              Category
             </label>
 
             <input
-              value={formData.tags.join(", ")}
-              onChange={handleTagsChange}
-              placeholder="Paneer, Tandoori, Indian"
-              className="
-                w-full
-                border
-                border-gray-300
-                rounded-lg
-                px-3
-                py-3
-                outline-none
-                focus:border-orange-500
-              "
+              id="dish-category"
+              type="text"
+              list="menu-category-options"
+              name="category"
+              value={formData.category}
+              onChange={handleChange}
+              placeholder="Choose or type a category"
+              disabled={loading}
+              className="w-full border border-gray-200 rounded-lg px-3 py-3 outline-none focus:ring-2 focus:ring-orange-400"
+              required
             />
 
-            <p className="text-xs text-gray-400 mt-1">
-              Separate tags using commas
+            <datalist id="menu-category-options">
+              {categoryOptions.map(
+                (category) => (
+                  <option
+                    value={category}
+                    key={category}
+                  />
+                )
+              )}
+            </datalist>
+
+            <p className="mt-1 text-xs text-gray-500">
+              Select an existing category or
+              type a new category name.
             </p>
           </div>
 
-          {/* STATUS */}
+          {/* PREP TIME */}
+          <div>
+            <label
+              htmlFor="dish-prep-time"
+              className="block text-sm font-semibold mb-1"
+            >
+              Preparation Time
+            </label>
 
-          <div
-            className="
-              border
-              border-gray-200
-              rounded-xl
-              p-4
-            "
-          >
-            <h3 className="font-semibold text-gray-800 mb-3">
-              Dish Settings
-            </h3>
+            <div className="relative">
+              <input
+                id="dish-prep-time"
+                type="number"
+                min="0"
+                name="prepTime"
+                placeholder="20"
+                value={formData.prepTime}
+                onChange={handleChange}
+                disabled={loading}
+                className="w-full border border-gray-200 rounded-lg px-3 py-3 pr-20 outline-none focus:ring-2 focus:ring-orange-400"
+                required
+              />
 
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-
-              {renderCheckOption("isAvailable", "Available")}
-              {renderCheckOption("featured", "Featured")}
-              {renderCheckOption("todaySpecial", "Today's Special")}
-              {renderCheckOption("isRecommended", "Recommended")}
-              {renderCheckOption("isBestseller", "Bestseller")}
-              {renderCheckOption("isPopular", "Popular")}
-              {renderCheckOption("isNewArrival", "New Arrival")}
-              {renderCheckOption("chefChoice", "Chef's Choice")}
-
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-400">
+                minutes
+              </span>
             </div>
           </div>
+        </div>
 
-          {/* ACTIONS */}
+        {/* FOOD TYPE */}
+        <div className="mt-5">
+          <label className="block text-sm font-semibold mb-2">
+            Food Type
+          </label>
 
-          <div
-            className="
-              flex
-              justify-end
-              gap-3
-              pt-2
-              border-t
-              border-gray-100
-            "
-          >
+          <div className="flex flex-wrap gap-3">
 
             <button
               type="button"
-              onClick={onCancel}
+              onClick={() =>
+                handleFoodType("veg")
+              }
               disabled={loading}
-              className="
-                border
-                border-gray-300
-                bg-white
-                text-gray-700
-                px-5
-                py-2.5
-                rounded-lg
-                font-semibold
-                hover:bg-gray-50
-              "
+              className={`px-5 py-2.5 rounded-lg border text-sm font-semibold transition ${
+                formData.foodType ===
+                "veg"
+                  ? "bg-green-50 border-green-500 text-green-700"
+                  : "border-gray-200 text-gray-500 hover:bg-gray-50"
+              }`}
             >
-              Cancel
+              🟢 Veg
             </button>
 
             <button
-              type="submit"
+              type="button"
+              onClick={() =>
+                handleFoodType("nonveg")
+              }
               disabled={loading}
-              className="
-                bg-orange-500
-                hover:bg-orange-600
-                disabled:opacity-60
-                text-white
-                px-6
-                py-2.5
-                rounded-lg
-                font-semibold
-              "
+              className={`px-5 py-2.5 rounded-lg border text-sm font-semibold transition ${
+                formData.foodType ===
+                "nonveg"
+                  ? "bg-red-50 border-red-500 text-red-700"
+                  : "border-gray-200 text-gray-500 hover:bg-gray-50"
+              }`}
             >
-              {loading
-                ? "Saving..."
-                : editingDish
-                ? "Update Dish"
-                : "Save Dish"}
+              🔴 Non-Veg
             </button>
+          </div>
+        </div>
 
+        {/* EGG */}
+        {formData.foodType ===
+          "veg" && (
+          <label className="mt-5 flex items-center gap-3 text-sm font-semibold cursor-pointer">
+            <input
+              type="checkbox"
+              name="containsEgg"
+              checked={
+                formData.containsEgg
+              }
+              onChange={handleChange}
+              disabled={loading}
+              className="h-4 w-4 accent-green-600"
+            />
+
+            Contains egg
+          </label>
+        )}
+
+        {/* DESCRIPTION */}
+        <div className="mt-5">
+          <label
+            htmlFor="dish-description"
+            className="block text-sm font-semibold mb-1"
+          >
+            Description
+          </label>
+
+          <textarea
+            id="dish-description"
+            name="description"
+            placeholder="Describe the dish..."
+            value={formData.description}
+            onChange={handleChange}
+            disabled={loading}
+            rows={3}
+            className="w-full border border-gray-200 rounded-lg px-3 py-3 outline-none resize-none focus:ring-2 focus:ring-orange-400"
+          />
+        </div>
+
+        {/* IMAGE */}
+        <div className="mt-5">
+          <label className="block text-sm font-semibold mb-2">
+            Dish Image
+          </label>
+
+          <label
+            htmlFor="dish-image"
+            className="border-2 border-dashed border-gray-300 rounded-xl p-5 flex items-center gap-4 cursor-pointer hover:bg-gray-50 transition"
+          >
+            {imagePreview ? (
+              <img
+                src={imagePreview}
+                alt="Dish preview"
+                className="w-16 h-16 rounded-xl object-cover"
+              />
+            ) : (
+              <div className="w-11 h-11 bg-gray-100 rounded-lg flex items-center justify-center">
+                <FiImage className="text-gray-500" />
+              </div>
+            )}
+
+            <div>
+              <p className="text-sm font-semibold">
+                {imagePreview
+                  ? "Change image"
+                  : "Choose image"}
+              </p>
+
+              <p className="text-xs text-gray-500 mt-1">
+                JPG, PNG or WEBP · Max 5 MB
+              </p>
+            </div>
+          </label>
+
+          <input
+            id="dish-image"
+            type="file"
+            accept="image/jpeg,image/png,image/webp,image/*"
+            onChange={handleImageChange}
+            disabled={loading}
+            className="hidden"
+          />
+
+          {imageFile && (
+            <p className="text-xs text-green-600 mt-2">
+              Selected:{" "}
+              {imageFile.name}
+            </p>
+          )}
+
+          {isEditing &&
+            !imageFile &&
+            dish?.image && (
+              <p className="text-xs text-gray-500 mt-2">
+                Existing image will remain
+                unchanged.
+              </p>
+            )}
+        </div>
+
+        {/* AVAILABILITY */}
+        <div className="mt-6">
+          <h3 className="font-bold text-sm mb-3">
+            Availability
+          </h3>
+
+          <CheckOption
+            label="Available"
+            description="Customers can order this dish"
+            checked={
+              formData.isAvailable
+            }
+            onChange={(value) =>
+              handleCheckbox(
+                "isAvailable",
+                value
+              )
+            }
+            disabled={loading}
+          />
+        </div>
+
+        {/* ADVANCED DISPLAY SECTIONS */}
+        {advancedEnabled && (
+          <div className="mt-6">
+            <h3 className="font-bold text-sm mb-3">
+              Display Sections
+            </h3>
+
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+
+              <CheckOption
+                label="Featured"
+                checked={
+                  formData.featured
+                }
+                onChange={(value) =>
+                  handleCheckbox(
+                    "featured",
+                    value
+                  )
+                }
+                disabled={loading}
+              />
+
+              <CheckOption
+                label="Today's Special"
+                checked={
+                  formData.todaySpecial
+                }
+                onChange={(value) =>
+                  handleCheckbox(
+                    "todaySpecial",
+                    value
+                  )
+                }
+                disabled={loading}
+              />
+
+              <CheckOption
+                label="Recommended"
+                checked={
+                  formData.isRecommended
+                }
+                onChange={(value) =>
+                  handleCheckbox(
+                    "isRecommended",
+                    value
+                  )
+                }
+                disabled={loading}
+              />
+
+              <CheckOption
+                label="Best Seller"
+                checked={
+                  formData.isBestseller
+                }
+                onChange={(value) =>
+                  handleCheckbox(
+                    "isBestseller",
+                    value
+                  )
+                }
+                disabled={loading}
+              />
+
+              <CheckOption
+                label="Popular"
+                checked={
+                  formData.isPopular
+                }
+                onChange={(value) =>
+                  handleCheckbox(
+                    "isPopular",
+                    value
+                  )
+                }
+                disabled={loading}
+              />
+
+              <CheckOption
+                label="New Arrival"
+                checked={
+                  formData.isNewArrival
+                }
+                onChange={(value) =>
+                  handleCheckbox(
+                    "isNewArrival",
+                    value
+                  )
+                }
+                disabled={loading}
+              />
+
+              <CheckOption
+                label="Chef's Choice"
+                checked={
+                  formData.chefChoice
+                }
+                onChange={(value) =>
+                  handleCheckbox(
+                    "chefChoice",
+                    value
+                  )
+                }
+                disabled={loading}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* TAGS */}
+        {advancedEnabled && (
+          <div className="mt-6">
+            <h3 className="font-bold text-sm mb-3">
+              Dish Tags
+            </h3>
+
+            <div className="flex flex-wrap gap-2">
+              {AVAILABLE_TAGS.map(
+                (tag) => {
+                  const selected =
+                    formData.tags.includes(
+                      tag
+                    );
+
+                  return (
+                    <button
+                      type="button"
+                      key={tag}
+                      onClick={() =>
+                        toggleTag(tag)
+                      }
+                      disabled={loading}
+                      className={`px-3 py-2 rounded-lg text-xs font-semibold border transition ${
+                        selected
+                          ? "bg-orange-500 border-orange-500 text-white"
+                          : "bg-white border-gray-200 text-gray-600 hover:bg-gray-50"
+                      }`}
+                    >
+                      {selected && (
+                        <FiStar
+                          className="inline mr-1"
+                          size={10}
+                        />
+                      )}
+
+                      {tag}
+                    </button>
+                  );
+                }
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* SPICE / ORDER */}
+        <div
+          className={`grid gap-4 mt-6 ${
+            advancedEnabled
+              ? "sm:grid-cols-2"
+              : ""
+          }`}
+        >
+          {/* SPICE */}
+          <div>
+            <label
+              htmlFor="dish-spice"
+              className="block text-sm font-semibold mb-1"
+            >
+              Spice Level
+            </label>
+
+            <select
+              id="dish-spice"
+              name="spiceLevel"
+              value={
+                formData.spiceLevel
+              }
+              onChange={handleChange}
+              disabled={loading}
+              className="w-full border border-gray-200 rounded-lg px-3 py-3 outline-none focus:ring-2 focus:ring-orange-400"
+            >
+              <option value="">
+                Select spice level
+              </option>
+
+              <option value="mild">
+                Mild
+              </option>
+
+              <option value="medium">
+                Medium
+              </option>
+
+              <option value="hot">
+                Hot
+              </option>
+            </select>
           </div>
 
-        </form>
+          {/* DISPLAY ORDER */}
+          {advancedEnabled && (
+            <div>
+              <label
+                htmlFor="dish-display-order"
+                className="block text-sm font-semibold mb-1"
+              >
+                Menu Priority
+                <span className="text-gray-400 font-normal">
+                  {" "}
+                  (optional)
+                </span>
+              </label>
 
-      </div>
+              <input
+                id="dish-display-order"
+                type="number"
+                min="0"
+                name="displayOrder"
+                value={
+                  formData.displayOrder
+                }
+                onChange={handleChange}
+                disabled={loading}
+                className="w-full border border-gray-200 rounded-lg px-3 py-3 outline-none focus:ring-2 focus:ring-orange-400"
+              />
+
+              <p className="mt-1 text-xs text-gray-500">
+                Positive numbers appear first.
+                1 is highest priority. Use 0
+                for normal order.
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* BUTTONS */}
+        <div className="flex flex-col sm:flex-row gap-3 mt-7">
+          <button
+            type="submit"
+            disabled={loading}
+            className="flex-1 bg-orange-500 hover:bg-orange-600 text-white py-3 rounded-xl font-bold transition disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {loading
+              ? "Saving..."
+              : isEditing
+              ? "Update Dish"
+              : "Add Dish"}
+          </button>
+
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={loading}
+            className="sm:w-32 border border-gray-200 py-3 rounded-xl font-semibold hover:bg-gray-50 disabled:opacity-50"
+          >
+            Cancel
+          </button>
+        </div>
+      </form>
     </div>
+  );
+}
+
+function CheckOption({
+  label,
+  description,
+  checked,
+  onChange,
+  disabled = false,
+}) {
+  return (
+    <label
+      className={`flex items-center gap-3 border border-gray-200 rounded-lg px-4 py-3 ${
+        disabled
+          ? "opacity-60 cursor-not-allowed"
+          : "cursor-pointer hover:bg-gray-50"
+      }`}
+    >
+      <input
+        type="checkbox"
+        checked={Boolean(checked)}
+        onChange={(event) =>
+          onChange(
+            event.target.checked
+          )
+        }
+        disabled={disabled}
+        className="w-4 h-4 accent-orange-500"
+      />
+
+      <div>
+        <p className="text-sm font-semibold">
+          {label}
+        </p>
+
+        {description && (
+          <p className="text-xs text-gray-500">
+            {description}
+          </p>
+        )}
+      </div>
+    </label>
   );
 }
