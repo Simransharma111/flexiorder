@@ -1,37 +1,77 @@
-export const categoryName = (category) => String(
-  typeof category === "object"
-    ? category?.name || category?.label || category?.categoryName || ""
-    : category || ""
-).trim();
+// src/utils/menuCategories.js
 
-export const categoryId = (category) => (
-  typeof category === "object"
-    ? String(category?._id || category?.id || "").trim()
-    : ""
-);
+export const categoryName = (category) => {
+  if (!category) return "";
 
-export const categoryKey = (category) => categoryName(category).toLocaleLowerCase();
+  if (typeof category === "object") {
+    return String(
+      category.name ||
+      category.label ||
+      category.categoryName ||
+      ""
+    ).trim();
+  }
+
+  return String(category).trim();
+};
+
+export const categoryId = (category) => {
+  if (!category || typeof category !== "object") return "";
+
+  return String(
+    category._id ||
+    category.id ||
+    category.categoryId ||
+    ""
+  ).trim();
+};
+
+export const categoryKey = (category) =>
+  categoryName(category).toLocaleLowerCase();
 
 export const buildCategoryList = (dishes = [], defaults = []) => {
   const labels = new Map();
-  [...defaults, ...dishes.map((dish) => categoryName(dish.category))]
+
+  [
+    ...defaults,
+    ...dishes.map((dish) => dish?.categoryId || dish?.category)
+  ]
+    .map(categoryName)
     .filter(Boolean)
     .forEach((category) => {
       const key = categoryKey(category);
-      if (key !== "all" && !labels.has(key)) labels.set(key, category);
+
+      if (key !== "all" && !labels.has(key)) {
+        labels.set(key, category);
+      }
     });
+
   return ["All", ...labels.values()];
 };
 
 export const normalizeCategory = (category, categories = []) => {
   const name = categoryName(category);
-  return categories.find((existing) => categoryKey(existing) === categoryKey(name)) || name;
+
+  return (
+    categories.find(
+      (existing) =>
+        categoryKey(existing) === categoryKey(name)
+    ) || name
+  );
 };
 
-export const resolveCategoryReference = (category, dishes = []) => {
+export const resolveCategoryReference = (
+  category,
+  dishes = []
+) => {
   const name = categoryName(category);
+
   const match = dishes
-    .map((dish) => dish?.category)
-    .find((existing) => categoryKey(existing) === categoryKey(name));
-  return match || name;
+    .map((dish) => dish?.categoryId || dish?.category)
+    .find(
+      (existing) =>
+        categoryKey(existing) === categoryKey(name)
+    );
+
+  return match || category;
 };

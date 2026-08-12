@@ -1,109 +1,93 @@
-import {
-  PushNotifications,
-} from "@capacitor/push-notifications";
-
+import { PushNotifications } from "@capacitor/push-notifications";
 import { Device } from "@capacitor/device";
-
-import {
-  LocalNotifications,
-} from "@capacitor/local-notifications";
-
+import { LocalNotifications } from "@capacitor/local-notifications";
 import { orderLocation } from "./orderModel";
 
+const ORDER_CHANNEL_ID = "order_alerts_v2";
+
 export const initFCM = async (api) => {
-
   try {
-
     // =========================
     // DEVICE INFO
     // =========================
 
-    const info =
-      await Device.getInfo();
+    const info = await Device.getInfo();
 
-    // ONLY FOR ANDROID APK
     if (info.platform !== "android") {
-
-      console.log(
-        "FCM only enabled on Android"
-      );
-
+      console.log("FCM only enabled on Android");
       return;
     }
 
+    console.log("Initializing Android FCM...");
+
     // =========================
-    // PUSH PERMISSION
+    // NOTIFICATION PERMISSION
     // =========================
 
-    const permission =
+    const pushPermission =
       await PushNotifications.requestPermissions();
 
-    if (
-      permission.receive !== "granted"
-    ) {
-
-      console.log(
-        "Notification permission denied"
-      );
-
+    if (pushPermission.receive !== "granted") {
+      console.log("Push notification permission denied");
       return;
     }
 
-    await LocalNotifications.requestPermissions();
+    const localPermission =
+      await LocalNotifications.requestPermissions();
 
-    // CREATE HIGH IMPORTANCE CHANNEL FOR ORDER ALERTS
+    if (localPermission.display !== "granted") {
+      console.log("Local notification permission denied");
+    }
+
+    // =========================
+    // CREATE NOTIFICATION CHANNEL
+    // =========================
+
     try {
       await LocalNotifications.createChannel({
-        id: "orders",
-        name: "Order Alerts",
-        description: "Get alerts when new orders are placed",
+        id: ORDER_CHANNEL_ID,
+        name: "New Order Alerts",
+        description: "Alerts for new restaurant orders",
         importance: 5,
-        sound: "orders_received.mp3",
+        sound: "orders_received",
         visibility: 1,
         vibration: true,
         lights: true,
         lightColor: "#F97316",
       });
-      console.log("Local notification channel 'orders' created successfully");
-    } catch (channelErr) {
-      console.warn("Could not create local notification channel", channelErr);
+
+      console.log(
+        "Order notification channel created:",
+        ORDER_CHANNEL_ID
+      );
+    } catch (err) {
+      console.warn(
+        "Notification channel creation failed:",
+        err
+      );
     }
 
     // =========================
-    // REGISTER DEVICE
+    // PUSH LISTENERS
     // =========================
 
-    await PushNotifications.register();
-
-    // =========================
-    // TOKEN RECEIVED
-    // =========================
-
-    PushNotifications.addListener(
+    await PushNotifications.addListener(
       "registration",
       async (token) => {
+        console.log(
+          "FCM TOKEN:",
+          token.value
+        );
 
         try {
-
           const authToken =
-            localStorage.getItem(
-              "token"
-            ) ||
-            sessionStorage.getItem(
-              "token"
-            );
+            localStorage.getItem("token") ||
+            sessionStorage.getItem("token");
 
           if (!authToken) {
-
-            console.log(
-              "No auth token found"
-            );
-
+            console.log("No auth token found");
             return;
-
           }
-
-          // SAVE TOKEN TO DATABASE
 
           await api.post(
             "/notifications/save-token",
@@ -112,8 +96,7 @@ export const initFCM = async (api) => {
             },
             {
               headers: {
-                Authorization:
-                  `Bearer ${authToken}`,
+                Authorization: `Bearer ${authToken}`,
               },
             }
           );
@@ -121,72 +104,65 @@ export const initFCM = async (api) => {
           console.log(
             "FCM token saved successfully"
           );
-
         } catch (err) {
-
-          console.log(
-            "Failed to save FCM token",
+          console.error(
+            "Failed to save FCM token:",
             err
           );
-
         }
-
       }
     );
 
-    // =========================
-    // REGISTRATION ERROR
-    // =========================
-
-    PushNotifications.addListener(
+    await PushNotifications.addListener(
       "registrationError",
       (err) => {
-
-        console.log(
-          "FCM Registration Error",
+        console.error(
+          "FCM registration error:",
           err
         );
-
       }
     );
 
     // =========================
-    // FOREGROUND NOTIFICATION
+    // FOREGROUND PUSH
     // =========================
 
-    PushNotifications.addListener(
+    await PushNotifications.addListener(
       "pushNotificationReceived",
       async (notification) => {
-
         console.log(
-          "Notification Received",
+          "FOREGROUND PUSH RECEIVED:",
           notification
         );
 
+        // -------------------------
+        // PLAY WEBVIEW AUDIO
+        // -------------------------
+
         try {
-
-          // PLAY SOUND INSIDE APP
-
-          const audio =
-            new Audio(
-              "/orders_received.mp3"
-            );
-
-          audio.play();
-
-        } catch (err) {
-
-          console.log(
-            "Audio play failed",
-            err
+          const audio = new Audio(
+            "/orders_received.mp3"
           );
 
+          audio.volume = 1.0;
+
+          await audio.play();
+
+          console.log(
+            "Order audio played"
+          );
+        } catch (err) {
+          console.warn(
+            "WebView audio failed:",
+            err
+          );
         }
 
-        // SHOW SYSTEM NOTIFICATION
+        // -------------------------
+        // SHOW NATIVE NOTIFICATION
+        // -------------------------
 
         try {
-
           await LocalNotifications.schedule({
             notifications: [
               {
@@ -200,30 +176,32 @@ export const initFCM = async (api) => {
                   notification.body ||
                   "You received a new order",
 
-                sound:
-                  "orders_received.mp3",
-
                 channelId:
-                  "orders",
+                  ORDER_CHANNEL_ID,
+
+                sound:
+                  "orders_received",
 
                 smallIcon:
                   "ic_launcher",
 
                 iconColor:
                   "#F97316",
+
+                autoCancel: true,
               },
             ],
           });
 
-        } catch (err) {
-
           console.log(
-            "Local notification failed",
+            "Local order notification scheduled"
+          );
+        } catch (err) {
+          console.error(
+            "Local notification failed:",
             err
           );
-
         }
-
       }
     );
 
@@ -231,59 +209,117 @@ export const initFCM = async (api) => {
     // NOTIFICATION CLICK
     // =========================
 
-    PushNotifications.addListener(
+    await PushNotifications.addListener(
       "pushNotificationActionPerformed",
-      (notification) => {
-
+      (event) => {
         console.log(
-          "Notification Clicked",
-          notification
+          "Notification clicked:",
+          event
         );
-
       }
     );
 
-  } catch (err) {
+    // =========================
+    // REGISTER
+    // =========================
+
+    await PushNotifications.register();
 
     console.log(
-      "FCM INIT ERROR",
-      err
+      "FCM registration requested"
     );
 
+  } catch (err) {
+    console.error(
+      "FCM INIT ERROR:",
+      err
+    );
   }
-
 };
 
-export const triggerLocalOrderNotification = async (order) => {
+// =====================================================
+// LOCAL ORDER ALERT
+// =====================================================
+
+export const triggerLocalOrderNotification = async (
+  order
+) => {
   if (!order) return;
 
-  // 1. Play audio in frontend
+  // =========================
+  // WEBVIEW AUDIO
+  // =========================
+
   try {
-    const audio = new Audio("/orders_received.mp3");
+    const audio = new Audio(
+      "/orders_received.mp3"
+    );
+
+    audio.volume = 1.0;
+
     await audio.play();
+
+    console.log(
+      "Local order audio played"
+    );
   } catch (err) {
-    console.warn("Audio play blocked/failed", err);
+    console.warn(
+      "Local order audio failed:",
+      err
+    );
   }
 
-  // 2. Schedule native local notification
+  // =========================
+  // NATIVE NOTIFICATION
+  // =========================
+
   try {
     const location = orderLocation(order);
-    const count = (order.items || []).reduce((sum, item) => sum + Number(item.quantity || 1), 0);
-    
+
+    const count = (
+      order.items || []
+    ).reduce(
+      (sum, item) =>
+        sum +
+        Number(item.quantity || 1),
+      0
+    );
+
     await LocalNotifications.schedule({
       notifications: [
         {
           id: Date.now(),
-          title: `New Order - ${location}`,
-          body: `Received an order with ${count} items.`,
-          sound: "orders_received.mp3",
-          channelId: "orders",
-          smallIcon: "ic_launcher",
-          iconColor: "#F97316",
+
+          title:
+            `New Order - ${location}`,
+
+          body:
+            `Received an order with ${count} items.`,
+
+          channelId:
+            ORDER_CHANNEL_ID,
+
+          sound:
+            "orders_received",
+
+          smallIcon:
+            "ic_launcher",
+
+          iconColor:
+            "#F97316",
+
+          autoCancel: true,
         },
       ],
     });
+
+    console.log(
+      "Native order notification sent"
+    );
   } catch (err) {
-    console.log("Local notification trigger failed", err);
+    console.error(
+      "Local notification trigger failed:",
+      err
+    );
   }
 };

@@ -198,46 +198,99 @@ export default function OwnerMenuManager({ advancedEnabled = false, restaurant =
   // SUBMIT
   // =====================================================
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (savingInFlight.current) return;
+ const handleSubmit = async (e) => {
+  e.preventDefault();
 
-    const enteredCategory = categoryName(formData.category);
-    if (!enteredCategory) {
-      alert("Enter a category name.");
-      return;
-    }
-    if (categoryKey(enteredCategory) === "all") {
-      alert('“All” is reserved for viewing the full menu. Choose another category name.');
-      return;
-    }
-    const normalizedCategory = normalizeCategory(enteredCategory, categories);
-    const categoryReference = resolveCategoryReference(normalizedCategory, dishes);
+  if (savingInFlight.current) return;
 
-    try {
-      savingInFlight.current = true;
-      setLoading(true);
-      setFeedback("");
-      const image = await readImageForStorage(imageFile);
-      const fields = dishFieldsFromForm(formData, categoryReference);
-      if (editingId) {
-        enqueueMenuUpdate(hotelId, editingId, fields, image);
-        setFeedback("Dish updated here. FlexiOrder will sync it automatically.");
-      } else {
-        enqueueMenuCreate(hotelId, fields, image);
-        setFeedback("Dish added here. FlexiOrder will sync it automatically.");
-      }
-      setDishes(readMenuCache(hotelId));
-      resetForm();
-      requestBackgroundSync();
-    } catch (err) {
-      console.error(err);
-      setLoadError(err?.message || "The dish could not be saved. Check the details and try again.");
-    } finally {
-      savingInFlight.current = false;
-      setLoading(false);
+  const enteredCategory = String(formData.category || "").trim();
+
+  if (!enteredCategory) {
+    setLoadError("Please enter a category.");
+    return;
+  }
+
+  if (enteredCategory.toLowerCase() === "all") {
+    setLoadError('“All” is reserved for viewing the complete menu. Please choose another category.');
+    return;
+  }
+
+  if (!formData.name.trim()) {
+    setLoadError("Dish name is required.");
+    return;
+  }
+
+  if (!formData.price || Number(formData.price) < 0) {
+    setLoadError("Please enter a valid price.");
+    return;
+  }
+
+  if (!formData.prepTime || Number(formData.prepTime) < 0) {
+    setLoadError("Please enter preparation time.");
+    return;
+  }
+
+  try {
+    savingInFlight.current = true;
+    setLoading(true);
+    setLoadError("");
+    setFeedback("");
+
+    const image = await readImageForStorage(imageFile);
+
+    /*
+     * IMPORTANT:
+     * Send category as the category NAME.
+     * Do not convert it to a MenuCategory ObjectId here.
+     */
+    const fields = dishFieldsFromForm(formData, enteredCategory);
+
+    console.log("SAVING DISH:", {
+      hotelId,
+      fields,
+    });
+
+    if (editingId) {
+      enqueueMenuUpdate(
+        hotelId,
+        editingId,
+        fields,
+        image
+      );
+
+      setFeedback(
+        "Dish updated. FlexiOrder will sync it automatically."
+      );
+    } else {
+      enqueueMenuCreate(
+        hotelId,
+        fields,
+        image
+      );
+
+      setFeedback(
+        "Dish added. FlexiOrder will sync it automatically."
+      );
     }
-  };
+
+    setDishes(readMenuCache(hotelId));
+
+    resetForm();
+
+    requestBackgroundSync();
+  } catch (err) {
+    console.error("SAVE DISH ERROR:", err);
+
+    setLoadError(
+      err?.response?.data?.message ||
+      err?.message ||
+      "The dish could not be saved."
+    );
+  } finally {
+    savingInFlight.current = false;
+    setLoading(false);
+  }
+};
 
   // =====================================================
   // RESET
