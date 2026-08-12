@@ -36,6 +36,18 @@ export const AuthProvider = ({
     };
   }, []);
 
+  useEffect(() => {
+    if (user) {
+      import("../utils/fcmPush").then(({ initFCM }) => {
+        import("../api/axios").then(({ default: api }) => {
+          initFCM(api).catch((err) => {
+            console.warn("FCM registration on session restore failed", err);
+          });
+        });
+      });
+    }
+  }, [user]);
+
   // LOGIN
   const login = (
     userData,
