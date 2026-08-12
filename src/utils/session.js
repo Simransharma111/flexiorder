@@ -1,4 +1,4 @@
-import { getRestaurantId } from "./storageScope";
+import { getRestaurantId } from "./storageScope.js";
 
 export const AUTH_CLEARED_EVENT = "flexiorder:auth-cleared";
 
