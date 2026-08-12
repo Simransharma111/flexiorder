@@ -3,9 +3,12 @@ name: Test Pipeline
 on:
   push:
     branches: [main]
+
   pull_request:
     branches: [main]
+
   workflow_dispatch:
+
   schedule:
     - cron: "0 2 * * 0"
 
@@ -17,6 +20,11 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+
+  # ============================================================
+  # LINT / UNIT TESTS / BUILD
+  # ============================================================
+
   lint:
     name: Lint, Unit Tests & Build
     runs-on: ubuntu-latest
@@ -41,6 +49,11 @@ jobs:
       - name: Audit dependencies
         run: npm run audit:ci
 
+
+  # ============================================================
+  # PLAYWRIGHT E2E TESTS
+  # ============================================================
+
   test:
     name: E2E Tests (${{ matrix.shard }}/2)
     runs-on: ubuntu-latest
@@ -49,6 +62,7 @@ jobs:
 
     strategy:
       fail-fast: false
+
       matrix:
         shard: [1, 2]
 
@@ -79,7 +93,20 @@ jobs:
       - name: Run Playwright shard
         env:
           PLAYWRIGHT_SHARD: ${{ matrix.shard }}
-        run: npm run test:e2e:ci -- --shard=${{ matrix.shard }}/2
+        run: |
+          npm run test:e2e:ci -- --shard=${{ matrix.shard }}/2
+
+      - name: Check blob report
+        if: always()
+        run: |
+          echo "Checking Playwright blob report..."
+
+          if [ -d "blob-report" ]; then
+            echo "blob-report directory exists."
+            find blob-report -maxdepth 2 -type f -print || true
+          else
+            echo "WARNING: blob-report directory does not exist."
+          fi
 
       - name: Upload blob report
         if: always()
@@ -87,7 +114,7 @@ jobs:
         with:
           name: playwright-blob-${{ matrix.shard }}
           path: blob-report/
-          if-no-files-found: error
+          if-no-files-found: warn
           retention-days: 14
 
       - name: Upload failure diagnostics and JUnit results
@@ -98,6 +125,11 @@ jobs:
           path: test-results/
           if-no-files-found: warn
           retention-days: 14
+
+
+  # ============================================================
+  # ANDROID
+  # ============================================================
 
   android:
     name: Android Unit Test & Debug Build
@@ -130,7 +162,9 @@ jobs:
 
       - name: Run Android tests and build APK
         working-directory: android
-        run: ./gradlew testDebugUnitTest assembleDebug
+        run: |
+          chmod +x gradlew
+          ./gradlew testDebugUnitTest assembleDebug
 
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
@@ -140,11 +174,17 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+
+  # ============================================================
+  # BURN-IN / FLAKY TEST DETECTION
+  # ============================================================
+
   burn-in:
     name: Burn-In (Flaky Detection)
     runs-on: ubuntu-latest
     timeout-minutes: 60
     needs: test
+
     if: github.event_name == 'pull_request' || github.event_name == 'schedule'
 
     steps:
@@ -172,8 +212,19 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Run burn-in suite
+        env:
+          PLAYWRIGHT_SHARD: burn-in
         run: |
           npm run test:e2e:ci -- --repeat-each=10
+
+      - name: Upload burn-in blob report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-burn-in-blob
+          path: blob-report/
+          if-no-files-found: warn
+          retention-days: 30
 
       - name: Upload burn-in failure diagnostics
         if: failure()
@@ -186,20 +237,37 @@ jobs:
           if-no-files-found: warn
           retention-days: 30
 
+
+  # ============================================================
+  # FINAL REPORT
+  # ============================================================
+
   report:
     name: Test Report
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    needs: [lint, test, android, burn-in]
+
+    needs:
+      - lint
+      - test
+      - android
+      - burn-in
+
     if: always()
 
     steps:
+
+      # ----------------------------------------------------------
+      # WORKFLOW SUMMARY
+      # ----------------------------------------------------------
+
       - name: Write workflow summary
         env:
           QUALITY_RESULT: ${{ needs.lint.result }}
           E2E_RESULT: ${{ needs.test.result }}
           ANDROID_RESULT: ${{ needs.android.result }}
           BURN_IN_RESULT: ${{ needs.burn-in.result }}
+
         run: |
           {
             echo "## FlexiOrder quality summary"
@@ -212,7 +280,13 @@ jobs:
             echo "- Shards: 2"
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Download shard reports
+
+      # ----------------------------------------------------------
+      # DOWNLOAD PLAYWRIGHT BLOB REPORTS
+      # ----------------------------------------------------------
+
+      - name: Download Playwright blob reports
+        id: download-reports
         continue-on-error: true
         uses: actions/download-artifact@v4
         with:
@@ -220,18 +294,54 @@ jobs:
           path: all-blob-reports
           merge-multiple: true
 
-      - name: Detect downloaded reports
+
+      # ----------------------------------------------------------
+      # CHECK WHETHER REPORTS EXIST
+      # ----------------------------------------------------------
+
+      - name: Detect Playwright reports
         id: reports
         run: |
-          if find all-blob-reports -name '*.zip' -print -quit 2>/dev/null | grep -q .; then
-            echo "found=true" >> "$GITHUB_OUTPUT"
+          echo "=========================================="
+          echo "Checking Playwright blob reports"
+          echo "=========================================="
+
+          if [ -d "all-blob-reports" ]; then
+            echo "Directory exists:"
+            ls -la all-blob-reports || true
           else
-            echo "found=false" >> "$GITHUB_OUTPUT"
+            echo "Directory does not exist."
           fi
+
+          if [ -d "all-blob-reports" ] && \
+             find all-blob-reports -type f -name '*.zip' -print -quit | grep -q .; then
+
+            echo "Playwright blob reports found."
+            echo "found=true" >> "$GITHUB_OUTPUT"
+
+            echo "Files:"
+            find all-blob-reports -type f -print
+
+          else
+
+            echo "No Playwright blob reports found."
+            echo "found=false" >> "$GITHUB_OUTPUT"
+
+          fi
+
+
+      # ----------------------------------------------------------
+      # CHECKOUT ONLY IF REPORT EXISTS
+      # ----------------------------------------------------------
 
       - name: Check out repository
         if: steps.reports.outputs.found == 'true'
         uses: actions/checkout@v4
+
+
+      # ----------------------------------------------------------
+      # NODE ONLY IF REPORT EXISTS
+      # ----------------------------------------------------------
 
       - name: Set up Node.js
         if: steps.reports.outputs.found == 'true'
@@ -240,13 +350,33 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
 
+
+      # ----------------------------------------------------------
+      # INSTALL PLAYWRIGHT
+      # ----------------------------------------------------------
+
       - name: Install dependencies
         if: steps.reports.outputs.found == 'true'
         run: npm ci
 
+
+      # ----------------------------------------------------------
+      # MERGE PLAYWRIGHT REPORTS
+      # ----------------------------------------------------------
+
       - name: Merge Playwright reports
         if: steps.reports.outputs.found == 'true'
-        run: npx playwright merge-reports --reporter html ./all-blob-reports
+        run: |
+          echo "Merging Playwright blob reports..."
+
+          npx playwright merge-reports \
+            --reporter html \
+            ./all-blob-reports
+
+
+      # ----------------------------------------------------------
+      # UPLOAD HTML REPORT
+      # ----------------------------------------------------------
 
       - name: Upload merged HTML report
         if: steps.reports.outputs.found == 'true'
@@ -256,3 +386,16 @@ jobs:
           path: playwright-report/
           if-no-files-found: error
           retention-days: 30
+
+
+      # ----------------------------------------------------------
+      # NO REPORT MESSAGE
+      # ----------------------------------------------------------
+
+      - name: No Playwright report available
+        if: steps.reports.outputs.found != 'true'
+        run: |
+          echo "=========================================="
+          echo "No Playwright blob reports were available."
+          echo "Skipping HTML report generation."
+          echo "=========================================="
