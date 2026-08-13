@@ -8,6 +8,12 @@ export default function DishCard({ dish, quantity, onAdd, onDecrease, orderingEn
   const foodType = String(dish.foodType || "").toLowerCase().replace(/[\s_-]/g, "");
   const nonVeg = ["nonveg", "nonvegetarian"].includes(foodType);
   const knownType = nonVeg || ["veg", "vegetarian"].includes(foodType);
+  const category = String(dish.category?.name || dish.categoryName || dish.category || "").toLowerCase();
+  const placeholder = category.includes("dessert") || category.includes("sweet")
+    ? "🍰" : category.includes("drink") || category.includes("beverage")
+      ? "🥤" : category.includes("bread") || category.includes("starter")
+        ? "🥗" : category.includes("rice") || category.includes("main")
+          ? "🍛" : nonVeg ? "🍗" : "🍽️";
   const activate = () => {
     if (orderingEnabled) {
       setRevealed(true);
@@ -27,7 +33,7 @@ export default function DishCard({ dish, quantity, onAdd, onDecrease, orderingEn
       }
     }}
   >
-    {dish.image ? <img src={dish.image} alt="" /> : <div className="guest-visual-dish__placeholder" aria-hidden="true">{dish.name?.charAt(0)}</div>}
+    {dish.image ? <img src={dish.image} alt="" /> : <div className="guest-visual-dish__placeholder" aria-hidden="true"><span>{placeholder}</span><small>{dish.name?.charAt(0)}</small></div>}
     <div className="guest-visual-dish__content">
       <div className="guest-visual-dish__title"><span className={`food-mark ${nonVeg ? "is-nonveg" : knownType ? "is-veg" : "is-unknown"}`} /><strong>{dish.name}</strong></div>
       {dish.description && <p>{dish.description}</p>}
