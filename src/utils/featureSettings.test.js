@@ -65,6 +65,51 @@ describe("feature settings", () => {
     }).featureSettings.godModeEnabled).toBe(false);
   });
 
+  it("applies literal restaurant-scoped ordering updates and rejects malformed events", () => {
+    const hotel = { _id: "hotel-1", orderingEnabled: true };
+    expect(applyHotelSettingsUpdate(hotel, {
+      hotelId: "hotel-1",
+      orderingEnabled: false,
+    }).orderingEnabled).toBe(false);
+    expect(applyHotelSettingsUpdate(hotel, {
+      hotelId: "hotel-2",
+      orderingEnabled: false,
+    })).toBe(hotel);
+    expect(applyHotelSettingsUpdate(hotel, {
+      hotelId: "hotel-1",
+      orderingEnabled: "false",
+    })).toBe(hotel);
+    expect(applyHotelSettingsUpdate(hotel, {
+      orderingEnabled: false,
+    })).toBe(hotel);
+    expect(applyHotelSettingsUpdate(hotel, {
+      hotelId: "hotel-1",
+      hotel: "malformed",
+      orderingEnabled: false,
+    })).toBe(hotel);
+  });
+
+  it("does not let an older scoped event reverse newer confirmed settings", () => {
+    const hotel = {
+      _id: "hotel-1",
+      orderingEnabled: false,
+      updatedAt: "2026-08-13T10:00:02.000Z",
+    };
+    expect(applyHotelSettingsUpdate(hotel, {
+      hotelId: "hotel-1",
+      orderingEnabled: true,
+      updatedAt: "2026-08-13T10:00:01.000Z",
+    })).toBe(hotel);
+    expect(applyHotelSettingsUpdate(hotel, {
+      hotelId: "hotel-1",
+      orderingEnabled: true,
+      updatedAt: "2026-08-13T10:00:03.000Z",
+    })).toMatchObject({
+      orderingEnabled: true,
+      updatedAt: "2026-08-13T10:00:03.000Z",
+    });
+  });
+
   it("merges partial realtime capabilities without resetting omitted permissions", () => {
     const hotel = {
       _id: "hotel-1",

@@ -1,6 +1,10 @@
 import { FiAlertCircle, FiCheckCircle, FiClock, FiCreditCard, FiShoppingBag, FiGlobe, FiMapPin } from "react-icons/fi";
 
-export default function DashboardHome({ stats, hotel, setActiveTab }) {
+export default function DashboardHome({
+  stats,
+  hotel,
+  setActiveTab,
+}) {
   const metrics = [
     { 
       label: "Revenue", 

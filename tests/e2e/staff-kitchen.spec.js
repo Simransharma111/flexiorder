@@ -37,6 +37,7 @@ test("waiter saves an offline order and automatically syncs it after reconnectio
 
   await expect(page.getByLabel("Offline")).toBeVisible();
   await expect(page.getByText("Syncing", { exact: true })).toBeVisible();
+  await expect(page.locator(".ops-sync-strip, .ops-attention-panel")).toHaveCount(0);
   await page.getByRole("button", { name: /^Accept Table 8 order/ }).click();
   await expect(page.locator(".ops-order-card--preparing")).toBeVisible();
   await page.getByRole("button", { name: /^Finish Table 8 order/ }).click();
@@ -68,6 +69,7 @@ test("waiter saves an offline order and automatically syncs it after reconnectio
     const key = Object.keys(localStorage).find((item) => item.startsWith("flexiorder_pending_staff_orders:"));
     return JSON.parse(localStorage.getItem(key) || "[]").length;
   })).toBe(0);
+  await expect(page.locator(".ops-sync-strip, .ops-attention-panel")).toHaveCount(0);
   await page.getByRole("tab", { name: "History" }).click();
   await expect(page.getByRole("button", { name: "More options for Table 8" })).toHaveCount(1);
 });
@@ -296,7 +298,8 @@ test("kitchen queues a status change offline and replays it with a mutation id",
   await context.setOffline(true);
   await orderCard.click();
   await expect(page.getByLabel("Offline")).toBeVisible();
-  await expect(page.getByText(/1 syncing/)).toBeVisible();
+  await expect(page.locator(".ops-order-card--preparing").getByText("Syncing", { exact: true })).toBeVisible();
+  await expect(page.locator(".ops-sync-strip, .ops-attention-panel")).toHaveCount(0);
 
   const queued = await page.evaluate(() => {
     const key = Object.keys(localStorage).find((item) => item.startsWith("flexiorder_pending_kitchen_updates:"));
@@ -379,7 +382,7 @@ test("paused orders resume preparing with one tap", async ({ page }) => {
   await expect.poll(() => statuses).toEqual(["preparing"]);
 });
 
-test("terminal status rejection offers restore confirmed recovery", async ({ page }) => {
+test("attention from a terminal status rejection offers restore confirmed recovery", async ({ page }) => {
   await installSession(page, "staff");
   const pendingOrder = kitchenOrder();
   await page.route("**/hotel/me", (route) => fulfillJson(route, hotel));
@@ -392,10 +395,25 @@ test("terminal status rejection offers restore confirmed recovery", async ({ pag
   await page.getByRole("button", { name: /^Accept Table 8 order/ }).click();
   await expect(page.locator(".ops-order-card--preparing")).toBeVisible();
   await expect(page.getByText("1 need attention")).toBeVisible();
+  await expect(page.locator(".ops-attention-panel")).toBeVisible();
   await expect(page.getByRole("button", { name: "Retry" })).toBeVisible();
   await page.getByRole("button", { name: "Restore confirmed" }).click();
   await expect(page.locator(".ops-order-card--new")).toBeVisible();
   await expect(page.getByText("1 need attention")).toHaveCount(0);
+});
+
+test("staff menu connection status uses the compact header indicator", async ({ page, context }) => {
+  await installSession(page, "staff");
+  await page.route("**/hotel/me", (route) => fulfillJson(route, { hotel }));
+  await page.route("**/menu/hotel-1", (route) => fulfillJson(route, []));
+
+  await page.goto("/staff/menu");
+  await expect(page.locator(".staff-menu-header .ops-connection-dot")).toBeVisible();
+  await expect(page.locator(".ops-sync-strip, .ops-attention-panel")).toHaveCount(0);
+
+  await context.setOffline(true);
+  await expect(page.locator(".staff-menu-header").getByLabel("Offline")).toBeVisible();
+  await expect(page.locator(".ops-sync-strip, .ops-attention-panel")).toHaveCount(0);
 });
 
 test("delivered leaves active orders immediately and history exposes full details", async ({ page }) => {
@@ -817,6 +835,40 @@ test("customer ordering pause does not block permitted staff ordering", async ({
   await page.getByRole("tab", { name: "Take Order" }).click();
   await page.getByRole("button", { name: "Table 8" }).click();
   await expect(page.getByRole("button", { name: "Add Paneer Tikka" })).toBeVisible();
+});
+
+test("waiter ordering toggle rolls back a failed save and uses confirmed server state", async ({ page }) => {
+  await installSession(page, "staff");
+  await mockStaffWorkspace(page);
+  let attempts = 0;
+  const payloads = [];
+  await page.route("**/hotel/profile", async (route) => {
+    attempts += 1;
+    const payload = route.request().postDataJSON();
+    payloads.push(payload);
+    if (attempts === 1) {
+      return fulfillJson(route, { message: "Setting could not be saved" }, 500);
+    }
+    return fulfillJson(route, {
+      hotel: { ...hotel, orderingEnabled: payload.orderingEnabled },
+    });
+  });
+  page.on("dialog", (dialog) => dialog.accept());
+
+  await page.goto("/owner/order");
+  await page.getByRole("button", { name: "More waiter options" }).click();
+  await page.getByRole("button", { name: /More settings/ }).click();
+  const pauseButton = page.getByRole("button", { name: "Pause customer ordering" });
+  await pauseButton.click();
+  await expect(pauseButton).toBeEnabled();
+  await expect(pauseButton).toBeVisible();
+
+  await pauseButton.click();
+  await expect(page.getByRole("button", { name: "Turn customer ordering on" })).toBeVisible();
+  expect(payloads).toEqual([
+    { orderingEnabled: false },
+    { orderingEnabled: false },
+  ]);
 });
 
 test("customer visual and simple menus use the same compact subcategory chooser", async ({ page }) => {

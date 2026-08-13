@@ -1,7 +1,7 @@
 let snapshot = {
-  reachability: typeof navigator === "undefined"
-    ? "connecting"
-    : navigator.onLine ? "connecting" : "offline",
+  // Start conservatively while the first real API request is in flight. Mobile
+  // WebViews can report navigator.onLine=false even when Wi-Fi/cellular works.
+  reachability: "connecting",
   syncing: false,
   lastSuccessAt: null,
 };
@@ -20,16 +20,19 @@ export const subscribeConnectivity = (listener) => {
 };
 
 export const reportApiRequest = () => {
-  if (typeof navigator !== "undefined" && navigator.onLine && snapshot.reachability === "offline") {
+  if (snapshot.reachability === "offline") {
     publish({ reachability: "connecting" });
   }
 };
 
 export const reportApiSuccess = () => publish({
-  reachability: typeof navigator !== "undefined" &&
-    typeof navigator.onLine === "boolean" && !navigator.onLine
-    ? "offline"
-    : "online",
+  // Android WebView can report false during USB reverse transitions while
+  // the forwarded API is reachable. Preserve browser offline-cache semantics.
+  reachability:
+    (typeof navigator !== "undefined" && navigator.onLine) ||
+    Capacitor.isNativePlatform()
+      ? "online"
+      : "offline",
   lastSuccessAt: new Date().toISOString(),
 });
 
@@ -55,3 +58,4 @@ export const startConnectivityMonitoring = () => {
     window.removeEventListener("offline", handleOffline);
   };
 };
+import { Capacitor } from "@capacitor/core";

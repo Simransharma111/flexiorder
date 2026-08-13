@@ -1,6 +1,8 @@
 import {
+  useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 
@@ -38,7 +40,7 @@ import { mergeOrders, reconcileAuthoritativeOrders } from "../utils/orderModel";
 import { getPendingKitchenUpdates } from "../utils/offlineKitchenUpdates";
 import { clearAuthSession } from "../utils/session";
 import { getHotelThemeStyle } from "../utils/hotelTheme";
-import { featureEnabled, getFeatureSettings, hydrateHotelFeatures } from "../utils/featureSettings";
+import { applyHotelSettingsUpdate, featureEnabled, getFeatureSettings, hydrateHotelFeatures } from "../utils/featureSettings";
 import { getScopedStorageKey, rememberRestaurantId } from "../utils/storageScope";
 import { useConnectivity } from "../context/ConnectivityContext";
 
@@ -131,6 +133,10 @@ const [loadingOrders,setLoadingOrders]=useState(false);
 const [newOrderCount,setNewOrderCount]=useState(0);
 
 const [refreshKey,setRefreshKey]=useState(0);
+const [orderingPending,setOrderingPending]=useState(false);
+const [orderingError,setOrderingError]=useState("");
+const orderingSaveInFlight=useRef(false);
+const orderingRevision=useRef(0);
 
 
 
@@ -300,6 +306,88 @@ newOrderHandler
 },[
 hotel
 ]);
+
+const ownerHotelId = hotel?._id || hotel?.id;
+
+useEffect(() => {
+  if (!ownerHotelId) return undefined;
+
+  const joinSettings = () => socket.emit("joinHotelSettings", String(ownerHotelId));
+  const handleSettingsUpdate = (payload) => {
+    const incoming = payload?.orderingEnabled ?? payload?.hotel?.orderingEnabled;
+    const incomingHotelId = String(
+      payload?.hotelId || payload?.hotel?._id || payload?.hotel?.id || ""
+    );
+    if (
+      typeof incoming !== "boolean" ||
+      incomingHotelId !== String(ownerHotelId)
+    ) return;
+
+    orderingRevision.current += 1;
+    setHotel((current) => applyHotelSettingsUpdate(current, payload));
+    setOrderingError("");
+  };
+
+  joinSettings();
+  socket.on("connect", joinSettings);
+  socket.on("hotelSettingsUpdated", handleSettingsUpdate);
+
+  return () => {
+    socket.emit("leaveHotelSettings", String(ownerHotelId));
+    socket.off("connect", joinSettings);
+    socket.off("hotelSettingsUpdated", handleSettingsUpdate);
+  };
+}, [ownerHotelId]);
+
+useEffect(() => {
+  if (!hotel || !ownerHotelId) return;
+  rememberRestaurantId(hotel);
+  localStorage.setItem(
+    getScopedStorageKey(HOTEL_CACHE_KEY),
+    JSON.stringify(hotel)
+  );
+}, [hotel, ownerHotelId]);
+
+const changeOrdering = useCallback(async (nextEnabled) => {
+  if (typeof nextEnabled !== "boolean" || orderingSaveInFlight.current) return;
+
+  const previousHotel = hotel;
+  const requestRevision = ++orderingRevision.current;
+  orderingSaveInFlight.current = true;
+  setOrderingPending(true);
+  setOrderingError("");
+
+  try {
+    const response = await api.patch("/hotel/profile", {
+      orderingEnabled: nextEnabled,
+    });
+    const confirmed = response.data?.hotel || response.data;
+
+    if (!confirmed || typeof confirmed.orderingEnabled !== "boolean") {
+      throw new Error("The restaurant did not confirm the ordering setting.");
+    }
+
+    if (requestRevision === orderingRevision.current) {
+      setHotel((current) => hydrateHotelFeatures({
+        ...current,
+        orderingEnabled: confirmed.orderingEnabled,
+        updatedAt: confirmed.updatedAt || current?.updatedAt,
+      }));
+    }
+  } catch (error) {
+    if (requestRevision === orderingRevision.current) {
+      setHotel(previousHotel);
+      setOrderingError(
+        error?.response?.data?.message ||
+          error?.message ||
+          "The ordering setting could not be saved. Try again."
+      );
+    }
+  } finally {
+    orderingSaveInFlight.current = false;
+    setOrderingPending(false);
+  }
+}, [hotel]);
 
 
 
@@ -628,6 +716,12 @@ stats={stats}
 hotel={hotel}
 
 setActiveTab={setActiveTab}
+
+onOrderingChange={changeOrdering}
+
+orderingPending={orderingPending}
+
+orderingError={orderingError}
 
 primaryColor={primaryColor}
 

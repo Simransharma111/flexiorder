@@ -3,21 +3,32 @@ import api from "../api/axios";
 import { sortDishesForDisplay } from "../utils/menuOrdering";
 import {
   buildCategoryList,
+  categoryId,
   categoryKey,
   categoryName,
+  dishCategoryName,
+  findCategoryByName,
+  normalizeCategoryRecord,
 } from "../utils/menuCategories";
-import { readMenuCache } from "../utils/offlineMenu";
 import {
   enqueueMenuCreate,
   enqueueMenuDelete,
   enqueueMenuUpdate,
   getMenuSyncSummary,
   MENU_CHANGED_EVENT,
+  readMenuCache,
+  readMenuCategoryCache,
   reconcileMenuFromServer,
   requestBackgroundSync,
   retryMenuMutations,
+  writeMenuCategoryCache,
 } from "../utils/offlineMenu";
 import { getRestaurantId } from "../utils/storageScope";
+import {
+  MENU_TRANSFER_MAX_BYTES,
+  parseMenuImport,
+  serializeMenuExport,
+} from "../utils/menuTransfer";
 import { useAuth } from "../context/AuthContext";
 import { useConnectivity } from "../context/ConnectivityContext";
 import {
@@ -46,35 +57,12 @@ const DEFAULT_CATEGORIES = [
   "Breakfast",
 ];
 
-const EMPTY_FORM = {
-  name: "",
-  description: "",
-  category: "Main Course",
-  foodType: "veg",
-  containsEgg: false,
-  price: "",
-  discountType: "percentage",
-  discountValue: "",
-  prepTime: "",
-  isAvailable: true,
-  isRecommended: false,
-  isBestseller: false,
-  featured: false,
-  todaySpecial: false,
-  isPopular: false,
-  isNewArrival: false,
-  chefChoice: false,
-  spiceLevel: "",
-  tags: [],
-  displayOrder: 0,
-};
-
 export default function OwnerMenuManager({
   advancedEnabled = false,
   restaurant = null,
 }) {
   const { user } = useAuth();
-  const { label: connectionLabel } = useConnectivity();
+  const { isOnline } = useConnectivity();
 
   const hotelId =
     getRestaurantId(restaurant) || getRestaurantId(user);
@@ -82,6 +70,10 @@ export default function OwnerMenuManager({
   const [dishes, setDishes] = useState(() =>
     hotelId ? readMenuCache(hotelId) : []
   );
+  const [categoryCatalog, setCategoryCatalog] = useState(() =>
+    hotelId ? readMenuCategoryCache(hotelId) : []
+  );
+  const [categoryCatalogConfirmed, setCategoryCatalogConfirmed] = useState(false);
 
   const [editingId, setEditingId] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -100,9 +92,40 @@ export default function OwnerMenuManager({
 
   const savingInFlight = useRef(false);
 
+  const canonicalCategories = useMemo(() => {
+    const byName = new Map();
+    const dishCategories = dishes.map((dish) =>
+      normalizeCategoryRecord({
+        _id:
+          categoryId(dish.categoryId) ||
+          categoryId(dish.category),
+        name: dishCategoryName(dish),
+      })
+    );
+
+    [
+      ...categoryCatalog,
+      ...(categoryCatalogConfirmed ? [] : dishCategories),
+    ]
+      .map(normalizeCategoryRecord)
+      .filter(Boolean)
+      .forEach((category) => {
+        const key = categoryKey(category);
+        if (key && !byName.has(key)) byName.set(key, category);
+      });
+
+    return [...byName.values()];
+  }, [categoryCatalog, categoryCatalogConfirmed, dishes]);
+
   const categories = useMemo(
-    () => buildCategoryList(dishes, DEFAULT_CATEGORIES),
-    [dishes]
+    () => buildCategoryList(
+      dishes,
+      [
+        ...DEFAULT_CATEGORIES,
+        ...canonicalCategories.map(categoryName),
+      ]
+    ),
+    [canonicalCategories, dishes]
   );
 
   useEffect(() => {
@@ -123,8 +146,32 @@ export default function OwnerMenuManager({
     }
 
     setDishes(readMenuCache(hotelId));
+    setCategoryCatalog(readMenuCategoryCache(hotelId));
     setSyncSummary(getMenuSyncSummary(hotelId));
   }, [hotelId]);
+
+  const storeCategoryCatalog = useCallback((nextCategories) => {
+    if (!hotelId) return [];
+
+    const stored = writeMenuCategoryCache(hotelId, nextCategories);
+    setCategoryCatalog(stored);
+    return stored;
+  }, [hotelId]);
+
+  const fetchCategories = useCallback(async () => {
+    if (!hotelId) return [];
+
+    const response = await api.get(`/menu/categories/${hotelId}`);
+    const incoming = Array.isArray(response.data)
+      ? response.data
+      : Array.isArray(response.data?.categories)
+        ? response.data.categories
+        : [];
+
+    const stored = storeCategoryCatalog(incoming);
+    setCategoryCatalogConfirmed(true);
+    return stored;
+  }, [hotelId, storeCategoryCatalog]);
 
   const fetchDishes = useCallback(async () => {
     if (!hotelId) return;
@@ -164,9 +211,14 @@ export default function OwnerMenuManager({
 
   useEffect(() => {
     if (hotelId) {
+      setCategoryCatalogConfirmed(false);
       fetchDishes();
+      fetchCategories().catch((err) => {
+        console.warn("Failed to fetch menu categories:", err);
+        setCategoryCatalog(readMenuCategoryCache(hotelId));
+      });
     }
-  }, [fetchDishes, hotelId]);
+  }, [fetchCategories, fetchDishes, hotelId]);
 
   useEffect(() => {
     if (!hotelId) return undefined;
@@ -220,6 +272,51 @@ export default function OwnerMenuManager({
     });
   };
 
+  const resolveCategoryForSave = async (value) => {
+    const requestedName = categoryName(value);
+    let match = findCategoryByName(canonicalCategories, requestedName);
+
+    if (match) return match;
+
+    if (!isOnline) {
+      throw new Error(
+        `Connect to the internet to create “${requestedName}”. You can still use categories already saved on this device.`
+      );
+    }
+
+    try {
+      const response = await api.post("/menu/category", {
+        name: requestedName,
+        subCategories: [],
+      });
+      const created = normalizeCategoryRecord(
+        response.data?.category || response.data
+      );
+
+      if (!created) {
+        throw new Error("The restaurant did not confirm the new category.");
+      }
+
+      storeCategoryCatalog([...canonicalCategories, created]);
+      return created;
+    } catch (err) {
+      try {
+        const refreshed = await fetchCategories();
+        match = findCategoryByName(refreshed, requestedName);
+        if (match) return match;
+      } catch {
+        // Preserve the original category-creation error below.
+      }
+
+      throw new Error(
+        err?.response?.data?.message ||
+          err?.message ||
+          "The category could not be created. Your dish has not been queued.",
+        { cause: err }
+      );
+    }
+  };
+
   const handleDishSaved = async ({
     formData,
     imageFile,
@@ -240,11 +337,21 @@ export default function OwnerMenuManager({
       setLoadError("");
       setFeedback("");
 
+      const resolvedCategory = await resolveCategoryForSave(
+        formData.category
+      );
+      const resolvedFields = {
+        ...fields,
+        category: resolvedCategory,
+        categoryId: categoryId(resolvedCategory),
+        categoryName: categoryName(resolvedCategory),
+      };
+
       if (editingId) {
         enqueueMenuUpdate(
           hotelId,
           editingId,
-          fields,
+          resolvedFields,
           imageFile
         );
 
@@ -254,7 +361,7 @@ export default function OwnerMenuManager({
       } else {
         enqueueMenuCreate(
           hotelId,
-          fields,
+          resolvedFields,
           imageFile
         );
 
@@ -274,6 +381,7 @@ export default function OwnerMenuManager({
           err?.message ||
           "The dish could not be saved."
       );
+      throw err;
     } finally {
       savingInFlight.current = false;
       setLoading(false);
@@ -360,48 +468,25 @@ export default function OwnerMenuManager({
   const exportMenu = () => {
     if (!dishes.length) return;
 
-    const excludedFields = new Set([
-      "_id",
-      "__v",
-      "createdAt",
-      "updatedAt",
-      "image",
-      "pendingSync",
-      "syncError",
-    ]);
+    try {
+      const serialized = serializeMenuExport(dishes);
+      const blob = new Blob(
+        [serialized],
+        { type: "application/json" }
+      );
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
 
-    const payload = {
-      format: "flexiorder-menu",
-      version: 1,
-      exportedAt: new Date().toISOString(),
-      dishes: dishes.map((dish) => ({
-        ...Object.fromEntries(
-          Object.entries(dish).filter(
-            ([field]) => !excludedFields.has(field)
-          )
-        ),
-        category: categoryName(dish.category),
-      })),
-    };
-
-    const blob = new Blob(
-      [JSON.stringify(payload, null, 2)],
-      {
-        type: "application/json",
-      }
-    );
-
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-
-    link.href = url;
-    link.download = "flexiorder-menu.json";
-
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-
-    URL.revokeObjectURL(url);
+      link.href = url;
+      link.download = "flexiorder-menu.json";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      setLoadError("");
+    } catch (err) {
+      setLoadError(err?.message || "The menu could not be exported.");
+    }
   };
 
   const importMenu = async (event) => {
@@ -412,102 +497,79 @@ export default function OwnerMenuManager({
     if (!file || !hotelId) return;
 
     try {
-      const parsed = JSON.parse(await file.text());
+      if (!isOnline) {
+        throw new Error(
+          "Connect to the internet to import this menu. The file was not changed and can be selected again."
+        );
+      }
 
-      const importedDishes = Array.isArray(parsed)
-        ? parsed
-        : parsed?.dishes;
+      if (file.size > MENU_TRANSFER_MAX_BYTES) {
+        throw new Error("The menu file must be 1 MB or smaller.");
+      }
 
+      const latestSummary = getMenuSyncSummary(hotelId);
+      if (latestSummary.pending > 0 || latestSummary.attention > 0) {
+        throw new Error(
+          "Wait for saved menu changes to finish syncing before importing."
+        );
+      }
+
+      const payload = parseMenuImport(
+        await file.text(),
+        file.size
+      );
       if (
-        !Array.isArray(importedDishes) ||
-        importedDishes.length === 0
+        new TextEncoder().encode(JSON.stringify(payload)).byteLength >
+        MENU_TRANSFER_MAX_BYTES
       ) {
         throw new Error(
-          "The file does not contain any dishes."
+          "The normalized menu is larger than 1 MB. Split it into smaller menu files."
         );
       }
 
       const confirmed = window.confirm(
-        `Import ${importedDishes.length} dishes into this menu? Existing dishes will stay.`
+        `Import ${payload.dishes.length} dishes into this menu? Existing dishes will stay.`
       );
 
       if (!confirmed) return;
 
       setImporting(true);
       setLoadError("");
+      setFeedback("");
 
-      let created = 0;
+      const response = await api.post("/menu/import", payload, {
+        headers: { "Content-Type": "application/json" },
+        maxBodyLength: MENU_TRANSFER_MAX_BYTES,
+      });
+      const imported = response.data?.imported;
+      const skipped = response.data?.skipped;
+      const errors = response.data?.errors;
+      const total = response.data?.total;
 
-      for (const dish of importedDishes) {
-        if (!dish?.name || dish?.price === undefined) {
-          continue;
-        }
-
-        const category =
-          categoryName(dish.category) ||
-          "Main Course";
-
-        const fields = {
-          name: dish.name,
-          description: dish.description || "",
-          category,
-          foodType: dish.foodType || "veg",
-          containsEgg: Boolean(dish.containsEgg),
-          price: Number(dish.price) || 0,
-          discountType:
-            dish.discountType || "percentage",
-          discountValue:
-            Number(dish.discountValue) || 0,
-          prepTime: Number(dish.prepTime) || 0,
-          isAvailable:
-            dish.isAvailable ?? true,
-          isRecommended:
-            dish.isRecommended ?? false,
-          isBestseller:
-            dish.isBestseller ?? false,
-          featured:
-            dish.featured ?? false,
-          todaySpecial:
-            dish.todaySpecial ?? false,
-          isPopular:
-            dish.isPopular ?? false,
-          isNewArrival:
-            dish.isNewArrival ?? false,
-          chefChoice:
-            dish.chefChoice ?? false,
-          spiceLevel:
-            dish.spiceLevel || "",
-          tags: Array.isArray(dish.tags)
-            ? dish.tags
-            : [],
-          displayOrder:
-            Number(dish.displayOrder) || 0,
-        };
-
-        enqueueMenuCreate(
-          hotelId,
-          fields,
-          null
-        );
-
-        created += 1;
+      if (
+        response.data?.success !== true ||
+        !Number.isInteger(imported) ||
+        !Number.isInteger(skipped) ||
+        imported < 0 ||
+        skipped < 0 ||
+        imported + skipped !== payload.dishes.length ||
+        total !== payload.dishes.length ||
+        errors !== 0
+      ) {
+        throw new Error("The restaurant did not confirm the menu import.");
       }
 
-      refreshLocalMenu();
-
+      await fetchDishes();
       setFeedback(
-        `${created} dish${
-          created === 1 ? "" : "es"
-        } imported. FlexiOrder will sync automatically.`
+        `${imported} dish${imported === 1 ? "" : "es"} imported. ${skipped} skipped.`
       );
-
-      requestBackgroundSync();
     } catch (err) {
       console.error("MENU IMPORT ERROR:", err);
 
       setLoadError(
-        err?.message ||
-          "The menu could not be imported."
+        err?.response?.data?.message ||
+          err?.message ||
+          "The menu could not be imported. No changes were made."
       );
     } finally {
       setImporting(false);
@@ -519,9 +581,7 @@ export default function OwnerMenuManager({
 
     return sortDishesForDisplay(
       dishes.filter((dish) => {
-        const dishCategory = categoryName(
-          dish.category
-        );
+        const dishCategory = dishCategoryName(dish);
 
         const categoryMatch =
           activeCategory === "All" ||
@@ -590,6 +650,14 @@ export default function OwnerMenuManager({
                 />
               </label>
 
+              <a
+                href="/examples/flexiorder-menu-demo.json"
+                download="flexiorder-menu-demo.json"
+                className="flex items-center justify-center rounded-xl border border-gray-200 bg-white px-3 py-3 text-sm font-semibold text-gray-700 transition hover:bg-gray-50"
+              >
+                Demo file
+              </a>
+
               <button
                 type="button"
                 onClick={exportMenu}
@@ -656,44 +724,28 @@ export default function OwnerMenuManager({
         </div>
       )}
 
-      {/* SYNC */}
-      {(syncSummary.pending > 0 ||
-        syncSummary.attention > 0 ||
-        connectionLabel !== "Online") && (
+      {/* Recovery is prominent only when a saved menu change needs a decision. */}
+      {syncSummary.attention > 0 && (
         <div
-          className={`ops-sync-strip mb-4${
-            syncSummary.attention
-              ? " needs-attention"
-              : ""
-          }`}
+          className="ops-attention-panel mb-4"
           role="status"
         >
           <span>
-            {syncSummary.attention
-              ? `${syncSummary.attention} menu change${
-                  syncSummary.attention === 1
-                    ? " needs"
-                    : "s need"
-                } attention`
-              : syncSummary.pending
-              ? `${syncSummary.pending} menu change${
-                  syncSummary.pending === 1
-                    ? ""
-                    : "s"
-                } · ${connectionLabel}`
-              : connectionLabel}
+            {`${syncSummary.attention} menu change${
+              syncSummary.attention === 1
+                ? " needs"
+                : "s need"
+            } attention`}
           </span>
 
-          {syncSummary.attention > 0 && (
-            <button
-              type="button"
-              onClick={() =>
-                retryMenuMutations(hotelId)
-              }
-            >
-              Retry
-            </button>
-          )}
+          <button
+            type="button"
+            disabled={!isOnline}
+            title={!isOnline ? "Reconnect to retry" : undefined}
+            onClick={() => retryMenuMutations(hotelId)}
+          >
+            Retry
+          </button>
         </div>
       )}
 

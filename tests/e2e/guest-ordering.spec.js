@@ -118,18 +118,192 @@ test.describe("customer QR ordering", () => {
 
     await expect(page.getByText("Kitchen cannot receive this order.")).toBeVisible();
     await expect(page.getByRole("heading", { name: "Your Cart" })).toBeVisible();
-    await expect(page.getByText("Paneer Tikka")).toBeVisible();
+    await expect(page.getByText("Paneer Tikka", { exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: /Place Order/ })).toBeEnabled();
   });
+
+  test("shows category names and one swipeable carousel for every special flag", async ({ page }) => {
+    const rawCategoryId = "6a7d865d30af0144c44a9063";
+    await mockGuestMenu(page, {
+      dishes: [
+        {
+          _id: "dish-multi-special",
+          name: "Celebration Platter",
+          description: "A little of everything",
+          price: 420,
+          foodType: "veg",
+          isAvailable: true,
+          category: rawCategoryId,
+          categoryId: { _id: rawCategoryId, name: "Starters" },
+          featured: true,
+          todaySpecial: true,
+          chefChoice: true,
+        },
+        {
+          _id: "dish-popular",
+          name: "Pepper Chicken",
+          price: 360,
+          foodType: "nonveg",
+          isAvailable: true,
+          categoryId: { _id: "6a7d865d30af0144c44a9064", name: "Main Course" },
+          isPopular: true,
+        },
+      ],
+    });
+
+    await page.goto("/qr/qr-123");
+
+    await expect(page.getByRole("button", { name: "Starters" })).toBeVisible();
+    await expect(page.getByText(rawCategoryId)).toHaveCount(0);
+    const specials = page.getByRole("region", { name: "Special picks" });
+    await expect(specials).toBeVisible();
+    await expect(specials.getByRole("heading", { name: "Special picks" })).toHaveCount(1);
+    await expect(specials.locator(".guest-specials__slide")).toHaveCount(2);
+    await expect(specials.getByText("Featured", { exact: true })).toHaveCount(1);
+    await expect(specials.getByText("Today’s special", { exact: true })).toHaveCount(1);
+    await expect(specials.getByText("Chef’s choice", { exact: true })).toHaveCount(1);
+
+    await expect(specials.getByRole("button", { name: /Show Celebration Platter/ })).toHaveAttribute("aria-current", "true");
+    await expect(specials.getByRole("button", { name: /Show Pepper Chicken/ })).toHaveAttribute("aria-current", "true", { timeout: 4_500 });
+
+    await page.getByRole("button", { name: "Veg", exact: true }).click();
+    await expect(specials.locator(".guest-specials__slide")).toHaveCount(1);
+    await expect(specials.getByText("Pepper Chicken", { exact: true })).toHaveCount(0);
+  });
   test("keeps the menu viewable but removes ordering controls when the host pauses ordering", async ({ page }) => {
-    await mockGuestMenu(page, { hotel: { orderingEnabled: false } });
+    await mockGuestMenu(page, {
+      hotel: { orderingEnabled: false },
+      orders: [{
+        _id: "active-paused-order",
+        status: "preparing",
+        createdAt: new Date().toISOString(),
+        items: [{ name: "Paneer Tikka", quantity: 1 }],
+      }],
+    });
 
     await page.goto("/qr/qr-123");
 
     await expect(page.getByText("Ordering is currently unavailable. You can still view the menu.")).toBeVisible();
-    await expect(page.getByText("Paneer Tikka")).toBeVisible();
-    await expect(page.getByRole("button", { name: "Add" })).toHaveCount(0);
+    await expect(page.getByText("Paneer Tikka", { exact: true })).toBeVisible();
+    await expect(page.getByRole("region", { name: "Your active orders" })).toBeVisible();
+    await expect(page.getByRole("button", { name: /Add Paneer Tikka/ })).toHaveCount(0);
     await expect(page.getByRole("button", { name: /View Cart/ })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /Schedule order/ })).toHaveCount(0);
+  });
+
+  test("renders the paused simple menu as information instead of order buttons", async ({ page }) => {
+    await mockGuestMenu(page, {
+      hotel: { orderingEnabled: false, menuMode: "simple" },
+    });
+
+    await page.goto("/qr/qr-123");
+
+    await expect(page.getByText("Paneer Tikka", { exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: /Add Paneer Tikka/ })).toHaveCount(0);
+    await expect(page.locator(".guest-simple-row__main").first()).toHaveJSProperty("tagName", "DIV");
+    await expect(page.getByRole("button", { name: /View Cart/ })).toHaveCount(0);
+  });
+
+  test("fails closed until a fresh menu response confirms ordering", async ({ page }) => {
+    let releaseMenu;
+    const menuReady = new Promise((resolve) => { releaseMenu = resolve; });
+    await page.route("**/qr/menu/qr-123", async (route) => {
+      await menuReady;
+      return fulfillJson(route, { hotel, table, dishes: [{
+        _id: "dish-paneer", name: "Paneer Tikka", price: 270, isAvailable: true,
+      }] });
+    });
+    await page.route("**/orders/table/table-8", (route) => fulfillJson(route, { orders: [] }));
+
+    await page.goto("/qr/qr-123");
+    await expect(page.getByRole("button", { name: /Add Paneer Tikka/ })).toHaveCount(0);
+    releaseMenu();
+    await expect(page.getByRole("button", { name: /Add Paneer Tikka/ })).toBeVisible();
+  });
+
+  test("does not enable ordering when a fresh QR response has no restaurant", async ({ page }) => {
+    await page.route("**/qr/menu/qr-123", (route) => fulfillJson(route, {
+      hotel: null,
+      table,
+      dishes: [{ _id: "dish-paneer", name: "Paneer Tikka", price: 270, isAvailable: true }],
+    }));
+    await page.route("**/orders/table/table-8", (route) => fulfillJson(route, { orders: [] }));
+
+    await page.goto("/qr/qr-123");
+
+    await expect(page.getByText("Confirming whether ordering is available. You can still view the menu.")).toBeVisible();
+    await expect(page.getByText("Paneer Tikka", { exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: /Add Paneer Tikka/ })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /View Cart/ })).toHaveCount(0);
+  });
+
+  test("preserves the cart when checkout preflight sees ordering paused", async ({ page }) => {
+    let paused = false;
+    let postCount = 0;
+    await page.route("**/qr/menu/qr-123", (route) => fulfillJson(route, {
+      hotel: { ...hotel, orderingEnabled: !paused },
+      table,
+      dishes: [{ _id: "dish-paneer", name: "Paneer Tikka", price: 270, isAvailable: true }],
+    }));
+    await page.route("**/orders/table/table-8", (route) => fulfillJson(route, { orders: [] }));
+    await page.route("**/orders", (route) => {
+      if (route.request().method() !== "POST") return route.fallback();
+      postCount += 1;
+      return fulfillJson(route, {
+        success: false,
+        code: "ORDERING_PAUSED",
+        message: "Customer ordering is currently paused",
+      }, 409);
+    });
+
+    await page.goto("/qr/qr-123");
+    await page.getByRole("button", { name: /Add Paneer Tikka/ }).click();
+    await page.getByRole("button", { name: /View Cart/ }).click();
+    await expect(page.getByRole("button", { name: /Place Order/ })).toBeVisible();
+    paused = true;
+    await page.getByRole("button", { name: /Place Order/ }).click();
+
+    await expect(page).toHaveURL(/\/qr\/qr-123/);
+    await expect(page.getByText("Ordering is currently unavailable. You can still view the menu.")).toBeVisible();
+    expect(postCount).toBe(0);
+
+    paused = false;
+    await page.goto("/cart/qr-123");
+    await expect(page.getByText("Paneer Tikka")).toBeVisible();
+  });
+
+  test("preserves the cart when order creation returns ORDERING_PAUSED", async ({ page }) => {
+    let paused = false;
+    let postCount = 0;
+    await page.route("**/qr/menu/qr-123", (route) => fulfillJson(route, {
+      hotel: { ...hotel, orderingEnabled: !paused },
+      table,
+      dishes: [{ _id: "dish-paneer", name: "Paneer Tikka", price: 270, isAvailable: true }],
+    }));
+    await page.route("**/orders/table/table-8", (route) => fulfillJson(route, { orders: [] }));
+    await page.route("**/orders", (route) => {
+      if (route.request().method() !== "POST") return route.fallback();
+      postCount += 1;
+      paused = true;
+      return fulfillJson(route, {
+        success: false,
+        code: "ORDERING_PAUSED",
+        message: "Customer ordering is currently paused",
+      }, 409);
+    });
+
+    await page.goto("/qr/qr-123");
+    await page.getByRole("button", { name: /Add Paneer Tikka/ }).click();
+    await page.getByRole("button", { name: /View Cart/ }).click();
+    await page.getByRole("button", { name: /Place Order/ }).click();
+
+    await expect.poll(() => postCount).toBe(1);
+    await expect(page).toHaveURL(/\/qr\/qr-123/);
+    await expect(page.getByText("Ordering is currently unavailable. You can still view the menu.")).toBeVisible();
+
+    paused = false;
+    await page.goto("/cart/qr-123");
+    await expect(page.getByText("Paneer Tikka", { exact: true })).toBeVisible();
   });
 
   test("uses the configured GST percentage consistently", async ({ page }) => {
@@ -140,6 +314,19 @@ test.describe("customer QR ordering", () => {
     await expect(page.getByText("GST (12%)")).toBeVisible();
     await expect(page.getByText("₹302.40", { exact: true })).toBeVisible();
 
+  });
+
+  test("uses canonical saved settings for a simple menu with GST", async ({ page }) => {
+    await mockGuestMenu(page, {
+      hotel: { menuMode: "simple", gstEnabled: true, gstPercentage: 12 },
+    });
+    await page.goto("/qr/qr-123");
+
+    await expect(page.locator(".guest-simple-menu")).toBeVisible();
+    await page.getByRole("button", { name: "Add Paneer Tikka" }).click();
+    await page.getByRole("button", { name: /View Cart/ }).click();
+    await expect(page.getByText("GST (12%)")).toBeVisible();
+    await expect(page.getByText("₹302.40", { exact: true })).toBeVisible();
   });
 
   test("removes GST when it is disabled", async ({ page }) => {

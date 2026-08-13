@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { FiMinus, FiPlus } from "react-icons/fi";
 import { getDishPricing } from "../../utils/pricing";
 import SubcategoryChooser from "../menu/SubcategoryChooser";
+import { categoryKey, dishCategoryName } from "../../utils/menuCategories";
 
 export default function SimpleMenuSection({
   categories,
@@ -11,11 +12,11 @@ export default function SimpleMenuSection({
   getCartQuantity,
   addToCart,
   decreaseQuantity,
-  increaseQuantity,
   orderingEnabled = true
 }) {
   // Subcategory state
   const [activeSubCategory, setActiveSubCategory] = useState("All");
+  const [revealedDishId, setRevealedDishId] = useState(null);
 
   // Reset subcategory on category change
   useEffect(() => {
@@ -27,14 +28,18 @@ export default function SimpleMenuSection({
     return activeCategory === "All" 
       ? dishes 
       : dishes.filter((dish) => {
-          const cat = typeof dish.category === "object" ? dish.category?.name : dish.category;
-          return cat === activeCategory;
+          return categoryKey(dishCategoryName(dish)) === categoryKey(activeCategory);
         });
   }, [dishes, activeCategory]);
 
   // Extract unique subcategories from the current category's dishes
   const subCategories = useMemo(() => {
     const set = new Set();
+    categoryFiltered.forEach((dish) => {
+      (dish.category?.subCategories || dish.categoryId?.subCategories || []).forEach((sub) => {
+        if (String(sub).trim()) set.add(String(sub).trim());
+      });
+    });
     categoryFiltered.forEach((dish) => {
       const sub = dish.subCategory || dish.subcategory || "";
       if (sub && sub.trim()) {
@@ -69,25 +74,16 @@ export default function SimpleMenuSection({
 
   return (
     <section className="guest-menu-section guest-simple-menu">
-      <div className="guest-category-bar" role="group" aria-label="Categories">
-        {categories.map((item) => (
-          <button
-            type="button"
-            key={item}
-            className={activeCategory === item ? "is-active" : ""}
-            aria-pressed={activeCategory === item}
-            onClick={() => {
-              setActiveSubCategory("All");
-              setActiveCategory(item);
-            }}
-          >
-            {item}
-          </button>
-        ))}
-      </div>
-
-      {/* Right Main Panel: Subcategory pills + Dishes */}
       <div className="guest-menu-main-panel">
+        <SubcategoryChooser
+          options={categories}
+          value={activeCategory}
+          label="Category"
+          onChange={(value) => {
+            setActiveSubCategory("All");
+            setActiveCategory(value);
+          }}
+        />
         <SubcategoryChooser
           key={activeCategory}
           options={subCategories}
@@ -109,14 +105,16 @@ export default function SimpleMenuSection({
                     const isNonVeg = ["nonveg", "nonvegetarian"].includes(foodType);
                     const knownType = isNonVeg || ["veg", "vegetarian"].includes(foodType);
                     const { basePrice, finalPrice, hasDiscount } = getDishPricing(dish);
+                    const RowMain = orderingEnabled ? "button" : "div";
                     return (
                       <div className="guest-simple-row" key={dish._id}>
-                        <button
-                          type="button"
-                          disabled={!orderingEnabled}
+                        <RowMain
+                          {...(orderingEnabled ? {
+                            type: "button",
+                            onClick: () => { setRevealedDishId(dish._id); addToCart(dish); },
+                            "aria-label": `Add ${dish.name}`,
+                          } : {})}
                           className="guest-simple-row__main"
-                          onClick={() => orderingEnabled && addToCart(dish)}
-                          aria-label={orderingEnabled ? `Add ${dish.name}` : dish.name}
                         >
                           <span className={`food-mark ${isNonVeg ? "is-nonveg" : knownType ? "is-veg" : "is-unknown"}`} aria-label={isNonVeg ? "Non-vegetarian" : knownType ? "Vegetarian" : "Dietary type not specified"} />
                           <span className="guest-simple-row__name">
@@ -127,15 +125,14 @@ export default function SimpleMenuSection({
                             {hasDiscount && <del>₹{basePrice.toFixed(0)}</del>}
                             <b>₹{finalPrice.toFixed(0)}</b>
                           </span>
-                          {orderingEnabled && !quantity && <span className="guest-add-label">Add</span>}
-                        </button>
-                        {orderingEnabled && quantity > 0 && (
-                          <div className="guest-qty">
-                            <button type="button" aria-label={`Remove one ${dish.name}`} onClick={() => decreaseQuantity(dish._id)}>
+                        </RowMain>
+                        {orderingEnabled && (quantity > 0 || revealedDishId === dish._id) && (
+                          <div className="guest-qty guest-qty--large">
+                            <button type="button" aria-label={`Remove one ${dish.name}`} onClick={() => { if (quantity <= 1) setRevealedDishId(null); decreaseQuantity(dish._id); }}>
                               <FiMinus />
                             </button>
                             <b>{quantity}</b>
-                            <button type="button" aria-label={`Add one ${dish.name}`} onClick={() => increaseQuantity(dish._id)}>
+                            <button type="button" aria-label={`Add one ${dish.name}`} onClick={() => { setRevealedDishId(dish._id); addToCart(dish); }}>
                               <FiPlus />
                             </button>
                           </div>

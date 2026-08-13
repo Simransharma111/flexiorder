@@ -18,6 +18,26 @@ describe("menu data", () => {
     expect(normalizeMenuResponse({ message: "ok" })).toBeNull();
   });
 
+  it("normalizes a populated category without rendering its database id", () => {
+    const [dish] = normalizeMenuResponse([{
+      _id: "dish-1",
+      name: "Soup",
+      categoryId: {
+        _id: "6a7d865d30af0144c44a9063",
+        name: "Starters",
+      },
+    }]);
+
+    expect(dish).toMatchObject({
+      categoryId: "6a7d865d30af0144c44a9063",
+      category: {
+        _id: "6a7d865d30af0144c44a9063",
+        name: "Starters",
+      },
+      categoryName: "Starters",
+    });
+  });
+
   it("preserves a populated category id when serializing", () => {
     const category = resolveCategoryReference("House Specials", [{
       category: { _id: "category-1", name: "House Specials" },
@@ -30,5 +50,14 @@ describe("menu data", () => {
   it("does not send an empty category during a partial update", () => {
     const form = buildDishFormData({ isAvailable: false });
     expect(form.has("category")).toBe(false);
+    expect(form.has("categoryId")).toBe(false);
+    expect(form.has("categoryName")).toBe(false);
+  });
+
+  it("rejects a nonempty category that cannot be serialized", () => {
+    expect(() => buildDishFormData({
+      name: "Platter",
+      categoryId: "not-a-valid-category-id",
+    })).toThrow("Please select a valid category.");
   });
 });

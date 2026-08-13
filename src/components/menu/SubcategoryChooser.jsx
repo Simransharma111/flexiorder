@@ -35,7 +35,7 @@ export default function SubcategoryChooser({ options, value, onChange, label = "
   return (
     <div
       ref={rootRef}
-      className="menu-subcategory-chooser"
+      className={`menu-subcategory-chooser ${label === "Category" ? "menu-category-chooser" : ""}`}
       onKeyDown={(event) => {
         if (event.key === "Escape" && open) {
           event.preventDefault();

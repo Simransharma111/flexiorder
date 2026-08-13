@@ -5,7 +5,6 @@ import { getDishPricing } from "../utils/pricing";
 import { sortDishesForDisplay } from "../utils/menuOrdering";
 import { buildCategoryList, categoryKey } from "../utils/menuCategories";
 import {
-  getPendingStaffOrders,
   getStaffOrdersEligibleForHandled,
   getStaffOrdersNeedingAttention,
   markStaffOrdersHandled,
@@ -46,12 +45,10 @@ export default function StaffOrder({ hotel, onOrderCreated }) {
   const [placing, setPlacing] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
-  const [pendingSyncCount, setPendingSyncCount] = useState(getPendingStaffOrders().length);
   const [attentionCount, setAttentionCount] = useState(getStaffOrdersNeedingAttention().length);
   const placingInFlight = useRef(false);
 
   const refreshQueueCounts = useCallback(() => {
-    setPendingSyncCount(getPendingStaffOrders().length);
     setAttentionCount(getStaffOrdersNeedingAttention().length);
   }, []);
 
@@ -283,22 +280,18 @@ export default function StaffOrder({ hotel, onOrderCreated }) {
     <section className="staff-order-flow">
       <h1 className="sr-only">Staff Ordering</h1>
 
-      {(!isOnline || pendingSyncCount > 0) && (
-        <div className={`ops-sync-strip${attentionCount ? " needs-attention" : ""}`}>
-          <span>{!isOnline ? "Offline · orders save here" : attentionCount ? `${attentionCount} need attention` : `${pendingSyncCount} syncing`}</span>
-          {attentionCount > 0 && isOnline && (
-            <>
-              {getStaffOrdersEligibleForHandled().length > 0 && <button type="button" onClick={() => {
-                markStaffOrdersHandled();
-                refreshQueueCounts();
-              }}>Already handled</button>}
-              <button type="button" onClick={() => {
-                retryStaffOrdersNeedingAttention();
-                refreshQueueCounts();
-                syncNow();
-              }}>Retry</button>
-            </>
-          )}
+      {attentionCount > 0 && (
+        <div className="ops-attention-panel" role="status">
+          <span>{`${attentionCount} need attention`}</span>
+          {getStaffOrdersEligibleForHandled().length > 0 && <button type="button" onClick={() => {
+            markStaffOrdersHandled();
+            refreshQueueCounts();
+          }}>Already handled</button>}
+          <button type="button" disabled={!isOnline} title={!isOnline ? "Reconnect to retry" : undefined} onClick={() => {
+            retryStaffOrdersNeedingAttention();
+            refreshQueueCounts();
+            syncNow();
+          }}>Retry</button>
         </div>
       )}
       {message && <div className="ops-inline-success" role="status">{message}<button type="button" aria-label="Dismiss message" onClick={() => setMessage("")}><FiX /></button></div>}

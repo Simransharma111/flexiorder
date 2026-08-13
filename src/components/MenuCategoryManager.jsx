@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import api from "../api/axios";
 import {
   FiPlus,
@@ -31,38 +31,50 @@ export default function MenuCategoryManager({
 
   const [editingSubCategory, setEditingSubCategory] = useState(null);
   const [editingSubName, setEditingSubName] = useState("");
+  const onCategoryUpdateRef = useRef(onCategoryUpdate);
+
+  useEffect(() => {
+    onCategoryUpdateRef.current = onCategoryUpdate;
+  }, [onCategoryUpdate]);
 
   // =============================
   // FETCH CATEGORIES
   // =============================
 
-  useEffect(() => {
-    if (hotelId) {
-      fetchCategories();
-    }
-  }, [hotelId]);
+  const fetchCategories = useCallback(async ({ signal } = {}) => {
+    let res;
 
-  const fetchCategories = async () => {
     try {
-      const res = await api.get(
-        `/menu/category/${hotelId}`
+      res = await api.get(
+        `/menu/category/${hotelId}`,
+        { signal }
       );
-
-      const data = res.data || [];
-
-      setCategories(data);
-
-      if (onCategoryUpdate) {
-        onCategoryUpdate(data);
-      }
-
     } catch (err) {
+      if (signal?.aborted || err.code === "ERR_CANCELED") return;
       console.error(
         "Category fetch error:",
         err.response?.data || err
       );
+      return;
     }
-  };
+
+    if (signal?.aborted) return;
+
+    const data = res.data || [];
+    setCategories(data);
+    onCategoryUpdateRef.current?.(data);
+  }, [hotelId]);
+
+  useEffect(() => {
+    if (!hotelId) {
+      setCategories([]);
+      return undefined;
+    }
+
+    const controller = new AbortController();
+    fetchCategories({ signal: controller.signal });
+    return () => controller.abort();
+  }, [fetchCategories, hotelId]);
 
   // =============================
   // ADD SUBCATEGORY TO FORM

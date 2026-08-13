@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildCategoryList, categoryKey, categoryName, normalizeCategory } from "./menuCategories";
+import { buildCategoryList, categoryKey, categoryName, dishCategoryName, normalizeCategory } from "./menuCategories";
 
 describe("menu categories", () => {
   it("normalizes object categories and case-insensitive keys", () => {
@@ -17,5 +17,19 @@ describe("menu categories", () => {
 
   it("matches imported category casing to an existing label", () => {
     expect(normalizeCategory("house specials", ["All", "House Specials"])).toBe("House Specials");
+  });
+
+  it("never exposes a database id as category text", () => {
+    const id = "6a7d865d30af0144c44a9063";
+    expect(categoryName(id)).toBe("");
+    expect(dishCategoryName({ categoryId: id })).toBe("");
+    expect(buildCategoryList([{ categoryId: id }])).toEqual(["All"]);
+  });
+
+  it("prefers a populated category name over its flattened id", () => {
+    expect(dishCategoryName({
+      categoryId: { _id: "6a7d865d30af0144c44a9063", name: "Starters" },
+      category: "6a7d865d30af0144c44a9063",
+    })).toBe("Starters");
   });
 });

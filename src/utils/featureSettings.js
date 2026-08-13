@@ -99,14 +99,29 @@ export const getFeatureSettings = (hotel) => {
 
 export const applyHotelSettingsUpdate = (hotel, update) => {
   if (!hotel || !update) return hotel;
+  if (update.hotel != null && typeof update.hotel !== "object") return hotel;
   const updateHotel = update.hotel && typeof update.hotel === "object" ? update.hotel : update;
   const currentId = hotelIdOf(hotel);
   const updateId = String(update.hotelId || updateHotel?._id || updateHotel?.id || "");
-  if (updateId && currentId !== "unknown" && updateId !== currentId) return hotel;
+  if (!updateId || currentId === "unknown" || updateId !== currentId) return hotel;
+  const incomingUpdatedAt = update.updatedAt || updateHotel?.updatedAt;
+  const currentUpdatedAt = hotel.updatedAt;
+  if (
+    incomingUpdatedAt &&
+    currentUpdatedAt &&
+    Number.isFinite(Date.parse(incomingUpdatedAt)) &&
+    Number.isFinite(Date.parse(currentUpdatedAt)) &&
+    Date.parse(incomingUpdatedAt) < Date.parse(currentUpdatedAt)
+  ) return hotel;
 
   const incomingFeatureSettings = update.featureSettings || updateHotel?.featureSettings;
   const legacyGodMode = update.godModeEnabled ?? updateHotel?.godModeEnabled;
-  if (!incomingFeatureSettings && typeof legacyGodMode !== "boolean") return hotel;
+  const incomingOrdering = update.orderingEnabled ?? updateHotel?.orderingEnabled;
+  if (
+    !incomingFeatureSettings &&
+    typeof legacyGodMode !== "boolean" &&
+    typeof incomingOrdering !== "boolean"
+  ) return hotel;
 
   const featureSettings = normalizeFeatureSettings({
     ...getFeatureSettings(hotel),
@@ -120,6 +135,10 @@ export const applyHotelSettingsUpdate = (hotel, update) => {
   return {
     ...hotel,
     ...(update.hotel ? updateHotel : {}),
+    ...(typeof incomingOrdering === "boolean"
+      ? { orderingEnabled: incomingOrdering }
+      : {}),
+    ...(incomingUpdatedAt ? { updatedAt: incomingUpdatedAt } : {}),
     featureSettings,
   };
 };

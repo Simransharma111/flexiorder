@@ -26,6 +26,7 @@ import {
   retryKitchenUpdatesNeedingAttention,
 } from "../../utils/offlineKitchenUpdates";
 import { useSync } from "../../context/SyncContext";
+import { useConnectivity } from "../../context/ConnectivityContext";
 import { SYNC_STATE_EVENT } from "../../utils/syncQueues";
 import { flushSync } from "react-dom";
 import { buildOrderReceipt } from "../../utils/orderReceipt";
@@ -39,6 +40,7 @@ export default function Orders({
   hotel = null,
 }) {
   const { syncKitchenNow } = useSync();
+  const { isOnline } = useConnectivity();
   const [activeView, setActiveView] = useState("active");
   const [search, setSearch] = useState("");
   const [historyActionOrder, setHistoryActionOrder] = useState(null);
@@ -70,7 +72,6 @@ export default function Orders({
   useDialogFocus(Boolean(historyDetailOrder), historyDetailDialogRef, closeHistoryDetails);
   useDialogFocus(Boolean(bulkSnapshotIds), bulkDialogRef, closeBulkConfirmation);
   const [localOrders, setLocalOrders] = useState(() => mergeOrders([], orders));
-  const [pendingSyncCount, setPendingSyncCount] = useState(getPendingKitchenUpdates().length);
   const [attentionCount, setAttentionCount] = useState(getKitchenUpdatesNeedingAttention().length);
   // Delivered orders accumulate for the session so History persists across polls.
   const [sessionDeliveries, setSessionDeliveries] = useState([]);
@@ -113,7 +114,6 @@ export default function Orders({
             : current;
         });
       });
-      setPendingSyncCount(getPendingKitchenUpdates().length);
       setAttentionCount(getKitchenUpdatesNeedingAttention().length);
       if (event.detail.syncedOrders?.length) refresh?.();
     };
@@ -173,7 +173,6 @@ export default function Orders({
       setSessionDeliveries((prev) => prev.filter((order) => !matchesOrderId(order, orderId)));
     }
 
-    setPendingSyncCount(getPendingKitchenUpdates().length);
     syncKitchenNow();
   };
 
@@ -243,7 +242,6 @@ export default function Orders({
       setBulkSnapshotIds(null);
       setActiveView("history");
     });
-    setPendingSyncCount(getPendingKitchenUpdates().length);
     const skipped = bulkSnapshotIds.length - optimisticOrders.length;
     setBulkAnnouncement(`${optimisticOrders.length} ${optimisticOrders.length === 1 ? "order" : "orders"} moved to History${skipped > 0 ? ` · ${skipped} no longer active` : ""}. Synchronization continues separately.`);
     syncKitchenNow();
@@ -326,47 +324,40 @@ export default function Orders({
         )}
       </div>
       {bulkAnnouncement && <p className="ops-orders-announcement" role="status">{bulkAnnouncement}</p>}
-      {(pendingSyncCount > 0 || attentionCount > 0) && (
-        <div className={`ops-sync-strip${attentionCount ? " needs-attention" : ""}`}>
-          <span>{attentionCount ? `${attentionCount} need attention` : `${pendingSyncCount} syncing`}</span>
-          {attentionCount > 0 && (
-            <>
-              {getKitchenUpdateErrors().map(({ orderId, error }) => (
-                <span key={orderId} className="ops-sync-strip__error-detail">{error}</span>
-              ))}
-              {getKitchenUpdatesEligibleForHandled().length > 0 && <button type="button" onClick={() => {
-                const pending = markKitchenUpdatesHandled();
-                setPendingSyncCount(pending.length);
-                setAttentionCount(getKitchenUpdatesNeedingAttention().length);
-              }}>Already handled</button>}
-              <button type="button" onClick={() => {
-                const pending = retryKitchenUpdatesNeedingAttention();
-                setPendingSyncCount(pending.length);
-                setAttentionCount(0);
-                syncKitchenNow();
-              }}>Retry</button>
-              <button type="button" onClick={() => {
-                const restorations = getKitchenRejectedRestorations();
-                const pending = discardKitchenUpdatesNeedingAttention();
-                publishOrders((current) => current.map((order) => {
-                  const restoration = restorations.find((item) => matchesOrderId(order, item.orderId));
-                  return restoration ? {
-                    ...order,
-                    status: restoration.status,
-                    pendingMutation: false,
-                    reverted: true,
-                    statusChangeType: "revert",
-                    updatedAt: new Date().toISOString(),
-                  } : order;
-                }));
-                setSessionDeliveries((current) => current.filter((delivery) =>
-                  !restorations.some((item) => matchesOrderId(delivery, item.orderId))));
-                setPendingSyncCount(pending.length);
-                setAttentionCount(0);
-                refresh?.();
-              }}>Restore confirmed</button>
-            </>
-          )}
+      {attentionCount > 0 && (
+        <div className="ops-attention-panel" role="status">
+          <span>{`${attentionCount} need attention`}</span>
+          {getKitchenUpdateErrors().map(({ orderId, error }) => (
+            <span key={orderId} className="ops-attention-panel__error-detail">{error}</span>
+          ))}
+          {getKitchenUpdatesEligibleForHandled().length > 0 && <button type="button" onClick={() => {
+            markKitchenUpdatesHandled();
+            setAttentionCount(getKitchenUpdatesNeedingAttention().length);
+          }}>Already handled</button>}
+          <button type="button" disabled={!isOnline} title={!isOnline ? "Reconnect to retry" : undefined} onClick={() => {
+            retryKitchenUpdatesNeedingAttention();
+            setAttentionCount(0);
+            syncKitchenNow();
+          }}>Retry</button>
+          <button type="button" onClick={() => {
+            const restorations = getKitchenRejectedRestorations();
+            discardKitchenUpdatesNeedingAttention();
+            publishOrders((current) => current.map((order) => {
+              const restoration = restorations.find((item) => matchesOrderId(order, item.orderId));
+              return restoration ? {
+                ...order,
+                status: restoration.status,
+                pendingMutation: false,
+                reverted: true,
+                statusChangeType: "revert",
+                updatedAt: new Date().toISOString(),
+              } : order;
+            }));
+            setSessionDeliveries((current) => current.filter((delivery) =>
+              !restorations.some((item) => matchesOrderId(delivery, item.orderId))));
+            setAttentionCount(0);
+            refresh?.();
+          }}>Restore confirmed</button>
         </div>
       )}
       {activeView === "active" ? (

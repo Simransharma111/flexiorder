@@ -4,9 +4,11 @@ import {
   enqueueMenuDelete,
   enqueueMenuUpdate,
   readMenuCache,
+  readMenuCategoryCache,
   readMenuQueue,
   reconcileMenuFromServer,
   syncPendingMenu,
+  writeMenuCategoryCache,
 } from "./offlineMenu";
 
 const createStorage = () => {
@@ -54,11 +56,14 @@ describe("offline menu", () => {
   });
 
   it("serializes concurrent replay and replaces the local id", async () => {
+    const category = { _id: "6a7d865d30af0144c44a9063", name: "Starters" };
+    writeMenuCategoryCache("hotel-1", [category]);
     const local = enqueueMenuCreate("hotel-1", { name: "Soup", category: "Starters", tags: [] });
     let release;
     const response = new Promise((resolve) => { release = resolve; });
     const api = {
       post: vi.fn(() => response),
+      get: vi.fn().mockResolvedValue({ data: [category] }),
       put: vi.fn(),
       delete: vi.fn(),
     };
@@ -79,6 +84,7 @@ describe("offline menu", () => {
   it("retains a definitively rejected dish for correction", async () => {
     enqueueMenuCreate("hotel-1", { name: "Soup", category: "Invalid", tags: [] });
     const api = {
+      get: vi.fn().mockResolvedValue({ data: [] }),
       post: vi.fn().mockRejectedValue({ response: { status: 400, data: { message: "Invalid category" } } }),
     };
     await syncPendingMenu(api, "hotel-1");
@@ -87,5 +93,44 @@ describe("offline menu", () => {
       lastError: "Couldn’t sync Soup. Its category is no longer available; open the dish and choose the category again.",
     });
     expect(readMenuCache("hotel-1")[0].syncError).toContain("choose the category again");
+  });
+
+  it("repairs a legacy name-only queue entry from the canonical catalog", async () => {
+    writeMenuCategoryCache("hotel-1", [{
+      _id: "6a7d865d30af0144c44a9063",
+      name: "Starters",
+    }]);
+    enqueueMenuCreate("hotel-1", {
+      name: "Soup",
+      category: "Starters",
+      tags: [],
+    });
+    const api = {
+      get: vi.fn().mockResolvedValue({ data: [{
+        _id: "6a7d865d30af0144c44a9063",
+        name: "Starters",
+      }] }),
+      post: vi.fn().mockResolvedValue({
+        data: {
+          dish: {
+            _id: "dish-server",
+            name: "Soup",
+            categoryId: {
+              _id: "6a7d865d30af0144c44a9063",
+              name: "Starters",
+            },
+          },
+        },
+      }),
+    };
+
+    await syncPendingMenu(api, "hotel-1");
+
+    const submitted = api.post.mock.calls[0][1];
+    expect(submitted.get("categoryId")).toBe("6a7d865d30af0144c44a9063");
+    expect(submitted.get("categoryName")).toBe("Starters");
+    expect(api.get).toHaveBeenCalledWith("/menu/categories/hotel-1");
+    expect(readMenuQueue("hotel-1")).toEqual([]);
+    expect(readMenuCategoryCache("hotel-1")[0].name).toBe("Starters");
   });
 });

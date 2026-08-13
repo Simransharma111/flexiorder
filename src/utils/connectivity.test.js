@@ -11,6 +11,7 @@ describe("connectivity signals", () => {
   afterEach(() => vi.unstubAllGlobals());
 
   it("distinguishes API reachability from a browser online hint", () => {
+    vi.stubGlobal("navigator", { onLine: true });
     reportApiFailure(new Error("network unavailable"));
     expect(getConnectivitySnapshot().reachability).toBe("offline");
 
@@ -22,6 +23,7 @@ describe("connectivity signals", () => {
   });
 
   it("tracks syncing independently of reachability", () => {
+    vi.stubGlobal("navigator", { onLine: true });
     reportApiSuccess();
     setConnectivitySyncing(true);
     expect(getConnectivitySnapshot()).toMatchObject({ reachability: "online", syncing: true });

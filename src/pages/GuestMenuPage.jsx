@@ -13,6 +13,7 @@ import {
 } from "react-router-dom";
 
 import api from "../api/axios";
+import socket from "../socket";
 
 import GuestHeader from "../components/guestmenu/GuestHeader";
 import HeroBanner from "../components/guestmenu/HeroBanner";
@@ -23,7 +24,8 @@ import ActiveOrder from "../components/guestmenu/ActiveOrder";
 import ScheduleModal from "../components/guestmenu/ScheduleModal";
 import { sortDishesForDisplay } from "../utils/menuOrdering";
 import { getHotelThemeStyle } from "../utils/hotelTheme";
-import { buildCategoryList, categoryKey } from "../utils/menuCategories";
+import { buildCategoryList, categoryKey, dishCategoryName } from "../utils/menuCategories";
+import { normalizeMenuResponse } from "../utils/menuData";
 import { useConnectivity } from "../context/ConnectivityContext";
 import { useCart } from "../context/CartContext";
 import {
@@ -32,6 +34,7 @@ import {
   sameGuestOrder,
   writeGuestActiveOrders,
 } from "../utils/guestOrderState";
+import { applyHotelSettingsUpdate } from "../utils/featureSettings";
 
 import {
   FiSearch,
@@ -60,8 +63,17 @@ const { isOnline } = useConnectivity();
 // =====================================================
 
 const [hotel,setHotel]=useState(null);
+const [orderingConfirmed,setOrderingConfirmed]=useState(false);
+const menuRequestRevision=useRef(0);
 
-const hostOrderingEnabled = hotel?.orderingEnabled !== false;
+const hotelId = hotel?._id || hotel?.id;
+const hostOrderingEnabled = Boolean(
+  orderingConfirmed &&
+  hotel &&
+  typeof hotel === "object" &&
+  hotelId &&
+  hotel.orderingEnabled !== false
+);
 const orderingEnabled = hostOrderingEnabled && isOnline;
 const simpleMenu =
   hotel?.menuMode === "simple" ||
@@ -154,6 +166,7 @@ const [
 const fetchMenu=useCallback(async({ silent = false } = {})=>{
 
 const cacheKey = `guestMenu_${qrId}`;
+const requestRevision = ++menuRequestRevision.current;
 
 try{
 
@@ -168,28 +181,26 @@ const res=await api.get(
 );
 
 
-setHotel(
-res.data?.hotel || null
-);
-
-
-setTable(
-res.data?.table || null
-);
-
-
-setDishes(
-res.data?.dishes || []
-);
-
+if (requestRevision === menuRequestRevision.current) {
+const freshHotel = res.data?.hotel || null;
+const freshDishes = normalizeMenuResponse(res.data?.dishes || []) || [];
+setHotel(freshHotel);
+setOrderingConfirmed(Boolean(
+  freshHotel &&
+  typeof freshHotel === "object" &&
+  (freshHotel._id || freshHotel.id)
+));
+setTable(res.data?.table || null);
+setDishes(freshDishes);
 localStorage.setItem(
 cacheKey,
 JSON.stringify({
 hotel: res.data?.hotel || null,
 table: res.data?.table || null,
-dishes: res.data?.dishes || [],
+dishes: freshDishes,
 })
 );
+}
 
 
 }
@@ -201,14 +212,19 @@ console.log(
 err
 );
 
+if (requestRevision !== menuRequestRevision.current) return;
+
 try {
 const cached = JSON.parse(localStorage.getItem(cacheKey) || "null");
 
 if (cached?.dishes) {
+if (requestRevision === menuRequestRevision.current) {
 setHotel(cached.hotel || null);
+setOrderingConfirmed(false);
 setTable(cached.table || null);
-setDishes(cached.dishes);
+setDishes(normalizeMenuResponse(cached.dishes) || []);
 setError("");
+}
 return;
 }
 } catch (cacheError) {
@@ -224,11 +240,19 @@ err?.response?.data?.message ||
 }
 finally{
 
-if (!silent) setLoading(false);
+if (!silent && requestRevision === menuRequestRevision.current) setLoading(false);
 
 }
 
 },[qrId]);
+
+useEffect(() => {
+  setOrderingConfirmed(false);
+  menuRequestRevision.current += 1;
+  setHotel(null);
+  setTable(null);
+  setDishes([]);
+}, [qrId]);
 
 useEffect(()=>{
 if(!qrId){
@@ -244,6 +268,38 @@ const refreshInterval = window.setInterval(
 );
 return () => window.clearInterval(refreshInterval);
 },[fetchMenu,qrId]);
+
+useEffect(() => {
+  if (!hotelId) return undefined;
+
+  const joinHotel = () => socket.emit(
+    "joinHotelSettings",
+    String(hotelId),
+    (result) => {
+      if (result?.joined) fetchMenu({ silent: true });
+    }
+  );
+  joinHotel();
+  const handleSettingsUpdate = (payload) => {
+    const incomingOrdering = payload?.orderingEnabled ?? payload?.hotel?.orderingEnabled;
+    if (typeof incomingOrdering !== "boolean") return;
+    setHotel((current) => {
+      const next = applyHotelSettingsUpdate(current, payload);
+      if (next === current) return current;
+      menuRequestRevision.current += 1;
+      setOrderingConfirmed(true);
+      return next;
+    });
+  };
+
+  socket.on("connect", joinHotel);
+  socket.on("hotelSettingsUpdated", handleSettingsUpdate);
+  return () => {
+    socket.emit("leaveHotelSettings", String(hotelId));
+    socket.off("connect", joinHotel);
+    socket.off("hotelSettingsUpdated", handleSettingsUpdate);
+  };
+}, [fetchMenu, hotelId]);
 
 
 
@@ -370,18 +426,7 @@ return sortDishesForDisplay(dishes
 .filter((dish)=>{
 
 
-let category =
-dish.category;
-
-
-if(
-typeof category==="object"
-){
-
-category =
-dish.category?.name;
-
-}
+const category = dishCategoryName(dish);
 
 
 
@@ -468,66 +513,20 @@ useEffect(() => {
 
 
 // =====================================================
-// FEATURED DISHES
+// SPECIAL PICKS
 // =====================================================
 
-
-const availableDish=(dish)=>
-dish.isAvailable!==false;
-
-
-
-const featured =
-sortDishesForDisplay(dishes.filter(
-(dish)=>
-availableDish(dish) &&
-dish.featured
-));
-
-
-
-const todaySpecial =
-sortDishesForDisplay(dishes.filter(
-(dish)=>
-availableDish(dish) &&
-dish.todaySpecial
-));
-
-
-
-const recommended =
-sortDishesForDisplay(dishes.filter(
-(dish)=>
-availableDish(dish) &&
-dish.isRecommended
-));
-
-
-
-const popular =
-sortDishesForDisplay(dishes.filter(
-(dish)=>
-availableDish(dish) &&
-dish.isPopular
-));
-
-
-
-const bestsellers =
-sortDishesForDisplay(dishes.filter(
-(dish)=>
-availableDish(dish) &&
-dish.isBestseller
-));
-
-
-
-const newArrivals =
-sortDishesForDisplay(dishes.filter(
-(dish)=>
-availableDish(dish) &&
-dish.isNewArrival
-));
+const specialDishes = filteredDishes.filter((dish) =>
+  [
+    dish.featured,
+    dish.todaySpecial,
+    dish.isRecommended,
+    dish.isBestseller,
+    dish.isPopular,
+    dish.isNewArrival,
+    dish.chefChoice,
+  ].some((flag) => flag === true)
+);
 
 
 
@@ -780,6 +779,8 @@ table={table}
     <p className="rounded-xl bg-gray-100 px-4 py-3 text-center text-sm text-gray-500">
       {!isOnline
         ? "You are offline. The saved menu is available to view; ordering will return when connected."
+        : !orderingConfirmed
+          ? "Confirming whether ordering is available. You can still view the menu."
         : "Ordering is currently unavailable. You can still view the menu."}
     </p>
   </div>
@@ -912,126 +913,14 @@ outline-none
 activeCategory==="All" &&
 
 
-<>
-
-
-{
-featured.length>0 &&
-
 <FeaturedSection
-
-title="Featured"
-
-dishes={featured}
-
-onAdd={addToCart}
-
-onDecrease={decreaseQuantity}
-
-onIncrease={increaseQuantity}
-
-getQuantity={getCartQuantity}
-
-orderingEnabled={orderingEnabled}
-
-/>
-
-}
-
-
-
-{
-todaySpecial.length>0 &&
-
-<FeaturedSection
-
-title="Today's Special"
-
-dishes={todaySpecial}
-
-onAdd={addToCart}
-
-onDecrease={decreaseQuantity}
-
-onIncrease={increaseQuantity}
-
-getQuantity={getCartQuantity}
-
-orderingEnabled={orderingEnabled}
-
-/>
-
-}
-
-
-
-{
-recommended.length>0 &&
-
-<FeaturedSection
-
-title="Recommended"
-
-dishes={recommended}
-
-onAdd={addToCart}
-
-onDecrease={decreaseQuantity}
-
-onIncrease={increaseQuantity}
-
-getQuantity={getCartQuantity}
-
-orderingEnabled={orderingEnabled}
-
-/>
-
-}
-
-{
-bestsellers.length>0 &&
-
-<FeaturedSection
-title="Best Sellers"
-dishes={bestsellers}
+dishes={specialDishes}
 onAdd={addToCart}
 onDecrease={decreaseQuantity}
 onIncrease={increaseQuantity}
 getQuantity={getCartQuantity}
 orderingEnabled={orderingEnabled}
 />
-}
-
-{
-popular.length>0 &&
-
-<FeaturedSection
-title="Most Popular"
-dishes={popular}
-onAdd={addToCart}
-onDecrease={decreaseQuantity}
-onIncrease={increaseQuantity}
-getQuantity={getCartQuantity}
-orderingEnabled={orderingEnabled}
-/>
-}
-
-{
-newArrivals.length>0 &&
-
-<FeaturedSection
-title="New Arrivals"
-dishes={newArrivals}
-onAdd={addToCart}
-onDecrease={decreaseQuantity}
-onIncrease={increaseQuantity}
-getQuantity={getCartQuantity}
-orderingEnabled={orderingEnabled}
-/>
-}
-
-
-</>
 
 
 }

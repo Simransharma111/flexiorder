@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import DishCard from "./DishCard";
 import SubcategoryChooser from "../menu/SubcategoryChooser";
+import { categoryKey, dishCategoryName } from "../../utils/menuCategories";
 
 export default function MenuSection({ 
   categories, 
@@ -26,14 +27,18 @@ export default function MenuSection({
     return activeCategory === "All" 
       ? dishes 
       : dishes.filter((dish) => {
-          const cat = typeof dish.category === "object" ? dish.category?.name : dish.category;
-          return cat === activeCategory;
+          return categoryKey(dishCategoryName(dish)) === categoryKey(activeCategory);
         });
   }, [dishes, activeCategory]);
 
   // Extract unique subcategories from the current category's dishes
   const subCategories = useMemo(() => {
     const set = new Set();
+    categoryFiltered.forEach((dish) => {
+      (dish.category?.subCategories || dish.categoryId?.subCategories || []).forEach((sub) => {
+        if (String(sub).trim()) set.add(String(sub).trim());
+      });
+    });
     categoryFiltered.forEach((dish) => {
       const sub = dish.subCategory || dish.subcategory || "";
       if (sub && sub.trim()) {
@@ -68,25 +73,16 @@ export default function MenuSection({
 
   return (
     <section className="guest-menu-section guest-visual-menu">
-      <div className="guest-category-bar" role="group" aria-label="Categories">
-        {categories.map((item) => (
-          <button 
-            type="button" 
-            key={item} 
-            className={activeCategory === item ? "is-active" : ""}
-            aria-pressed={activeCategory === item}
-            onClick={() => {
-              setActiveSubCategory("All");
-              setActiveCategory(item);
-            }}
-          >
-            {item}
-          </button>
-        ))}
-      </div>
-
-      {/* Right Main Panel: Subcategory pills + Dishes */}
       <div className="guest-menu-main-panel">
+        <SubcategoryChooser
+          options={categories}
+          value={activeCategory}
+          label="Category"
+          onChange={(value) => {
+            setActiveSubCategory("All");
+            setActiveCategory(value);
+          }}
+        />
         <SubcategoryChooser
           key={activeCategory}
           options={subCategories}

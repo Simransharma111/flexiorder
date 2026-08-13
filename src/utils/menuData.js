@@ -100,8 +100,25 @@ export const normalizeDish = (dish) => {
         dish.categoryName ||
         "";
 
-  const idValue = categoryId(category);
-  const nameValue = categoryName(category);
+  const idValue =
+    categoryId(dish.categoryId) ||
+    categoryId(dish.category);
+  const nameValue =
+    categoryName(dish.categoryId) ||
+    categoryName(dish.category) ||
+    categoryName(dish.categoryName);
+  const normalizedCategory =
+    idValue || nameValue
+      ? {
+          ...(idValue ? { _id: idValue } : {}),
+          name:
+            nameValue ||
+            "Uncategorized",
+          ...(Array.isArray(category?.subCategories)
+            ? { subCategories: category.subCategories }
+            : {}),
+        }
+      : category;
 
   return {
     ...dish,
@@ -114,7 +131,7 @@ export const normalizeDish = (dish) => {
 
     categoryId: idValue,
 
-    category,
+    category: normalizedCategory,
 
     categoryName:
       nameValue || "Uncategorized",
@@ -304,7 +321,15 @@ export const buildDishFormData = (
    * Some flows create custom category names without a stored Mongo id, so
    * the serializer must allow either representation.
    */
-  const rawCategory = fields.category ?? fields.categoryId ?? fields.categoryName ?? "";
+  const hasNonemptyCategoryInput = [
+    fields.category,
+    fields.categoryId,
+    fields.categoryName,
+  ].some((value) =>
+    typeof value === "string"
+      ? value.trim().length > 0
+      : value !== undefined && value !== null
+  );
 
   let resolvedCategoryId =
     categoryId(fields.categoryId) || categoryId(fields.category);
@@ -330,19 +355,21 @@ export const buildDishFormData = (
           if (resolvedCategoryId) break;
         }
       }
-    } catch (err) {
+    } catch {
       // fallback: ignore resolution failure
     }
   }
 
   const serializedCategory = resolvedCategoryId || resolvedCategoryName || "";
 
-  if (!serializedCategory) {
+  if (!serializedCategory && hasNonemptyCategoryInput) {
     throw new Error("Please select a valid category.");
   }
 
-  // send a field named `category` (used by tests and some server expectations)
-  form.append("category", serializedCategory);
+  if (serializedCategory) {
+    // send a field named `category` (used by tests and some server expectations)
+    form.append("category", serializedCategory);
+  }
 
   if (resolvedCategoryId) form.append("categoryId", resolvedCategoryId);
   if (resolvedCategoryName) form.append("categoryName", resolvedCategoryName);

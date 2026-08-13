@@ -9,6 +9,8 @@ import {
 } from "react-icons/fi";
 
 import api from "../api/axios";
+import { API_URL } from "../config/env";
+import { Capacitor } from "@capacitor/core";
 import { useAuth } from "../context/AuthContext";
 import { initFCM } from "../utils/fcmPush";
 import { getPostLoginPath } from "../constants/roles";
@@ -26,6 +28,7 @@ export default function AuthPage({ mode = "login" }) {
   const [formData, setFormData] = useState({
     name: "",
     email: "",
+    phone: "",
     password: "",
     confirmPassword: "",
   });
@@ -50,7 +53,7 @@ export default function AuthPage({ mode = "login" }) {
 
     if (loading) return;
 
-    const email = formData.email.trim();
+    const email = formData.email.trim().toLowerCase();
     const password = formData.password;
 
     if (!email) {
@@ -66,6 +69,11 @@ export default function AuthPage({ mode = "login" }) {
     if (isRegister) {
       if (!formData.name.trim()) {
         alert("Please enter your name.");
+        return;
+      }
+
+      if (!/^[+0-9()\-\s]{7,20}$/.test(formData.phone.trim())) {
+        alert("Please enter a valid phone number.");
         return;
       }
 
@@ -86,6 +94,7 @@ export default function AuthPage({ mode = "login" }) {
         ? {
             name: formData.name.trim(),
             email,
+            phone: formData.phone.trim(),
             password,
           }
         : {
@@ -93,13 +102,48 @@ export default function AuthPage({ mode = "login" }) {
             password,
           };
 
-      const res = await api.post(
-        endpoint,
-        payload,
-        {
-          skipAuth: true,
+      let res;
+      const nativeAuth = Capacitor.isNativePlatform() && API_URL;
+      if (nativeAuth) {
+        const nativeResponse = await fetch(`${API_URL}${endpoint}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Accept: "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const nativeBody = await nativeResponse.json().catch(() => ({}));
+        if (!nativeResponse.ok) {
+          const error = new Error(nativeBody?.message || `Request failed with status ${nativeResponse.status}`);
+          error.response = { status: nativeResponse.status, data: nativeBody };
+          throw error;
         }
-      );
+        res = { data: nativeBody };
+      } else {
+        try {
+          res = await api.post(endpoint, payload, { skipAuth: true });
+        } catch (firstError) {
+        // Render may be waking from sleep. Retry one network-only failure so
+        // a cold start is not presented as a user's internet problem.
+        if (!firstError?.request || firstError?.response) throw firstError;
+        await new Promise((resolve) => setTimeout(resolve, 1800));
+          try {
+          res = await api.post(endpoint, payload, { skipAuth: true });
+        } catch (secondError) {
+          if (!secondError?.request || secondError?.response || !API_URL) throw secondError;
+          const nativeResponse = await fetch(`${API_URL}${endpoint}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Accept: "application/json" },
+            body: JSON.stringify(payload),
+          });
+          const nativeBody = await nativeResponse.json().catch(() => ({}));
+          if (!nativeResponse.ok) {
+            const error = new Error(nativeBody?.message || `Request failed with status ${nativeResponse.status}`);
+            error.response = { status: nativeResponse.status, data: nativeBody };
+            throw error;
+          }
+          res = { data: nativeBody };
+          }
+        }
+      }
 
       const user = res.data?.user;
       const token = res.data?.token;
@@ -194,7 +238,7 @@ export default function AuthPage({ mode = "login" }) {
           `Request failed with status ${err.response.status}.`;
       } else if (err.request) {
         message =
-          "Unable to reach FlexiOrder. Please check your internet connection and try again.";
+          "The FlexiOrder server did not respond. Check your connection and try again.";
       } else if (err.message) {
         message = err.message;
       }
@@ -355,6 +399,21 @@ export default function AuthPage({ mode = "login" }) {
               disabled={loading}
               className="w-full rounded-2xl bg-slate-900/70 border border-white/10 px-5 py-4 text-slate-100 placeholder:text-slate-500 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 disabled:opacity-60"
             />
+
+            {/* PHONE */}
+            {isRegister && (
+              <input
+                name="phone"
+                type="tel"
+                placeholder="Phone Number"
+                value={formData.phone}
+                onChange={handleChange}
+                autoComplete="tel"
+                inputMode="tel"
+                disabled={loading}
+                className="w-full rounded-2xl bg-slate-900/70 border border-white/10 px-5 py-4 text-slate-100 placeholder:text-slate-500 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 disabled:opacity-60"
+              />
+            )}
 
             {/* PASSWORD */}
             <input

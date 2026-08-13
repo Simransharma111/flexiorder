@@ -35,6 +35,7 @@ export default function StaffWorkspace() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
   const settingsRevision = useRef(0);
+  const orderingRequestRevision = useRef(0);
   const currentRole = readStoredSession().user?.role;
 
   const persistOrders = useCallback((next) => {
@@ -95,7 +96,18 @@ export default function StaffWorkspace() {
   }, [fetchData]);
 
   useEffect(() => {
-    if (hotel?._id) socket.emit("joinHotel", hotel._id);
+    if (!hotel?._id) return undefined;
+    const hotelId = String(hotel._id);
+    const joinHotel = () => {
+      socket.emit("joinHotel", hotelId);
+      socket.emit("joinHotelSettings", hotelId);
+    };
+    joinHotel();
+    socket.on("connect", joinHotel);
+    return () => {
+      socket.emit("leaveHotelSettings", hotelId);
+      socket.off("connect", joinHotel);
+    };
   }, [hotel?._id]);
 
   useEffect(() => {
@@ -108,10 +120,15 @@ export default function StaffWorkspace() {
     };
     const update = (order) => upsert(order);
     const updateHotelSettings = (payload) => {
-      settingsRevision.current += 1;
       setHotel((current) => {
         const next = applyHotelSettingsUpdate(current, payload);
         if (!next || next === current) return current;
+        const incomingOrdering = payload?.orderingEnabled ?? payload?.hotel?.orderingEnabled;
+        if (typeof incomingOrdering === "boolean") {
+          orderingRequestRevision.current += 1;
+          setUpdatingOrdering(false);
+        }
+        settingsRevision.current += 1;
         persistFeatureSettings(next, next.featureSettings);
         localStorage.setItem(getScopedStorageKey(HOTEL_CACHE_KEY), JSON.stringify(next));
         return next;
@@ -133,16 +150,33 @@ export default function StaffWorkspace() {
     if (!window.confirm(nextValue
       ? "Allow customers to place new orders now?"
       : "Pause customer ordering? Customers can still view the menu.")) return;
+    const previousHotel = hotel;
+    const requestRevision = ++orderingRequestRevision.current;
+    const optimisticHotel = { ...hotel, orderingEnabled: nextValue };
+    setHotel(optimisticHotel);
+    localStorage.setItem(getScopedStorageKey(HOTEL_CACHE_KEY), JSON.stringify(optimisticHotel));
     setUpdatingOrdering(true);
     try {
-      await api.patch("/hotel/profile", { orderingEnabled: nextValue });
-      const nextHotel = { ...hotel, orderingEnabled: nextValue };
+      const response = await api.patch("/hotel/profile", { orderingEnabled: nextValue });
+      if (requestRevision !== orderingRequestRevision.current) return;
+      const confirmedHotel = response.data?.hotel || response.data;
+      if (typeof confirmedHotel?.orderingEnabled !== "boolean") {
+        throw new Error("The restaurant did not confirm the ordering setting.");
+      }
+      const nextHotel = hydrateHotelFeatures(confirmedHotel);
+      settingsRevision.current += 1;
       setHotel(nextHotel);
       localStorage.setItem(getScopedStorageKey(HOTEL_CACHE_KEY), JSON.stringify(nextHotel));
     } catch (error) {
+      if (requestRevision !== orderingRequestRevision.current) return;
+      settingsRevision.current += 1;
+      setHotel(previousHotel);
+      localStorage.setItem(getScopedStorageKey(HOTEL_CACHE_KEY), JSON.stringify(previousHotel));
       window.alert(error?.response?.data?.message || "Could not update customer ordering.");
     } finally {
-      setUpdatingOrdering(false);
+      if (requestRevision === orderingRequestRevision.current) {
+        setUpdatingOrdering(false);
+      }
     }
   };
 

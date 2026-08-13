@@ -44,7 +44,7 @@ const HOTEL_CACHE_KEY = "flexiorder_kitchen_hotel";
 
 export default function KitchenDashboard() {
   const navigate = useNavigate();
-  const { status: connectionStatus, label: connectionLabel } = useConnectivity();
+  const { status: connectionStatus, label: connectionLabel, isOnline } = useConnectivity();
   const { syncKitchenNow } = useSync();
   const [hotel, setHotel] = useState(() => {
     try {
@@ -58,7 +58,6 @@ export default function KitchenDashboard() {
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState("");
   const [toolsOpen, setToolsOpen] = useState(false);
-  const [pendingSyncCount, setPendingSyncCount] = useState(getPendingKitchenUpdates().length);
   const [attentionCount, setAttentionCount] = useState(getKitchenUpdatesNeedingAttention().length);
   // IDs that have been in READY state for 20+ seconds and should be hidden.
   const [hiddenReadyIds, setHiddenReadyIds] = useState(new Set());
@@ -192,7 +191,6 @@ export default function KitchenDashboard() {
             : mergeOrderUpdate(current, order, getPendingKitchenUpdates())
         ));
       });
-      setPendingSyncCount(getPendingKitchenUpdates().length);
       setAttentionCount(getKitchenUpdatesNeedingAttention().length);
     };
     window.addEventListener(SYNC_STATE_EVENT, handleSync);
@@ -245,7 +243,6 @@ export default function KitchenDashboard() {
       });
     }
 
-    setPendingSyncCount(getPendingKitchenUpdates().length);
     syncKitchenNow();
   };
 
@@ -317,45 +314,38 @@ export default function KitchenDashboard() {
         </div>
       )}
 
-      {(pendingSyncCount > 0 || attentionCount > 0) && (
-        <div className={`ops-sync-strip${attentionCount ? " needs-attention" : ""}`}>
-          <span>{attentionCount ? `${attentionCount} need attention` : `${pendingSyncCount} syncing`}</span>
-          {attentionCount > 0 && (
-            <>
-              {getKitchenUpdateErrors().map(({ orderId, error }) => (
-                <span key={orderId} className="ops-sync-strip__error-detail">{error}</span>
-              ))}
-              {getKitchenUpdatesEligibleForHandled().length > 0 && <button type="button" onClick={() => {
-                const pending = markKitchenUpdatesHandled();
-                setPendingSyncCount(pending.length);
-                setAttentionCount(getKitchenUpdatesNeedingAttention().length);
-              }}>Already handled</button>}
-              <button type="button" onClick={() => {
-                const pending = retryKitchenUpdatesNeedingAttention();
-                setPendingSyncCount(pending.length);
-                setAttentionCount(0);
-                syncKitchenNow();
-              }}>Retry</button>
-              <button type="button" onClick={() => {
-                const restorations = getKitchenRejectedRestorations();
-                const pending = discardKitchenUpdatesNeedingAttention();
-                setOrders((current) => cacheOrders(current.map((order) => {
-                  const restoration = restorations.find((item) => matchesOrderId(order, item.orderId));
-                  return restoration ? {
-                    ...order,
-                    status: restoration.status,
-                    pendingMutation: false,
-                    reverted: true,
-                    statusChangeType: "revert",
-                    updatedAt: new Date().toISOString(),
-                  } : order;
-                })));
-                setPendingSyncCount(pending.length);
-                setAttentionCount(0);
-                fetchOrders();
-              }}>Restore confirmed</button>
-            </>
-          )}
+      {attentionCount > 0 && (
+        <div className="ops-attention-panel" role="status">
+          <span>{`${attentionCount} need attention`}</span>
+          {getKitchenUpdateErrors().map(({ orderId, error }) => (
+            <span key={orderId} className="ops-attention-panel__error-detail">{error}</span>
+          ))}
+          {getKitchenUpdatesEligibleForHandled().length > 0 && <button type="button" onClick={() => {
+            markKitchenUpdatesHandled();
+            setAttentionCount(getKitchenUpdatesNeedingAttention().length);
+          }}>Already handled</button>}
+          <button type="button" disabled={!isOnline} title={!isOnline ? "Reconnect to retry" : undefined} onClick={() => {
+            retryKitchenUpdatesNeedingAttention();
+            setAttentionCount(0);
+            syncKitchenNow();
+          }}>Retry</button>
+          <button type="button" onClick={() => {
+            const restorations = getKitchenRejectedRestorations();
+            discardKitchenUpdatesNeedingAttention();
+            setOrders((current) => cacheOrders(current.map((order) => {
+              const restoration = restorations.find((item) => matchesOrderId(order, item.orderId));
+              return restoration ? {
+                ...order,
+                status: restoration.status,
+                pendingMutation: false,
+                reverted: true,
+                statusChangeType: "revert",
+                updatedAt: new Date().toISOString(),
+              } : order;
+            })));
+            setAttentionCount(0);
+            fetchOrders();
+          }}>Restore confirmed</button>
         </div>
       )}
 

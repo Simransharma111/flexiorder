@@ -13,9 +13,11 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useCart } from "../context/CartContext";
 import { useEffect, useRef, useState } from "react";
 import api from "../api/axios";
+import socket from "../socket";
 import { useConnectivity } from "../context/ConnectivityContext";
 import { getSchedulePickerBounds, validateScheduledOrderTime } from "../utils/scheduleWindow";
 import { mergeGuestOrderItems, saveGuestOrderHandoff } from "../utils/guestOrderState";
+import { applyHotelSettingsUpdate } from "../utils/featureSettings";
 
 const getHotelPricing = (hotel) => {
   const enabled = Boolean(
@@ -58,36 +60,92 @@ export default function CartPage() {
   const [successMessage, setSuccessMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const [scheduleClock, setScheduleClock] = useState(() => new Date());
-  // Track whether the host has paused QR ordering.
-  const [orderingEnabled, setOrderingEnabled] = useState(true);
+  const [checkoutHotel, setCheckoutHotel] = useState(null);
+  const [orderingConfirmed, setOrderingConfirmed] = useState(false);
+  const checkoutRequestRevision = useRef(0);
+  const checkoutPreflightInFlight = useRef(false);
+  const checkoutHotelId = checkoutHotel?._id || checkoutHotel?.id;
+  const orderingEnabled = Boolean(
+    orderingConfirmed &&
+    checkoutHotel &&
+    typeof checkoutHotel === "object" &&
+    checkoutHotelId &&
+    checkoutHotel.orderingEnabled !== false
+  );
 
   // =========================================================
   // SET CART SESSION
   // =========================================================
 
   useEffect(() => {
-    if (qrId) {
-      setCartSession(qrId);
-      api.get(`/qr/menu/${qrId}`, { skipAuth: true })
-        .then((response) => {
-          const hotel = response.data?.hotel;
-          // Respect the host's ordering toggle.
-          setOrderingEnabled(hotel?.orderingEnabled !== false);
-          const pricing = getHotelPricing(hotel);
-          setGstEnabled(pricing.enabled);
-          setGstRate(pricing.rate);
-          const menu = response.data?.dishes || response.data?.menu || [];
-          setUnavailableIds(
-            menu
-              .filter((dish) => dish.isAvailable === false)
-              .map((dish) => dish._id)
-          );
-        })
-        .catch((error) => {
-          console.warn("Could not refresh checkout availability", error);
-        });
-    }
+    if (!qrId) return undefined;
+    setCartSession(qrId);
+    setOrderingConfirmed(false);
+
+    const refreshCheckoutState = async () => {
+      if (checkoutPreflightInFlight.current) return;
+      const requestRevision = ++checkoutRequestRevision.current;
+      try {
+        const response = await api.get(`/qr/menu/${qrId}`, { skipAuth: true });
+        if (requestRevision !== checkoutRequestRevision.current) return;
+        const hotel = response.data?.hotel || null;
+        setCheckoutHotel(hotel);
+        setOrderingConfirmed(Boolean(
+          hotel &&
+          typeof hotel === "object" &&
+          (hotel._id || hotel.id)
+        ));
+        const pricing = getHotelPricing(hotel);
+        setGstEnabled(pricing.enabled);
+        setGstRate(pricing.rate);
+        const menu = response.data?.dishes || response.data?.menu || [];
+        setUnavailableIds(
+          menu.filter((dish) => dish.isAvailable === false).map((dish) => dish._id)
+        );
+      } catch (error) {
+        if (requestRevision !== checkoutRequestRevision.current) return;
+        setOrderingConfirmed(false);
+        console.warn("Could not refresh checkout availability", error);
+      }
+    };
+
+    refreshCheckoutState();
+    const intervalId = window.setInterval(refreshCheckoutState, 30000);
+    return () => {
+      checkoutRequestRevision.current += 1;
+      window.clearInterval(intervalId);
+    };
   }, [qrId, setCartSession]);
+
+  useEffect(() => {
+    if (!checkoutHotelId) return undefined;
+    socket.emit("joinHotelSettings", String(checkoutHotelId));
+    const joinHotel = () => socket.emit("joinHotelSettings", String(checkoutHotelId));
+    const handleSettingsUpdate = (payload) => {
+      const incomingOrdering = payload?.orderingEnabled ?? payload?.hotel?.orderingEnabled;
+      if (typeof incomingOrdering !== "boolean") return;
+      setCheckoutHotel((current) => {
+        const next = applyHotelSettingsUpdate(current, payload);
+        if (next === current) return current;
+        checkoutRequestRevision.current += 1;
+        setOrderingConfirmed(true);
+        return next;
+      });
+    };
+    socket.on("connect", joinHotel);
+    socket.on("hotelSettingsUpdated", handleSettingsUpdate);
+    return () => {
+      socket.emit("leaveHotelSettings", String(checkoutHotelId));
+      socket.off("connect", joinHotel);
+      socket.off("hotelSettingsUpdated", handleSettingsUpdate);
+    };
+  }, [checkoutHotelId]);
+
+  useEffect(() => {
+    if (orderingConfirmed && checkoutHotel?.orderingEnabled === false) {
+      navigate(`/qr/${qrId}`, { replace: true });
+    }
+  }, [checkoutHotel?.orderingEnabled, navigate, orderingConfirmed, qrId]);
 
   useEffect(() => {
     if (orderType !== "schedule") return undefined;
@@ -116,10 +174,14 @@ export default function CartPage() {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6">
         <div className="bg-white rounded-2xl p-8 text-center shadow-sm w-full max-w-md">
-          <div className="text-5xl mb-4">🚫</div>
-          <h2 className="text-xl font-bold text-gray-900">Ordering is paused</h2>
+          <div className="text-5xl mb-4">{orderingConfirmed ? "🚫" : "…"}</div>
+          <h2 className="text-xl font-bold text-gray-900">
+            {orderingConfirmed ? "Ordering is paused" : "Confirming ordering availability"}
+          </h2>
           <p className="text-gray-500 mt-2 text-sm">
-            The restaurant has temporarily disabled customer ordering. Please ask a waiter to place the order on your behalf.
+            {orderingConfirmed
+              ? "The restaurant has temporarily disabled customer ordering. Your cart has been kept."
+              : errorMessage || "Ordering controls will appear after the restaurant confirms that ordering is available."}
           </p>
           <button
             onClick={() => navigate(`/qr/${qrId}`)}
@@ -233,12 +295,29 @@ export default function CartPage() {
       let tableId = null;
 
       try {
-        const menuResponse = await api.get(
-          `/qr/menu/${qrId}`,
-          { skipAuth: true }
-        );
+        checkoutPreflightInFlight.current = true;
+        const requestRevision = ++checkoutRequestRevision.current;
+        const menuResponse = await api.get(`/qr/menu/${qrId}`, { skipAuth: true });
+        const freshHotel = menuResponse.data?.hotel || null;
+        if (requestRevision !== checkoutRequestRevision.current) {
+          throw new Error("Ordering availability changed. Please review the menu and try again.");
+        }
+        if (
+          !freshHotel ||
+          typeof freshHotel !== "object" ||
+          Array.isArray(freshHotel) ||
+          !(freshHotel._id || freshHotel.id)
+        ) {
+          throw new Error("Could not confirm the restaurant's ordering availability.");
+        }
+        setCheckoutHotel(freshHotel);
+        setOrderingConfirmed(true);
+        if (freshHotel?.orderingEnabled === false) {
+          navigate(`/qr/${qrId}`, { replace: true });
+          return;
+        }
 
-        orderPricing = getHotelPricing(menuResponse.data?.hotel);
+        orderPricing = getHotelPricing(freshHotel);
         setGstEnabled(orderPricing.enabled);
         setGstRate(orderPricing.rate);
 
@@ -251,14 +330,24 @@ export default function CartPage() {
           "Failed to get table:",
           menuError
         );
+        setOrderingConfirmed(false);
+        setErrorMessage(
+          menuError?.response?.data?.message ||
+          menuError?.message ||
+          "Could not confirm ordering availability. Please try again."
+        );
+        return;
+      } finally {
+        checkoutPreflightInFlight.current = false;
       }
 
       // =====================================================
-      // FALLBACK
+      // TABLE VALIDATION
       // =====================================================
 
       if (!tableId) {
-        tableId = qrId;
+        setErrorMessage("Could not confirm your table. Please reopen the QR menu.");
+        return;
       }
 
       // =====================================================
@@ -374,6 +463,14 @@ export default function CartPage() {
         "Failed to place order. Please try again.";
 
       setErrorMessage(message);
+
+      if (error?.response?.data?.code === "ORDERING_PAUSED") {
+        setCheckoutHotel((current) => current
+          ? { ...current, orderingEnabled: false }
+          : current);
+        setOrderingConfirmed(true);
+        navigate(`/qr/${qrId}`, { replace: true });
+      }
 
     } finally {
       placingInFlight.current = false;

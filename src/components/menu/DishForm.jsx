@@ -11,6 +11,7 @@ import {
 import {
   categoryKey,
   categoryName,
+  dishCategoryName,
 } from "../../utils/menuCategories";
 
 const EMPTY_FORM = {
@@ -93,7 +94,7 @@ export default function DishForm({
     }
 
     const existingCategory =
-      categoryName(dish.category) ||
+      dishCategoryName(dish) ||
       "Main Course";
 
     setFormData({
@@ -386,21 +387,8 @@ export default function DishForm({
           : [],
       };
 
-      /*
-       * IMPORTANT
-       *
-       * category is deliberately passed
-       * as a NAME.
-       *
-       * Example:
-       * "Main Course"
-       *
-       * NOT:
-       * ObjectId
-       *
-       * NOT:
-       * { _id, name }
-       */
+      // The editor owns the human-readable label. OwnerMenuManager resolves
+      // that label to a restaurant-scoped category before queueing the dish.
       const fields =
         dishFieldsFromForm(
           cleanFormData,
@@ -589,33 +577,44 @@ export default function DishForm({
               Category
             </label>
 
-            <input
+            <select
               id="dish-category"
-              type="text"
-              list="menu-category-options"
               name="category"
-              value={formData.category}
-              onChange={handleChange}
-              placeholder="Choose or type a category"
+              value={categoryOptions.includes(formData.category) ? formData.category : "__new__"}
+              onChange={(event) => {
+                if (event.target.value === "__new__") {
+                  setFormData((current) => ({ ...current, category: "" }));
+                } else {
+                  handleChange(event);
+                }
+              }}
               disabled={loading}
-              className="w-full border border-gray-200 rounded-lg px-3 py-3 outline-none focus:ring-2 focus:ring-orange-400"
+              className="w-full border border-gray-200 rounded-lg bg-white px-3 py-3 outline-none focus:ring-2 focus:ring-orange-400"
               required
-            />
+            >
+              <option value="" disabled>Choose a category</option>
+              {categoryOptions.map((category) => (
+                <option value={category} key={category}>{category}</option>
+              ))}
+              <option value="__new__">+ Create new category…</option>
+            </select>
 
-            <datalist id="menu-category-options">
-              {categoryOptions.map(
-                (category) => (
-                  <option
-                    value={category}
-                    key={category}
-                  />
-                )
-              )}
-            </datalist>
+            {!categoryOptions.includes(formData.category) && (
+              <input
+                aria-label="New category name"
+                type="text"
+                name="category"
+                value={formData.category}
+                onChange={handleChange}
+                placeholder="New category name"
+                disabled={loading}
+                className="mt-2 w-full border border-gray-200 rounded-lg px-3 py-3 outline-none focus:ring-2 focus:ring-orange-400"
+                required
+              />
+            )}
 
             <p className="mt-1 text-xs text-gray-500">
-              Select an existing category or
-              type a new category name.
+              Choose a restaurant category, or create one once if it is not listed.
             </p>
           </div>
 

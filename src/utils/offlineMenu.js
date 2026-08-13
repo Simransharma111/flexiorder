@@ -4,10 +4,18 @@ import {
   normalizeDishResponse,
   normalizeMenuResponse,
 } from "./menuData";
+import {
+  categoryId,
+  categoryName,
+  dishCategoryName,
+  findCategoryByName,
+  normalizeCategoryRecord,
+} from "./menuCategories";
 import { getRestaurantId, getRestaurantStorageKey, getUserId } from "./storageScope";
 
 const CACHE_KEY = "flexiorder_menu";
 const QUEUE_KEY = "flexiorder_pending_menu_mutations";
+const CATEGORY_CACHE_KEY = "flexiorder_menu_categories";
 export const MENU_CHANGED_EVENT = "flexiorder:menu-changed";
 export const SYNC_REQUEST_EVENT = "flexiorder:sync-requested";
 
@@ -30,6 +38,7 @@ const operationId = (prefix) => (
 const keysFor = (restaurant) => ({
   cache: getRestaurantStorageKey(CACHE_KEY, restaurant),
   queue: getRestaurantStorageKey(QUEUE_KEY, restaurant),
+  categories: getRestaurantStorageKey(CATEGORY_CACHE_KEY, restaurant),
 });
 
 const readJson = (key, fallback) => {
@@ -97,6 +106,56 @@ export const readMenuQueue = (restaurant) => {
   return Array.isArray(queue) ? queue : [];
 };
 
+export const readMenuCategoryCache = (restaurant) => {
+  const restaurantId = getRestaurantId(restaurant);
+  if (!restaurantId) return [];
+
+  const cached = readJson(keysFor(restaurantId).categories, []);
+  if (!Array.isArray(cached)) return [];
+
+  return cached
+    .map(normalizeCategoryRecord)
+    .filter(Boolean);
+};
+
+export const writeMenuCategoryCache = (restaurant, categories = []) => {
+  const restaurantId = getRestaurantId(restaurant);
+  if (!restaurantId) return [];
+
+  const byName = new Map();
+  categories
+    .map(normalizeCategoryRecord)
+    .filter(Boolean)
+    .forEach((category) => {
+      const key = categoryName(category).toLocaleLowerCase();
+      if (key && !byName.has(key)) byName.set(key, category);
+    });
+
+  const normalized = [...byName.values()];
+  localStorage.setItem(
+    keysFor(restaurantId).categories,
+    JSON.stringify(normalized)
+  );
+  return normalized;
+};
+
+const categoriesFromDishes = (dishes = []) =>
+  dishes
+    .map((dish) => {
+      const id =
+        categoryId(dish?.categoryId) ||
+        categoryId(dish?.category);
+      const name = dishCategoryName(dish);
+      return id && name ? { _id: id, name } : null;
+    })
+    .filter(Boolean);
+
+const mergeCategoryCache = (restaurant, categories = []) =>
+  writeMenuCategoryCache(restaurant, [
+    ...categories,
+    ...readMenuCategoryCache(restaurant),
+  ]);
+
 const dishKey = (dish) => String(dish?._id || dish?.id || dish?.clientDishId || "");
 
 const upsertDish = (dishes, dish, replacingId = null) => {
@@ -148,6 +207,7 @@ export const reconcileMenuFromServer = (restaurant, payload) => {
   const cached = readMenuCache(restaurant);
   const queue = readMenuQueue(restaurant);
   const next = applyPendingOperations(incoming, cached, queue);
+  mergeCategoryCache(restaurant, categoriesFromDishes(incoming));
   writeState(restaurant, next, queue);
   return next;
 };
@@ -283,8 +343,70 @@ const errorMessage = (error, operation) => {
 };
 
 const isRetryable = (error) => {
+  if (error?.nonRetryable) return false;
   const status = Number(error?.response?.status || 0);
   return !error?.response || status >= 500 || [408, 429].includes(status);
+};
+
+const fetchCanonicalCategories = async (api, restaurant) => {
+  const response = await api.get(`/menu/categories/${restaurant}`);
+  const categories = Array.isArray(response.data)
+    ? response.data
+    : Array.isArray(response.data?.categories)
+      ? response.data.categories
+      : [];
+
+  return writeMenuCategoryCache(restaurant, categories);
+};
+
+const repairQueuedCategory = async (api, restaurant, operation) => {
+  if (!["create", "update"].includes(operation.type)) {
+    return operation;
+  }
+
+  const fields = operation.fields || {};
+  const existingId =
+    categoryId(fields.categoryId) ||
+    categoryId(fields.category);
+  const name =
+    categoryName(fields.categoryName) ||
+    categoryName(fields.category);
+  if (!existingId && !name) return operation;
+
+  const categories = await fetchCanonicalCategories(api, restaurant);
+  let match = existingId
+    ? categories.find((category) => categoryId(category) === existingId)
+    : null;
+  if (!match && name) match = findCategoryByName(categories, name);
+
+  if (!match) {
+    const error = new Error(
+      `Invalid category. “${name || existingId}” is not an active category; open the dish and choose the category again.`
+    );
+    error.nonRetryable = true;
+    throw error;
+  }
+
+  const repaired = {
+    ...operation,
+    fields: {
+      ...fields,
+      category: match,
+      categoryId: categoryId(match),
+      categoryName: categoryName(match),
+    },
+  };
+
+  const queue = readMenuQueue(restaurant);
+  if (queue.some((item) => item.id === operation.id)) {
+    writeState(
+      restaurant,
+      readMenuCache(restaurant),
+      queue.map((item) => item.id === operation.id ? repaired : item)
+    );
+  }
+
+  return repaired;
 };
 
 const recordFailure = (restaurant, snapshot, error) => {
@@ -413,8 +535,13 @@ const runMenuSync = async (api, restaurant, { force = false } = {}) => {
   ));
   for (const operation of snapshot) {
     try {
-      const serverDish = await replayOperation(api, operation);
-      completeOperation(restaurantId, operation, serverDish);
+      const repairedOperation = await repairQueuedCategory(
+        api,
+        restaurantId,
+        operation
+      );
+      const serverDish = await replayOperation(api, repairedOperation);
+      completeOperation(restaurantId, repairedOperation, serverDish);
       synced += 1;
     } catch (error) {
       recordFailure(restaurantId, operation, error);

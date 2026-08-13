@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "../api/axios";
+import socket from "../socket";
 import {
   FaPen,
   FaSave,
@@ -11,12 +12,60 @@ import { HOTEL_THEME_CHOICES } from "../constants/hotelThemes";
 import { getHotelThemeStyle, resolveHotelTheme } from "../utils/hotelTheme";
 import {
   APP_LEVELS,
+  applyHotelSettingsUpdate,
   appLevelAllows,
   getFeaturesForLevel,
   hydrateHotelFeatures,
   normalizeFeatureSettings,
   persistFeatureSettings,
 } from "../utils/featureSettings";
+
+const hasOwn = (value, field) =>
+  Boolean(value) && Object.prototype.hasOwnProperty.call(value, field);
+
+const normalizeHotelSettings = (value) => {
+  if (!value) return value;
+  const rawRate = Number(
+    value.gstPercentage ?? value.gstRate ?? value.gst?.percentage ?? value.gst?.rate ?? 0
+  );
+  const legacyMenuMode = value.menuDisplayMode ?? (value.simpleMenu ? "simple" : "visual");
+  const rawMenuMode = value.menuMode ?? legacyMenuMode;
+
+  return {
+    ...value,
+    gstEnabled: Boolean(value.gstEnabled ?? value.enableGST ?? value.gst?.enabled ?? false),
+    gstPercentage: Number.isFinite(rawRate) && rawRate >= 0 && rawRate <= 100 ? rawRate : 0,
+    menuMode: ["visual", "simple"].includes(rawMenuMode) ? rawMenuMode : "visual",
+  };
+};
+
+const getSettingsPayload = (hotel) => {
+  const gstPercentage = hotel.gstPercentage === "" ? 0 : Number(hotel.gstPercentage);
+  if (typeof hotel.gstEnabled !== "boolean") {
+    throw new Error("Choose whether GST is enabled before saving.");
+  }
+  if (!Number.isFinite(gstPercentage) || gstPercentage < 0 || gstPercentage > 100) {
+    throw new Error("GST percentage must be a number from 0 through 100.");
+  }
+  if (!["visual", "simple"].includes(hotel.menuMode)) {
+    throw new Error("Choose either Visual menu or Simple menu before saving.");
+  }
+
+  return {
+    menuMode: hotel.menuMode,
+    gstEnabled: hotel.gstEnabled,
+    gstPercentage,
+  };
+};
+
+const confirmsSettings = (hotel, submitted) => (
+  hasOwn(hotel, "menuMode") &&
+  hasOwn(hotel, "gstEnabled") &&
+  hasOwn(hotel, "gstPercentage") &&
+  hotel.menuMode === submitted.menuMode &&
+  hotel.gstEnabled === submitted.gstEnabled &&
+  hotel.gstPercentage === submitted.gstPercentage
+);
 
 
 
@@ -29,6 +78,10 @@ const navigate=useNavigate();
 const [hotel,setHotel]=useState(null);
 
 const [loading,setLoading]=useState(false);
+const [orderingLoading,setOrderingLoading]=useState(false);
+const orderingRequestRevision=useRef(0);
+const settingsRevision=useRef(0);
+const confirmedHotelRef=useRef(null);
 
 
 const [logo,setLogo]=useState(null);
@@ -52,23 +105,20 @@ const fetchHotel=useCallback(async()=>{
 
 try{
 
+const requestRevision=settingsRevision.current;
+
 
 const res=await api.get(
 "/hotel/me"
 );
 
 
-let data=hydrateHotelFeatures(res.data?.hotel || res.data);
+const data=normalizeHotelSettings(hydrateHotelFeatures(res.data?.hotel || res.data));
 
-if (data) {
-  const gstEnabled = Boolean(data.gstEnabled ?? data.enableGST ?? data.gst?.enabled ?? false);
-  const gstPercentage = Number(data.gstPercentage ?? data.gstRate ?? data.gst?.percentage ?? data.gst?.rate ?? 0);
-  const menuMode = data.menuMode ?? data.menuDisplayMode ?? (data.simpleMenu ? "simple" : "visual") ?? "visual";
-  data = { ...data, gstEnabled, gstPercentage, menuMode };
-}
+if (requestRevision !== settingsRevision.current) return;
 
+confirmedHotelRef.current=data;
 setHotel(data);
-onHotelChange?.(data);
 
 
 setLogoPreview(
@@ -87,11 +137,46 @@ console.log(err);
 
 }
 
-}, [onHotelChange]);
+}, []);
 
 useEffect(()=>{
   fetchHotel();
 },[fetchHotel]);
+
+useEffect(() => {
+  if (hotel) onHotelChange?.(hotel);
+}, [hotel, onHotelChange]);
+
+useEffect(() => {
+  const hotelId = hotel?._id || hotel?.id;
+  if (!hotelId) return undefined;
+  socket.emit("joinHotelSettings", String(hotelId));
+  const joinHotel = () => socket.emit("joinHotelSettings", String(hotelId));
+  const handleSettingsUpdate = (payload) => {
+    setHotel((current) => {
+      const next = applyHotelSettingsUpdate(current, payload);
+      if (next === current) return current;
+      settingsRevision.current += 1;
+      const confirmedCurrent = confirmedHotelRef.current;
+      const confirmedNext = applyHotelSettingsUpdate(confirmedCurrent, payload);
+      if (confirmedNext !== confirmedCurrent) {
+        confirmedHotelRef.current = confirmedNext;
+      }
+      const incomingOrdering = payload?.orderingEnabled ?? payload?.hotel?.orderingEnabled;
+      if (typeof incomingOrdering === "boolean") {
+        setOrderingLoading(false);
+      }
+      return next;
+    });
+  };
+  socket.on("connect", joinHotel);
+  socket.on("hotelSettingsUpdated", handleSettingsUpdate);
+  return () => {
+    socket.emit("leaveHotelSettings", String(hotelId));
+    socket.off("connect", joinHotel);
+    socket.off("hotelSettingsUpdated", handleSettingsUpdate);
+  };
+}, [hotel?._id, hotel?.id]);
 
 
 
@@ -106,9 +191,7 @@ const updateField=(field,value)=>{
 
 
 setHotel((previous) => {
-  const next = { ...previous, [field]: value };
-  onHotelChange?.(next);
-  return next;
+  return { ...previous, [field]: value };
 });
 
 
@@ -120,9 +203,7 @@ const updateFeatureSetting=(field,value)=>{
       ...previous.featureSettings,
       [field]: value,
     });
-    const next = { ...previous, featureSettings };
-    onHotelChange?.(next);
-    return next;
+    return { ...previous, featureSettings };
   });
 };
 
@@ -132,6 +213,49 @@ const updateStaffCapability=(capability,value)=>{
     ...current.staffCapabilities,
     [capability]: value,
   });
+};
+
+const updateOrderingEnabled=async(value)=>{
+  if (!hotel || orderingLoading || loading || typeof value !== "boolean") return;
+  const previousHotel = hotel;
+  const requestRevision = ++orderingRequestRevision.current;
+  updateField("orderingEnabled", value);
+  setOrderingLoading(true);
+
+  try {
+    const response = await api.patch("/hotel/profile", {
+      orderingEnabled: value,
+    });
+    if (requestRevision !== orderingRequestRevision.current) return;
+    const confirmedHotel = response.data?.hotel || response.data;
+    if (typeof confirmedHotel?.orderingEnabled !== "boolean") {
+      throw new Error("The restaurant did not confirm the ordering setting.");
+    }
+    setHotel((current) => {
+      const next = {
+        ...current,
+        orderingEnabled: confirmedHotel.orderingEnabled,
+        updatedAt: confirmedHotel.updatedAt || current?.updatedAt,
+      };
+      confirmedHotelRef.current = {
+        ...confirmedHotelRef.current,
+        orderingEnabled: confirmedHotel.orderingEnabled,
+        updatedAt: confirmedHotel.updatedAt || confirmedHotelRef.current?.updatedAt,
+      };
+      return next;
+    });
+  } catch (error) {
+    if (requestRevision !== orderingRequestRevision.current) return;
+    setHotel((current) => {
+      const next = { ...current, orderingEnabled: previousHotel.orderingEnabled };
+      return next;
+    });
+    alert(error?.response?.data?.message || "Customer ordering could not be updated.");
+  } finally {
+    if (requestRevision === orderingRequestRevision.current) {
+      setOrderingLoading(false);
+    }
+  }
 };
 
 
@@ -152,6 +276,8 @@ try{
 setLoading(true);
 
 const featureSettings = normalizeFeatureSettings(hotel.featureSettings);
+const submittedSettings = getSettingsPayload(hotel);
+const saveRequestRevision = settingsRevision.current;
 
 
 const res = await api.patch(
@@ -165,19 +291,7 @@ const res = await api.patch(
     website: hotel.website,
     instagram: hotel.instagram,
     whatsapp: hotel.whatsapp,
-    orderingEnabled: hotel.orderingEnabled !== false,
-    gstEnabled: Boolean(hotel.gstEnabled),
-    enableGST: Boolean(hotel.gstEnabled),
-    gst: {
-      enabled: Boolean(hotel.gstEnabled),
-      percentage: Number(hotel.gstPercentage || 0),
-      rate: Number(hotel.gstPercentage || 0),
-    },
-    gstPercentage: Number(hotel.gstPercentage || 0),
-    gstRate: Number(hotel.gstPercentage || 0),
-    menuMode: hotel.menuMode || "visual",
-    menuDisplayMode: hotel.menuMode || "visual",
-    simpleMenu: hotel.menuMode === "simple",
+    ...submittedSettings,
     appLevel: featureSettings.appLevel,
     publicDisplayEnabled: featureSettings.publicDisplayEnabled,
     godModeEnabled: featureSettings.godModeEnabled,
@@ -186,16 +300,56 @@ const res = await api.patch(
   }
 );
 
-let data = hydrateHotelFeatures(res.data?.hotel || res.data || hotel);
-if (data) {
-  const gstEnabled = Boolean(data.gstEnabled ?? data.enableGST ?? data.gst?.enabled ?? false);
-  const gstPercentage = Number(data.gstPercentage ?? data.gstRate ?? data.gst?.percentage ?? data.gst?.rate ?? 0);
-  const menuMode = data.menuMode ?? data.menuDisplayMode ?? (data.simpleMenu ? "simple" : "visual") ?? "visual";
-  data = { ...data, gstEnabled, gstPercentage, menuMode };
+let confirmedResponse = res.data?.hotel || res.data;
+// Some deployments/proxies return a successful envelope before the updated
+// document has been serialized.  Re-read the authoritative hotel once before
+// showing a false "not confirmed" error.
+if (!confirmsSettings(confirmedResponse, submittedSettings)) {
+  try {
+    const verify = await api.get("/hotel/me");
+    const verifiedHotel = verify.data?.hotel || verify.data;
+    if (confirmsSettings(verifiedHotel, submittedSettings)) {
+      confirmedResponse = verifiedHotel;
+    }
+  } catch {
+    // Keep the original response so the user receives the meaningful error.
+  }
 }
+if (!confirmsSettings(confirmedResponse, submittedSettings)) {
+  if (
+    ["visual", "simple"].includes(confirmedResponse?.menuMode) &&
+    typeof confirmedResponse?.gstEnabled === "boolean" &&
+    typeof confirmedResponse?.gstPercentage === "number"
+  ) {
+    const responseHotel = normalizeHotelSettings(
+      hydrateHotelFeatures(confirmedResponse)
+    );
+    confirmedHotelRef.current = saveRequestRevision === settingsRevision.current
+      ? responseHotel
+      : {
+        ...responseHotel,
+        orderingEnabled: confirmedHotelRef.current?.orderingEnabled,
+        featureSettings: confirmedHotelRef.current?.featureSettings,
+        updatedAt: confirmedHotelRef.current?.updatedAt || responseHotel.updatedAt,
+      };
+  }
+  throw new Error("The restaurant did not confirm the saved menu and GST settings.");
+}
+const data = normalizeHotelSettings(hydrateHotelFeatures(confirmedResponse));
+const concurrentConfirmed = confirmedHotelRef.current;
 
-setHotel(data);
-onHotelChange?.(data);
+setHotel(() => {
+  const next = saveRequestRevision === settingsRevision.current
+    ? data
+    : {
+      ...data,
+      orderingEnabled: concurrentConfirmed?.orderingEnabled,
+      featureSettings: concurrentConfirmed?.featureSettings,
+      updatedAt: concurrentConfirmed?.updatedAt || data.updatedAt,
+    };
+  confirmedHotelRef.current = next;
+  return next;
+});
 
 persistFeatureSettings(data, featureSettings);
 
@@ -210,8 +364,12 @@ alert(
 
 console.log(err);
 
+if (confirmedHotelRef.current) {
+  setHotel(confirmedHotelRef.current);
+}
+
 alert(
-"Profile update failed"
+err?.response?.data?.message || err?.message || "Profile update failed"
 );
 
 
@@ -338,16 +496,10 @@ const res = await api.patch(
 );
 
 
-let data = hydrateHotelFeatures(res.data?.hotel || res.data || hotel);
-if (data) {
-  const gstEnabled = Boolean(data.gstEnabled ?? data.enableGST ?? data.gst?.enabled ?? false);
-  const gstPercentage = Number(data.gstPercentage ?? data.gstRate ?? data.gst?.percentage ?? data.gst?.rate ?? 0);
-  const menuMode = data.menuMode ?? data.menuDisplayMode ?? (data.simpleMenu ? "simple" : "visual") ?? "visual";
-  data = { ...data, gstEnabled, gstPercentage, menuMode };
-}
+const data = normalizeHotelSettings(hydrateHotelFeatures(res.data?.hotel || res.data || hotel));
 
+confirmedHotelRef.current=data;
 setHotel(data);
-onHotelChange?.(data);
 
 alert(
 "Branding updated successfully"
@@ -394,7 +546,6 @@ const changeTheme=(theme)=>{
         mode: theme.mode || "dark",
       },
     };
-    onHotelChange?.(next);
     return next;
   });
 
@@ -744,12 +895,12 @@ mt-5
       type="checkbox"
       aria-label="God Mode"
       checked={featureSettings.godModeEnabled}
-      disabled={loading}
+      disabled={loading || orderingLoading}
       onChange={(event) => updateFeatureSetting("godModeEnabled", event.target.checked)}
     />
   </label>
 
-  <button type="button" disabled={loading} onClick={saveAppSettings} className="mt-5 rounded-xl bg-white px-5 py-3 font-bold text-black">
+  <button type="button" disabled={loading || orderingLoading} onClick={saveAppSettings} className="mt-5 rounded-xl bg-white px-5 py-3 font-bold text-black">
     <FaSave /> Save app settings
   </button>
 </section>
@@ -951,7 +1102,8 @@ p-6
     <input
       type="checkbox"
       checked={hotel.orderingEnabled !== false}
-      onChange={(event) => updateField("orderingEnabled", event.target.checked)}
+      onChange={(event) => updateOrderingEnabled(event.target.checked)}
+      disabled={orderingLoading || loading}
       className="h-4 w-4 accent-orange-500"
     />
     Customer ordering enabled
@@ -965,6 +1117,7 @@ p-6
       <button
         key={value}
         type="button"
+        aria-pressed={(hotel.menuMode || "visual") === value}
         onClick={() => updateField("menuMode", value)}
         className={`rounded-2xl border-2 p-4 text-left ${
           (hotel.menuMode || "visual") === value
@@ -1010,8 +1163,11 @@ p-6
         type="number"
         min="0"
         max="100"
-        value={hotel.gstPercentage || ""}
-        onChange={(event) => updateField("gstPercentage", event.target.value)}
+        value={hotel.gstPercentage ?? ""}
+        onChange={(event) => updateField(
+          "gstPercentage",
+          event.target.value === "" ? "" : Number(event.target.value)
+        )}
         placeholder="e.g. 5"
         className="w-full rounded-xl border border-white/20 bg-black/10 px-4 py-3 outline-none"
       />
@@ -1023,7 +1179,7 @@ p-6
 <div className="flex justify-end">
   <button
     onClick={saveProfile}
-    disabled={loading}
+    disabled={loading || orderingLoading}
     className="
     px-8
     py-3

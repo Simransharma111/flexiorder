@@ -7,11 +7,13 @@ import { canUseStaffCapability, hydrateHotelFeatures } from "../utils/featureSet
 import { getHotelThemeStyle } from "../utils/hotelTheme";
 import { clearAuthSession, readStoredSession } from "../utils/session";
 import { getScopedStorageKey, rememberRestaurantId } from "../utils/storageScope";
+import { useConnectivity } from "../context/ConnectivityContext";
 
 const HOTEL_CACHE_KEY = "flexiorder_staff_hotel";
 
 export default function StaffMenuPage() {
   const navigate = useNavigate();
+  const { status: connectionStatus, label: connectionLabel } = useConnectivity();
   const [hotel, setHotel] = useState(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const role = readStoredSession().user?.role;
@@ -56,6 +58,7 @@ export default function StaffMenuPage() {
       <header className="staff-menu-header">
         <button type="button" className="ops-icon-button" aria-label="Back to Waiter" onClick={() => navigate("/owner/order")}><FiArrowLeft /></button>
         <div><strong>Edit menu</strong><span>{hotel.name}</span></div>
+        <span className={`ops-connection-dot is-${connectionStatus}`} title={connectionLabel} aria-label={connectionLabel} />
         <button type="button" className="ops-icon-button" aria-label="More menu options" onClick={() => setMenuOpen(true)}><FiMoreVertical /></button>
       </header>
 
