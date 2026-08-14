@@ -871,7 +871,7 @@ test("waiter ordering toggle rolls back a failed save and uses confirmed server 
   ]);
 });
 
-test("customer visual and simple menus use the same compact subcategory chooser", async ({ page }) => {
+test("customer visual and simple menus use one compact category chooser", async ({ page }) => {
   const menu = [
     { _id: "dish-paneer", name: "Paneer Tikka", price: 250, category: "Starters", subCategory: "Grill", foodType: "veg", isAvailable: true },
     { _id: "dish-naan", name: "Butter Naan", price: 60, category: "Starters", subCategory: "Breads", foodType: "veg", isAvailable: true },
@@ -879,20 +879,22 @@ test("customer visual and simple menus use the same compact subcategory chooser"
   await mockGuestMenu(page, { dishes: menu });
 
   await page.goto("/qr/qr-123");
-  const chooser = page.locator(".guest-menu-main-panel .menu-subcategory-trigger");
+  const chooser = page.locator(".guest-menu-main-panel .menu-category-chooser .menu-subcategory-trigger");
   await expect(page.locator(".guest-menu-sidebar")).toHaveCount(0);
-  await expect(page.locator(".guest-category-bar").getByRole("button", { name: "All", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator(".guest-menu-main-panel .menu-subcategory-trigger")).toHaveCount(1);
+  await expect(chooser).toContainText("All");
   await chooser.click();
   await page.getByPlaceholder("Search dishes...").click();
   await expect(chooser).toHaveAttribute("aria-expanded", "false");
   await chooser.click();
-  await page.getByRole("button", { name: "Breads" }).click();
-  await expect(chooser).toContainText("Breads");
+  await page.getByRole("group", { name: "Category" }).getByRole("button", { name: "Starters" }).click();
+  await expect(chooser).toContainText("Starters");
   await expect(page.getByText("Butter Naan", { exact: true })).toBeVisible();
-  await expect(page.getByText("Paneer Tikka", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("Paneer Tikka", { exact: true })).toBeVisible();
 
   await page.unroute("**/qr/menu/qr-123");
   await mockGuestMenu(page, { hotel: { menuMode: "simple" }, dishes: menu });
   await page.reload();
-  await expect(page.getByRole("button", { name: /Subcategory All/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Category All/ })).toBeVisible();
+  await expect(page.locator(".guest-menu-main-panel .menu-subcategory-trigger")).toHaveCount(1);
 });

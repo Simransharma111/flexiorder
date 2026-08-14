@@ -46,10 +46,9 @@ export default function TrackOrderPage() {
     const pollingId = window.setInterval(fetchOrder, 5000);
 
     // JOIN SOCKET ROOM
-    socket.emit(
-      "joinOrderRoom",
-      orderId
-    );
+    const joinOrder = () => socket.emit("joinOrderRoom", orderId);
+    joinOrder();
+    socket.on("connect", joinOrder);
 
     // LISTEN FOR LIVE UPDATES
     const handleOrderUpdated = (updatedOrder) => setOrder(updatedOrder);
@@ -58,6 +57,8 @@ export default function TrackOrderPage() {
     return () => {
 
       window.clearInterval(pollingId);
+      socket.emit("leaveOrderRoom", orderId);
+      socket.off("connect", joinOrder);
       socket.off("orderUpdated", handleOrderUpdated);
 
     };

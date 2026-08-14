@@ -81,6 +81,11 @@ export default function CartPage() {
     if (!qrId) return undefined;
     setCartSession(qrId);
     setOrderingConfirmed(false);
+    setCheckoutHotel(null);
+    setGstEnabled(false);
+    setGstRate(0);
+    setUnavailableIds([]);
+    setErrorMessage("");
 
     const refreshCheckoutState = async () => {
       if (checkoutPreflightInFlight.current) return;
@@ -105,6 +110,7 @@ export default function CartPage() {
       } catch (error) {
         if (requestRevision !== checkoutRequestRevision.current) return;
         setOrderingConfirmed(false);
+        setErrorMessage("Could not confirm ordering availability. Check your connection and try again.");
         console.warn("Could not refresh checkout availability", error);
       }
     };
@@ -122,12 +128,13 @@ export default function CartPage() {
     socket.emit("joinHotelSettings", String(checkoutHotelId));
     const joinHotel = () => socket.emit("joinHotelSettings", String(checkoutHotelId));
     const handleSettingsUpdate = (payload) => {
-      const incomingOrdering = payload?.orderingEnabled ?? payload?.hotel?.orderingEnabled;
-      if (typeof incomingOrdering !== "boolean") return;
       setCheckoutHotel((current) => {
         const next = applyHotelSettingsUpdate(current, payload);
         if (next === current) return current;
         checkoutRequestRevision.current += 1;
+        const pricing = getHotelPricing(next);
+        setGstEnabled(pricing.enabled);
+        setGstRate(pricing.rate);
         setOrderingConfirmed(true);
         return next;
       });

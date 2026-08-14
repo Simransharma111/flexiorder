@@ -153,7 +153,9 @@ test.describe("customer QR ordering", () => {
 
     await page.goto("/qr/qr-123");
 
-    await expect(page.getByRole("button", { name: "Starters" })).toBeVisible();
+    await page.getByRole("button", { name: "Category All" }).click();
+    await expect(page.getByRole("group", { name: "Category" })
+      .getByRole("button", { name: "Starters" })).toBeVisible();
     await expect(page.getByText(rawCategoryId)).toHaveCount(0);
     const specials = page.getByRole("region", { name: "Special picks" });
     await expect(specials).toBeVisible();

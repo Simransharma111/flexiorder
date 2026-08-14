@@ -106,6 +106,9 @@ export const applyHotelSettingsUpdate = (hotel, update) => {
   if (!updateId || currentId === "unknown" || updateId !== currentId) return hotel;
   const incomingUpdatedAt = update.updatedAt || updateHotel?.updatedAt;
   const currentUpdatedAt = hotel.updatedAt;
+  if (incomingUpdatedAt && !Number.isFinite(Date.parse(incomingUpdatedAt))) {
+    return hotel;
+  }
   if (
     incomingUpdatedAt &&
     currentUpdatedAt &&
@@ -114,13 +117,30 @@ export const applyHotelSettingsUpdate = (hotel, update) => {
     Date.parse(incomingUpdatedAt) < Date.parse(currentUpdatedAt)
   ) return hotel;
 
-  const incomingFeatureSettings = update.featureSettings || updateHotel?.featureSettings;
+  const rawFeatureSettings = update.featureSettings || updateHotel?.featureSettings;
+  const incomingFeatureSettings = rawFeatureSettings &&
+    typeof rawFeatureSettings === "object" &&
+    !Array.isArray(rawFeatureSettings)
+    ? rawFeatureSettings
+    : null;
   const legacyGodMode = update.godModeEnabled ?? updateHotel?.godModeEnabled;
   const incomingOrdering = update.orderingEnabled ?? updateHotel?.orderingEnabled;
+  const incomingMenuMode = update.menuMode ?? updateHotel?.menuMode;
+  const incomingGstEnabled = update.gstEnabled ?? updateHotel?.gstEnabled;
+  const incomingGstPercentage = update.gstPercentage ?? updateHotel?.gstPercentage;
+  const hasMenuMode = ["visual", "simple"].includes(incomingMenuMode);
+  const hasGstEnabled = typeof incomingGstEnabled === "boolean";
+  const hasGstPercentage = typeof incomingGstPercentage === "number" &&
+    Number.isFinite(incomingGstPercentage) &&
+    incomingGstPercentage >= 0 &&
+    incomingGstPercentage <= 100;
   if (
     !incomingFeatureSettings &&
     typeof legacyGodMode !== "boolean" &&
-    typeof incomingOrdering !== "boolean"
+    typeof incomingOrdering !== "boolean" &&
+    !hasMenuMode &&
+    !hasGstEnabled &&
+    !hasGstPercentage
   ) return hotel;
 
   const featureSettings = normalizeFeatureSettings({
@@ -134,10 +154,12 @@ export const applyHotelSettingsUpdate = (hotel, update) => {
   });
   return {
     ...hotel,
-    ...(update.hotel ? updateHotel : {}),
     ...(typeof incomingOrdering === "boolean"
       ? { orderingEnabled: incomingOrdering }
       : {}),
+    ...(hasMenuMode ? { menuMode: incomingMenuMode } : {}),
+    ...(hasGstEnabled ? { gstEnabled: incomingGstEnabled } : {}),
+    ...(hasGstPercentage ? { gstPercentage: incomingGstPercentage } : {}),
     ...(incomingUpdatedAt ? { updatedAt: incomingUpdatedAt } : {}),
     featureSettings,
   };

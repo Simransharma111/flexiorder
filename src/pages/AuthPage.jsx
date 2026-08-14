@@ -12,7 +12,6 @@ import api from "../api/axios";
 import { API_URL } from "../config/env";
 import { Capacitor } from "@capacitor/core";
 import { useAuth } from "../context/AuthContext";
-import { initFCM } from "../utils/fcmPush";
 import { getPostLoginPath } from "../constants/roles";
 import { normalizeRole } from "../utils/access";
 
@@ -199,21 +198,6 @@ export default function AuthPage({ mode = "login" }) {
 
         return;
       }
-
-      /*
-       * IMPORTANT:
-       *
-       * Do NOT wait for FCM before navigating.
-       *
-       * Login should complete immediately on mobile.
-       * FCM can initialize in the background.
-       */
-      initFCM(api).catch((err) => {
-        console.warn(
-          "FCM initialization failed after login:",
-          err
-        );
-      });
 
       /*
        * NORMAL POST-LOGIN ROUTING

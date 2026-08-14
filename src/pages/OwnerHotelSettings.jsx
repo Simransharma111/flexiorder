@@ -227,9 +227,16 @@ const updateOrderingEnabled=async(value)=>{
       orderingEnabled: value,
     });
     if (requestRevision !== orderingRequestRevision.current) return;
-    const confirmedHotel = response.data?.hotel || response.data;
+    let confirmedHotel = response.data?.hotel || response.data;
+    if (typeof confirmedHotel?.orderingEnabled !== "boolean") {
+      const verify = await api.get("/hotel/me");
+      confirmedHotel = verify.data?.hotel || verify.data;
+    }
     if (typeof confirmedHotel?.orderingEnabled !== "boolean") {
       throw new Error("The restaurant did not confirm the ordering setting.");
+    }
+    if (confirmedHotel.orderingEnabled !== value) {
+      throw new Error("The restaurant kept the previous ordering setting. Please try again.");
     }
     setHotel((current) => {
       const next = {

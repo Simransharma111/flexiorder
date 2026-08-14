@@ -36,6 +36,17 @@ export const matchesOrderId = (order, id) => Boolean(
   )
 );
 
+export const orderBelongsToHotel = (order, hotelId) => {
+  const orderHotel = order?.hotelId && typeof order.hotelId === "object"
+    ? order.hotelId._id || order.hotelId.id
+    : order?.hotelId;
+  return Boolean(
+    orderHotel &&
+    hotelId &&
+    String(orderHotel) === String(hotelId)
+  );
+};
+
 const BULK_ACTIVE_STATUSES = new Set(["pending", "accepted", "preparing", "paused", "ready"]);
 
 export const getActiveOrderIds = (orders = [], snapshotIds = null, blockedIds = []) => {

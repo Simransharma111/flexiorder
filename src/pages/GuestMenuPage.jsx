@@ -281,8 +281,6 @@ useEffect(() => {
   );
   joinHotel();
   const handleSettingsUpdate = (payload) => {
-    const incomingOrdering = payload?.orderingEnabled ?? payload?.hotel?.orderingEnabled;
-    if (typeof incomingOrdering !== "boolean") return;
     setHotel((current) => {
       const next = applyHotelSettingsUpdate(current, payload);
       if (next === current) return current;

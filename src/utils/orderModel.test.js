@@ -5,6 +5,7 @@ import {
   mergeOrderUpdate,
   mergeOrders,
   nextOrderStatus,
+  orderBelongsToHotel,
   orderLocation,
   reconcileAuthoritativeOrders,
 } from "./orderModel";
@@ -19,6 +20,13 @@ describe("order model", () => {
   it("deduplicates socket and polling copies", () => {
     expect(mergeOrders([{ _id: "1", status: "pending" }], [{ _id: "1", status: "accepted" }]))
       .toEqual([{ _id: "1", status: "accepted" }]);
+  });
+
+  it("accepts realtime orders only for the active restaurant", () => {
+    expect(orderBelongsToHotel({ hotelId: "hotel-1" }, "hotel-1")).toBe(true);
+    expect(orderBelongsToHotel({ hotelId: { _id: "hotel-1" } }, "hotel-1")).toBe(true);
+    expect(orderBelongsToHotel({ hotelId: "hotel-2" }, "hotel-1")).toBe(false);
+    expect(orderBelongsToHotel({ _id: "order-without-hotel" }, "hotel-1")).toBe(false);
   });
 
   it("freezes and revalidates every unblocked active order identity", () => {

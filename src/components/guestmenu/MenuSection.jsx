@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import DishCard from "./DishCard";
 import SubcategoryChooser from "../menu/SubcategoryChooser";
 import { categoryKey, dishCategoryName } from "../../utils/menuCategories";
@@ -14,14 +14,6 @@ export default function MenuSection({
   increaseQuantity, 
   orderingEnabled = true 
 }) {
-  // Subcategory state
-  const [activeSubCategory, setActiveSubCategory] = useState("All");
-
-  // Reset subcategory on category change
-  useEffect(() => {
-    setActiveSubCategory("All");
-  }, [activeCategory]);
-
   // Filter dishes by main category
   const categoryFiltered = useMemo(() => {
     return activeCategory === "All" 
@@ -31,35 +23,13 @@ export default function MenuSection({
         });
   }, [dishes, activeCategory]);
 
-  // Extract unique subcategories from the current category's dishes
-  const subCategories = useMemo(() => {
-    const set = new Set();
-    categoryFiltered.forEach((dish) => {
-      (dish.category?.subCategories || dish.categoryId?.subCategories || []).forEach((sub) => {
-        if (String(sub).trim()) set.add(String(sub).trim());
-      });
-    });
-    categoryFiltered.forEach((dish) => {
-      const sub = dish.subCategory || dish.subcategory || "";
-      if (sub && sub.trim()) {
-        set.add(sub.trim());
-      }
-    });
-    return ["All", ...Array.from(set)];
-  }, [categoryFiltered]);
-
-  // Filter and group by subcategory
+  // Keep subcategory headings for organization without adding a second,
+  // easily-confused filter control to the customer menu.
   const groupedDishes = useMemo(() => {
     const groups = {};
     categoryFiltered.forEach((dish) => {
       const sub = (dish.subCategory || dish.subcategory || "").trim();
       const groupName = sub || "";
-      
-      // If we are filtering for a specific subcategory, skip others
-      if (activeSubCategory !== "All" && groupName !== activeSubCategory) {
-        return;
-      }
-      
       if (!groups[groupName]) {
         groups[groupName] = [];
       }
@@ -67,7 +37,7 @@ export default function MenuSection({
     });
     
     return groups;
-  }, [categoryFiltered, activeSubCategory]);
+  }, [categoryFiltered]);
 
   const hasAnyDishes = Object.values(groupedDishes).some(g => g.length > 0);
 
@@ -78,16 +48,7 @@ export default function MenuSection({
           options={categories}
           value={activeCategory}
           label="Category"
-          onChange={(value) => {
-            setActiveSubCategory("All");
-            setActiveCategory(value);
-          }}
-        />
-        <SubcategoryChooser
-          key={activeCategory}
-          options={subCategories}
-          value={activeSubCategory}
-          onChange={setActiveSubCategory}
+          onChange={setActiveCategory}
         />
 
         {/* List grouped by subcategory */}

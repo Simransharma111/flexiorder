@@ -89,6 +89,60 @@ describe("feature settings", () => {
     })).toBe(hotel);
   });
 
+  it("applies canonical menu and GST settings from scoped realtime events", () => {
+    const hotel = {
+      _id: "hotel-1",
+      menuMode: "visual",
+      gstEnabled: false,
+      gstPercentage: 0,
+    };
+    const next = applyHotelSettingsUpdate(hotel, {
+      hotelId: "hotel-1",
+      menuMode: "simple",
+      gstEnabled: true,
+      gstPercentage: 12,
+    });
+
+    expect(next).toMatchObject({
+      menuMode: "simple",
+      gstEnabled: true,
+      gstPercentage: 12,
+    });
+    expect(applyHotelSettingsUpdate(hotel, {
+      hotelId: "hotel-2",
+      menuMode: "simple",
+    })).toBe(hotel);
+  });
+
+  it("ignores malformed canonical setting fields without corrupting valid fields", () => {
+    const hotel = {
+      _id: "hotel-1",
+      orderingEnabled: true,
+      menuMode: "visual",
+      gstEnabled: false,
+      gstPercentage: 5,
+    };
+    const next = applyHotelSettingsUpdate(hotel, {
+      hotelId: "hotel-1",
+      orderingEnabled: false,
+      menuMode: "graphic",
+      gstEnabled: "true",
+      gstPercentage: 101,
+    });
+
+    expect(next).toMatchObject({
+      orderingEnabled: false,
+      menuMode: "visual",
+      gstEnabled: false,
+      gstPercentage: 5,
+    });
+    expect(applyHotelSettingsUpdate(hotel, {
+      hotelId: "hotel-1",
+      menuMode: "simple",
+      updatedAt: "not-a-date",
+    })).toBe(hotel);
+  });
+
   it("does not let an older scoped event reverse newer confirmed settings", () => {
     const hotel = {
       _id: "hotel-1",

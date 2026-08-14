@@ -6,12 +6,13 @@ import api from "../api/axios";
 import socket from "../socket";
 import { triggerLocalOrderNotification } from "../utils/fcmPush";
 import KitchenBoard from "../components/kitchen/KitchenBoard";
-import { clearAuthSession, readStoredSession } from "../utils/session";
+import { clearAuthSession, getStoredAuthToken, readStoredSession } from "../utils/session";
 import { getScopedStorageKey, rememberRestaurantId } from "../utils/storageScope";
 import {
   mergeOrders,
   mergeOrderUpdate,
   matchesOrderId,
+  orderBelongsToHotel,
   orderKey,
   orderLocation,
   reconcileAuthoritativeOrders,
@@ -143,10 +144,23 @@ export default function KitchenDashboard() {
   }, [fetchHotel, fetchOrders]);
 
   useEffect(() => {
-    if (hotel?._id) socket.emit("joinHotel", hotel._id);
+    if (!hotel?._id) return undefined;
+    const hotelId = String(hotel._id);
+    const joinHotel = () => {
+      socket.emit("joinHotel", hotelId, getStoredAuthToken());
+      socket.emit("joinHotelSettings", hotelId);
+    };
+    joinHotel();
+    socket.on("connect", joinHotel);
+    return () => {
+      socket.emit("leaveHotel", hotelId);
+      socket.emit("leaveHotelSettings", hotelId);
+      socket.off("connect", joinHotel);
+    };
   }, [hotel?._id]);
   useEffect(() => {
     const onNewOrder = (order) => {
+      if (!orderBelongsToHotel(order, hotel?._id)) return;
       setOrders((current) => cacheOrders(mergeOrders(current, [order])));
       triggerLocalOrderNotification(order);
     };
@@ -162,10 +176,10 @@ export default function KitchenDashboard() {
       ));
     };
     const onHotelSettingsUpdate = (payload) => {
-      settingsRevision.current += 1;
       setHotel((current) => {
         const next = applyHotelSettingsUpdate(current, payload);
         if (!next || next === current) return current;
+        settingsRevision.current += 1;
         persistFeatureSettings(next, next.featureSettings);
         localStorage.setItem(getScopedStorageKey(HOTEL_CACHE_KEY), JSON.stringify(next));
         return next;
@@ -179,7 +193,7 @@ export default function KitchenDashboard() {
       socket.off("kitchenOrderUpdated", onOrderUpdate);
       socket.off("hotelSettingsUpdated", onHotelSettingsUpdate);
     };
-  }, []);
+  }, [hotel?._id]);
 
   useEffect(() => {
     const handleSync = (event) => {

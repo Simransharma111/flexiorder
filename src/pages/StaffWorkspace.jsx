@@ -7,10 +7,10 @@ import { triggerLocalOrderNotification } from "../utils/fcmPush";
 import StaffOrder from "./StaffOrder";
 import Orders from "../components/ownerdashboard/Orders";
 import { getScopedStorageKey, rememberRestaurantId } from "../utils/storageScope";
-import { mergeOrders, mergeOrderUpdate, reconcileAuthoritativeOrders } from "../utils/orderModel";
+import { mergeOrders, mergeOrderUpdate, orderBelongsToHotel, reconcileAuthoritativeOrders } from "../utils/orderModel";
 import { getPendingKitchenUpdates } from "../utils/offlineKitchenUpdates";
 import { getHotelThemeStyle } from "../utils/hotelTheme";
-import { clearAuthSession, readStoredSession } from "../utils/session";
+import { clearAuthSession, getStoredAuthToken, readStoredSession } from "../utils/session";
 import {
   applyHotelSettingsUpdate,
   canUseStaffCapability,
@@ -99,7 +99,7 @@ export default function StaffWorkspace() {
     if (!hotel?._id) return undefined;
     const hotelId = String(hotel._id);
     const joinHotel = () => {
-      socket.emit("joinHotel", hotelId);
+      socket.emit("joinHotel", hotelId, getStoredAuthToken());
       socket.emit("joinHotelSettings", hotelId);
     };
     joinHotel();
@@ -115,6 +115,7 @@ export default function StaffWorkspace() {
       mergeOrderUpdate(current, order, getPendingKitchenUpdates())
     ));
     const handleNewOrder = (order) => {
+      if (!orderBelongsToHotel(order, hotel?._id)) return;
       upsert(order);
       triggerLocalOrderNotification(order);
     };
@@ -142,7 +143,7 @@ export default function StaffWorkspace() {
       socket.off("kitchenOrderUpdated", update);
       socket.off("hotelSettingsUpdated", updateHotelSettings);
     };
-  }, [persistOrders]);
+  }, [hotel?._id, persistOrders]);
 
   const toggleOrdering = async () => {
     if (!hotel || updatingOrdering) return;

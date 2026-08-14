@@ -149,9 +149,11 @@ test("owner pauses and resumes customer ordering from Settings", async ({ page }
   await expect(orderingToggle).not.toBeChecked();
 
   const failedSaveDialog = page.waitForEvent("dialog");
-  await orderingToggle.check();
-  await expect((await failedSaveDialog).message()).toContain("Ordering setting was not saved");
-  await (await failedSaveDialog).accept();
+  const checkAttempt = orderingToggle.check();
+  const dialog = await failedSaveDialog;
+  expect(dialog.message()).toContain("Ordering setting was not saved");
+  await dialog.accept();
+  await checkAttempt;
   await expect(orderingToggle).not.toBeChecked();
   expect(payloads).toEqual([
     { orderingEnabled: false },
@@ -234,20 +236,22 @@ test("owner settings restore confirmed state after rejection or an unconfirmed r
     await page.getByRole("button", { name: /^Simple menu/ }).click();
     await page.getByRole("checkbox", { name: "Enable GST" }).check();
     await page.getByPlaceholder("e.g. 5").fill("12");
-    const alertDialog = page.waitForEvent("dialog");
+    const alertDialog = page.waitForEvent("dialog").then(async (dialog) => {
+      const message = dialog.message();
+      await dialog.accept();
+      return message;
+    });
     await page.getByRole("button", { name: "Save Settings" }).click();
     return alertDialog;
   };
 
-  const rejectedDialog = await submitDraft();
-  expect(rejectedDialog.message()).toBe("GST setting rejected");
-  await rejectedDialog.accept();
+  const rejectedMessage = await submitDraft();
+  expect(rejectedMessage).toBe("GST setting rejected");
   await expect(page.getByRole("button", { name: /^Visual menu/ })).toHaveAttribute("aria-pressed", "true");
   await expect(page.getByRole("checkbox", { name: "Enable GST" })).not.toBeChecked();
 
-  const unconfirmedDialog = await submitDraft();
-  expect(unconfirmedDialog.message()).toBe("The restaurant did not confirm the saved menu and GST settings.");
-  await unconfirmedDialog.accept();
+  const unconfirmedMessage = await submitDraft();
+  expect(unconfirmedMessage).toBe("The restaurant did not confirm the saved menu and GST settings.");
   await expect(page.getByRole("button", { name: /^Visual menu/ })).toHaveAttribute("aria-pressed", "true");
   await expect(page.getByRole("checkbox", { name: "Enable GST" })).not.toBeChecked();
 });
@@ -380,7 +384,7 @@ test("Advanced explains inherited features and exposes working menu data tools",
   await expect(page.getByRole("button", { name: "Export menu" })).toBeVisible();
   await page.getByRole("button", { name: "Add Dish" }).first().click();
   await expect(page.getByText("Display Sections", { exact: true })).toBeVisible();
-  await expect(page.getByText("Menu priority (optional)", { exact: true })).toBeVisible();
+  await expect(page.getByLabel(/Menu Priority/i)).toBeVisible();
 });
 
 test("menu export downloads canonical portable data without restaurant ids or images", async ({ page }) => {
@@ -579,7 +583,8 @@ test("owner can type and save a custom dish category", async ({ page }) => {
   const form = page.locator("form");
   await form.getByPlaceholder("e.g. Paneer Butter Masala").fill("House Platter");
   await form.getByLabel("Price").fill("450");
-  await form.getByLabel("Category").fill("House Specials");
+  await form.getByLabel("Category").selectOption("__new__");
+  await form.getByLabel("New category name").fill("House Specials");
   await form.getByLabel("Preparation Time").fill("20");
   await form.getByRole("button", { name: "Add Dish" }).click();
 
@@ -704,7 +709,7 @@ test("existing populated category keeps its server id when adding a dish", async
   const form = page.locator("form");
   await form.getByPlaceholder("e.g. Paneer Butter Masala").fill("ID Curry");
   await form.getByLabel("Price").fill("340");
-  await form.getByLabel("Category").fill("Main Course");
+  await form.getByLabel("Category").selectOption("Main Course");
   await form.getByLabel("Preparation Time").fill("18");
   await form.getByRole("button", { name: "Add Dish" }).click();
 
@@ -748,7 +753,7 @@ test("owner adds the first dish to an empty saved category", async ({ page }) =>
   const form = page.locator("form");
   await form.getByLabel("Dish Name").fill("Mango Salad");
   await form.getByLabel("Price").fill("190");
-  await form.getByLabel("Category").fill("Seasonal");
+  await form.getByLabel("Category").selectOption("Seasonal");
   await form.getByLabel("Preparation Time").fill("8");
   await form.getByRole("button", { name: "Add Dish" }).click();
 
@@ -823,7 +828,7 @@ test("offline-created dish survives reload and syncs when the API returns", asyn
   const form = page.locator("form");
   await form.getByPlaceholder("e.g. Paneer Butter Masala").fill("Offline Thali");
   await form.getByLabel("Price").fill("280");
-  await form.getByLabel("Category").fill("Main Course");
+  await form.getByLabel("Category").selectOption("Main Course");
   await form.getByLabel("Preparation Time").fill("18");
   await form.getByRole("button", { name: "Add Dish" }).click();
   await expect(page.getByText("Offline Thali", { exact: true }).filter({ visible: true })).toHaveCount(1);

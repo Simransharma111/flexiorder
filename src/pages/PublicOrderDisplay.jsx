@@ -15,8 +15,9 @@ import {
   itemCount,
   matchesOrderId,
   mergeOrders,
+  orderBelongsToHotel,
 } from "../utils/orderModel";
-import { clearAuthSession, readStoredSession } from "../utils/session";
+import { clearAuthSession, getStoredAuthToken, readStoredSession } from "../utils/session";
 import { getScopedStorageKey } from "../utils/storageScope";
 
 const CACHE_KEY = "flexiorder_public_display_orders";
@@ -91,11 +92,20 @@ export default function PublicOrderDisplay() {
   }, [fetchDisplay]);
 
   useEffect(() => {
-    if (hotel?._id) socket.emit("joinHotel", hotel._id);
+    if (!hotel?._id) return undefined;
+    const hotelId = String(hotel._id);
+    const joinHotel = () => socket.emit("joinHotel", hotelId, getStoredAuthToken());
+    joinHotel();
+    socket.on("connect", joinHotel);
+    return () => {
+      socket.emit("leaveHotel", hotelId);
+      socket.off("connect", joinHotel);
+    };
   }, [hotel?._id]);
 
   useEffect(() => {
     const upsert = (order) => setOrders((current) => {
+      if (!orderBelongsToHotel(order, hotel?._id)) return current;
       let next;
       if (["delivered", "cancelled"].includes(order.status)) {
         const identifiers = [order._id, order.clientOrderId, order.localId].filter(Boolean);
@@ -111,7 +121,7 @@ export default function PublicOrderDisplay() {
       socket.off("newOrder", upsert);
       socket.off("kitchenOrderUpdated", upsert);
     };
-  }, [cacheOrders]);
+  }, [cacheOrders, hotel?._id]);
 
   useEffect(() => {
     const keepAwake = async () => {
