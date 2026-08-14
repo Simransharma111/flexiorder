@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-
 import {
   FaHotel,
   FaTrash,
@@ -9,26 +8,30 @@ import {
   FaPhone,
   FaMapMarkerAlt,
   FaPowerOff,
+  FaSyncAlt,
+  FaTimes,
 } from "react-icons/fa";
 
 import api from "../api/axios";
 import { useNavigate } from "react-router-dom";
 import { clearAuthSession } from "../utils/session.js";
 
-
 export default function SuperAdminDashboard() {
-
   const navigate = useNavigate();
+
+  // =====================================================
+  // STATE
+  // =====================================================
 
   const [hotels, setHotels] = useState([]);
 
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
 
-  const [actionLoading, setActionLoading] =
-    useState(null);
+  const [actionLoading, setActionLoading] = useState(null);
 
-  const [showModal, setShowModal] =
-    useState(false);
+  const [showModal, setShowModal] = useState(false);
+
+  const [error, setError] = useState("");
 
   const [formData, setFormData] = useState({
     hotelName: "",
@@ -43,36 +46,121 @@ export default function SuperAdminDashboard() {
   // FETCH HOTELS
   // =====================================================
 
-  useEffect(() => {
-    fetchHotels();
-  }, []);
-
   const fetchHotels = async () => {
-
     try {
+      setLoading(true);
+      setError("");
 
-      const res = await api.get(
-        "/admin/hotels"
-      );
+      console.log("FETCHING HOTELS...");
 
-      setHotels(
-        Array.isArray(res.data)
-          ? res.data
-          : []
-      );
-
-    } catch (err) {
+      const res = await api.get("/admin/hotels");
 
       console.log(
+        "GET HOTELS RESPONSE:",
+        res.data
+      );
+
+      /*
+       * Backend response:
+       *
+       * {
+       *   success: true,
+       *   hotels: [...]
+       * }
+       */
+
+      const hotelsFromServer =
+        res.data?.hotels;
+
+      if (Array.isArray(hotelsFromServer)) {
+        setHotels(hotelsFromServer);
+      } else {
+        console.warn(
+          "Unexpected hotel response:",
+          res.data
+        );
+
+        setHotels([]);
+
+        setError(
+          "Server returned an invalid hotel list."
+        );
+      }
+    } catch (err) {
+      console.error(
         "FETCH HOTELS ERROR:",
         err
       );
 
-      alert(
-        err.response?.data?.message ||
-        "Failed to fetch hotels"
+      console.error(
+        "STATUS:",
+        err?.response?.status
       );
+
+      console.error(
+        "DATA:",
+        err?.response?.data
+      );
+
+      const message =
+        err?.response?.data?.message ||
+        "Failed to fetch hotels.";
+
+      setError(message);
+
+      setHotels([]);
+    } finally {
+      setLoading(false);
     }
+  };
+
+  // =====================================================
+  // INITIAL LOAD
+  // =====================================================
+
+  useEffect(() => {
+    fetchHotels();
+  }, []);
+
+  // =====================================================
+  // FORM CHANGE
+  // =====================================================
+
+  const handleFormChange = (e) => {
+    const { name, value } = e.target;
+
+    setFormData((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
+  };
+
+  // =====================================================
+  // RESET FORM
+  // =====================================================
+
+  const resetForm = () => {
+    setFormData({
+      hotelName: "",
+      address: "",
+      phone: "",
+      ownerName: "",
+      ownerEmail: "",
+      ownerPassword: "",
+    });
+  };
+
+  // =====================================================
+  // CLOSE MODAL
+  // =====================================================
+
+  const closeModal = () => {
+    if (actionLoading === "create") {
+      return;
+    }
+
+    setShowModal(false);
+    resetForm();
   };
 
   // =====================================================
@@ -80,208 +168,235 @@ export default function SuperAdminDashboard() {
   // =====================================================
 
   const createHotel = async () => {
+    const hotelName =
+      formData.hotelName.trim();
 
-    if (
-      !formData.hotelName.trim() ||
-      !formData.ownerName.trim() ||
-      !formData.ownerEmail.trim() ||
-      !formData.ownerPassword.trim()
-    ) {
+    const ownerName =
+      formData.ownerName.trim();
 
+    const ownerEmail =
+      formData.ownerEmail.trim();
+
+    const ownerPassword =
+      formData.ownerPassword.trim();
+
+    if (!hotelName) {
+      alert("Please enter hotel name.");
+      return;
+    }
+
+    if (!ownerName) {
+      alert("Please enter owner name.");
+      return;
+    }
+
+    if (!ownerEmail) {
+      alert("Please enter owner email.");
+      return;
+    }
+
+    if (!ownerPassword) {
+      alert("Please enter owner password.");
+      return;
+    }
+
+    if (ownerPassword.length < 6) {
       alert(
-        "Please fill all required fields"
+        "Owner password must be at least 6 characters."
       );
-
       return;
     }
 
     try {
+      setActionLoading("create");
 
-      setLoading(true);
+      const payload = {
+        hotelName,
+        address: formData.address.trim(),
+        phone: formData.phone.trim(),
+        ownerName,
+        ownerEmail,
+        ownerPassword,
+      };
+
+      console.log(
+        "CREATING HOTEL:",
+        payload
+      );
 
       const res = await api.post(
         "/admin/create-hotel",
-        formData
+        payload
       );
 
-      if (res.data?.hotel) {
+      console.log(
+        "CREATE HOTEL RESPONSE:",
+        res.data
+      );
 
-        setHotels((prev) => [
-          res.data.hotel,
-          ...prev,
-        ]);
-
-      } else {
-
-        await fetchHotels();
-
+      if (!res.data?.success) {
+        throw new Error(
+          res.data?.message ||
+          "Hotel creation failed."
+        );
       }
 
-      setFormData({
-        hotelName: "",
-        address: "",
-        phone: "",
-        ownerName: "",
-        ownerEmail: "",
-        ownerPassword: "",
-      });
+      /*
+       * Fetch the complete list again.
+       * This keeps frontend state synchronized
+       * with MongoDB.
+       */
+
+      await fetchHotels();
 
       setShowModal(false);
 
+      resetForm();
+
       alert(
-        "Hotel created successfully"
+        "Hotel and owner created successfully."
       );
-
     } catch (err) {
-
-      console.log(
+      console.error(
         "CREATE HOTEL ERROR:",
         err
       );
 
       alert(
-        err.response?.data?.message ||
-        "Failed to create hotel"
+        err?.response?.data?.message ||
+        err?.message ||
+        "Failed to create hotel."
       );
-
     } finally {
-
-      setLoading(false);
+      setActionLoading(null);
     }
   };
 
   // =====================================================
-  // ACTIVATE
+  // ACTIVATE HOTEL
   // =====================================================
 
   const activateHotel = async (id) => {
+    if (!id) return;
 
     try {
-
       setActionLoading(id);
 
       const res = await api.put(
         `/admin/hotels/${id}/activate`
       );
 
-      const updatedHotel =
-        res.data?.hotel;
+      console.log(
+        "ACTIVATE RESPONSE:",
+        res.data
+      );
 
-      if (updatedHotel) {
-
+      if (res.data?.hotel) {
         setHotels((prev) =>
           prev.map((hotel) =>
             hotel._id === id
-              ? updatedHotel
+              ? res.data.hotel
               : hotel
           )
         );
-
       } else {
-
         await fetchHotels();
-
       }
-
     } catch (err) {
-
-      console.log(
+      console.error(
         "ACTIVATE ERROR:",
         err
       );
 
       alert(
-        err.response?.data?.message ||
-        "Failed to activate hotel"
+        err?.response?.data?.message ||
+        "Failed to activate hotel."
       );
-
     } finally {
-
       setActionLoading(null);
     }
   };
 
   // =====================================================
-  // DEACTIVATE
+  // DEACTIVATE HOTEL
   // =====================================================
 
   const deactivateHotel = async (id) => {
+    if (!id) return;
 
-    const confirmDeactivate =
+    const confirmed =
       window.confirm(
-        "Deactivate this hotel? The owner will also lose access."
+        "Deactivate this hotel?\n\nThe owner will also lose access."
       );
 
-    if (!confirmDeactivate) {
+    if (!confirmed) {
       return;
     }
 
     try {
-
       setActionLoading(id);
 
       const res = await api.put(
         `/admin/hotels/${id}/deactivate`
       );
 
-      const updatedHotel =
-        res.data?.hotel;
+      console.log(
+        "DEACTIVATE RESPONSE:",
+        res.data
+      );
 
-      if (updatedHotel) {
-
+      if (res.data?.hotel) {
         setHotels((prev) =>
           prev.map((hotel) =>
             hotel._id === id
-              ? updatedHotel
+              ? res.data.hotel
               : hotel
           )
         );
-
       } else {
-
         await fetchHotels();
-
       }
-
     } catch (err) {
-
-      console.log(
+      console.error(
         "DEACTIVATE ERROR:",
         err
       );
 
       alert(
-        err.response?.data?.message ||
-        "Failed to deactivate hotel"
+        err?.response?.data?.message ||
+        "Failed to deactivate hotel."
       );
-
     } finally {
-
       setActionLoading(null);
     }
   };
 
   // =====================================================
-  // DELETE
+  // DELETE HOTEL
   // =====================================================
 
   const deleteHotel = async (id) => {
+    if (!id) return;
 
-    const confirmDelete =
+    const confirmed =
       window.confirm(
-        "PERMANENTLY DELETE this hotel and its owner? This cannot be undone."
+        "PERMANENTLY DELETE this hotel and its owner?\n\nThis action cannot be undone."
       );
 
-    if (!confirmDelete) {
+    if (!confirmed) {
       return;
     }
 
     try {
-
       setActionLoading(id);
 
-      await api.delete(
+      const res = await api.delete(
         `/admin/hotels/${id}`
+      );
+
+      console.log(
+        "DELETE RESPONSE:",
+        res.data
       );
 
       setHotels((prev) =>
@@ -292,23 +407,19 @@ export default function SuperAdminDashboard() {
       );
 
       alert(
-        "Hotel deleted successfully"
+        "Hotel and owner deleted successfully."
       );
-
     } catch (err) {
-
-      console.log(
-        "DELETE ERROR:",
+      console.error(
+        "DELETE HOTEL ERROR:",
         err
       );
 
       alert(
-        err.response?.data?.message ||
-        "Failed to delete hotel"
+        err?.response?.data?.message ||
+        "Failed to delete hotel."
       );
-
     } finally {
-
       setActionLoading(null);
     }
   };
@@ -317,11 +428,22 @@ export default function SuperAdminDashboard() {
   // LOGOUT
   // =====================================================
 
-  const handleLogout = () => { 
-  const confirmLogout = window.confirm("Do you want to logout?"); 
-  if (!confirmLogout) 
-    return; 
-  clearAuthSession(); navigate("/"); };
+  const handleLogout = () => {
+    const confirmed =
+      window.confirm(
+        "Do you want to logout?"
+      );
+
+    if (!confirmed) {
+      return;
+    }
+
+    clearAuthSession();
+
+    navigate("/", {
+      replace: true,
+    });
+  };
 
   // =====================================================
   // STATS
@@ -343,11 +465,10 @@ export default function SuperAdminDashboard() {
     ).length;
 
   // =====================================================
-  // UI
+  // RENDER
   // =====================================================
 
   return (
-
     <div className="min-h-screen bg-[#0F172A] text-white p-4 md:p-6">
 
       {/* =================================================
@@ -357,7 +478,6 @@ export default function SuperAdminDashboard() {
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-5 mb-8">
 
         <div>
-
           <h1 className="text-3xl md:text-4xl font-bold">
             Super Admin Dashboard
           </h1>
@@ -365,25 +485,47 @@ export default function SuperAdminDashboard() {
           <p className="text-gray-400 mt-2">
             Manage hotels and owners
           </p>
-
         </div>
 
         <div className="flex gap-3 flex-wrap">
 
+          {/* REFRESH */}
+
           <button
+            type="button"
+            onClick={fetchHotels}
+            disabled={loading}
+            className="px-4 py-3 rounded-xl bg-white/10 hover:bg-white/20 border border-white/10 font-semibold flex items-center gap-2 disabled:opacity-50"
+          >
+            <FaSyncAlt
+              className={
+                loading
+                  ? "animate-spin"
+                  : ""
+              }
+            />
+
+            Refresh
+          </button>
+
+          {/* CREATE */}
+
+          <button
+            type="button"
             onClick={() =>
               setShowModal(true)
             }
             className="bg-orange-500 hover:bg-orange-600 transition px-5 py-3 rounded-xl font-semibold flex items-center gap-2"
           >
-
             <FaPlus />
 
             Create Hotel
-
           </button>
 
+          {/* LOGOUT */}
+
           <button
+            type="button"
             onClick={handleLogout}
             className="bg-red-600 hover:bg-red-700 transition px-5 py-3 rounded-xl font-semibold"
           >
@@ -391,14 +533,46 @@ export default function SuperAdminDashboard() {
           </button>
 
         </div>
-
       </div>
+
+      {/* =================================================
+          ERROR
+      ================================================= */}
+
+      {error && (
+        <div className="mb-6 bg-red-500/10 border border-red-500/30 rounded-2xl p-4">
+
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+
+            <div>
+              <p className="font-semibold text-red-400">
+                Unable to load hotels
+              </p>
+
+              <p className="text-sm text-red-300/80 mt-1">
+                {error}
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={fetchHotels}
+              className="px-4 py-2 rounded-xl bg-red-500/20 hover:bg-red-500/30 text-red-300 font-semibold"
+            >
+              Try Again
+            </button>
+
+          </div>
+        </div>
+      )}
 
       {/* =================================================
           STATS
       ================================================= */}
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
+
+        {/* TOTAL */}
 
         <div className="bg-white/5 border border-white/10 rounded-2xl p-5">
 
@@ -412,6 +586,8 @@ export default function SuperAdminDashboard() {
 
         </div>
 
+        {/* ACTIVE */}
+
         <div className="bg-green-500/10 border border-green-500/20 rounded-2xl p-5">
 
           <p className="text-green-400">
@@ -423,6 +599,8 @@ export default function SuperAdminDashboard() {
           </h2>
 
         </div>
+
+        {/* INACTIVE */}
 
         <div className="bg-red-500/10 border border-red-500/20 rounded-2xl p-5">
 
@@ -439,15 +617,14 @@ export default function SuperAdminDashboard() {
       </div>
 
       {/* =================================================
-          HOTELS
+          HOTEL LIST
       ================================================= */}
 
       <div className="bg-white/5 border border-white/10 rounded-2xl p-4 md:p-6">
 
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
 
           <div>
-
             <h2 className="text-2xl md:text-3xl font-bold">
               Hotels
             </h2>
@@ -455,22 +632,70 @@ export default function SuperAdminDashboard() {
             <p className="text-gray-400 mt-1">
               Manage hotel accounts and access
             </p>
+          </div>
 
+          <div className="text-sm text-gray-400">
+            {totalHotels}{" "}
+            {totalHotels === 1
+              ? "hotel"
+              : "hotels"}
           </div>
 
         </div>
 
-        {hotels.length === 0 ? (
+        {/* =================================================
+            LOADING
+        ================================================= */}
+
+        {loading ? (
+
+          <div className="text-center py-20">
+
+            <FaSyncAlt className="mx-auto text-4xl text-orange-400 animate-spin mb-4" />
+
+            <p className="text-gray-400">
+              Loading hotels...
+            </p>
+
+          </div>
+
+        ) : hotels.length === 0 ? (
+
+          /* =================================================
+             EMPTY
+          ================================================= */
 
           <div className="text-center py-20 text-gray-400">
 
             <FaHotel className="mx-auto text-5xl mb-4 opacity-40" />
 
-            No hotels found
+            <h3 className="text-xl font-semibold text-gray-300">
+              No hotels found
+            </h3>
+
+            <p className="mt-2 text-sm">
+              Create a hotel to get started.
+            </p>
+
+            <button
+              type="button"
+              onClick={() =>
+                setShowModal(true)
+              }
+              className="mt-5 bg-orange-500 hover:bg-orange-600 px-5 py-3 rounded-xl font-semibold inline-flex items-center gap-2"
+            >
+              <FaPlus />
+
+              Create Hotel
+            </button>
 
           </div>
 
         ) : (
+
+          /* =================================================
+             HOTELS
+          ================================================= */
 
           <div className="space-y-4">
 
@@ -483,19 +708,23 @@ export default function SuperAdminDashboard() {
                 hotel.owner;
 
               const isLoading =
-                actionLoading === hotel._id;
+                actionLoading ===
+                hotel._id;
 
               return (
 
                 <div
                   key={hotel._id}
-                  className={`border rounded-2xl p-5 transition ${isActive
-                    ? "bg-white/5 border-white/10"
-                    : "bg-red-500/5 border-red-500/20"
-                    }`}
+                  className={`border rounded-2xl p-5 transition ${
+                    isActive
+                      ? "bg-white/5 border-white/10"
+                      : "bg-red-500/5 border-red-500/20"
+                  }`}
                 >
 
-                  {/* TOP */}
+                  {/* =================================================
+                      HOTEL TOP
+                  ================================================= */}
 
                   <div className="flex flex-col xl:flex-row xl:items-start xl:justify-between gap-5">
 
@@ -505,59 +734,63 @@ export default function SuperAdminDashboard() {
 
                       <div className="flex items-start gap-3">
 
-                        <div className="bg-orange-500/10 p-3 rounded-xl">
+                        <div className="bg-orange-500/10 p-3 rounded-xl shrink-0">
 
                           <FaHotel className="text-orange-400 text-xl" />
 
                         </div>
 
-                        <div>
+                        <div className="min-w-0">
 
-                          <h3 className="text-xl md:text-2xl font-bold">
-
-                            {hotel.name}
-
+                          <h3 className="text-xl md:text-2xl font-bold break-words">
+                            {hotel.name ||
+                              "Unnamed Hotel"}
                           </h3>
 
-                          <p className="text-xs text-gray-500 mt-1">
-
-                            ID: {hotel._id}
-
+                          <p className="text-xs text-gray-500 mt-1 break-all">
+                            ID:{" "}
+                            {hotel._id}
                           </p>
 
                         </div>
 
                       </div>
 
-                      {/* HOTEL DETAILS */}
+                      {/* =================================================
+                          HOTEL DETAILS
+                      ================================================= */}
 
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-5">
 
-                        <div className="flex items-center gap-2 text-gray-300">
+                        <div className="flex items-start gap-2 text-gray-300">
 
-                          <FaMapMarkerAlt className="text-gray-500" />
+                          <FaMapMarkerAlt className="text-gray-500 mt-1 shrink-0" />
 
                           <span>
-                            {hotel.address || "No address"}
+                            {hotel.address ||
+                              "No address"}
                           </span>
 
                         </div>
 
                         <div className="flex items-center gap-2 text-gray-300">
 
-                          <FaPhone className="text-gray-500" />
+                          <FaPhone className="text-gray-500 shrink-0" />
 
                           <span>
-                            {hotel.phone || "No phone"}
+                            {hotel.phone ||
+                              "No phone"}
                           </span>
 
                         </div>
 
                       </div>
 
-                      {/* OWNER DETAILS */}
+                      {/* =================================================
+                          OWNER DETAILS
+                      ================================================= */}
 
-                      {owner && (
+                      {owner ? (
 
                         <div className="mt-5 bg-black/20 border border-white/5 rounded-xl p-4">
 
@@ -567,22 +800,24 @@ export default function SuperAdminDashboard() {
 
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
 
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2 min-w-0">
 
-                              <FaUser className="text-orange-400" />
+                              <FaUser className="text-orange-400 shrink-0" />
 
-                              <span>
-                                {owner.name || "No name"}
+                              <span className="truncate">
+                                {owner.name ||
+                                  "No name"}
                               </span>
 
                             </div>
 
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2 min-w-0">
 
-                              <FaEnvelope className="text-orange-400" />
+                              <FaEnvelope className="text-orange-400 shrink-0" />
 
                               <span className="break-all">
-                                {owner.email || "No email"}
+                                {owner.email ||
+                                  "No email"}
                               </span>
 
                             </div>
@@ -591,38 +826,69 @@ export default function SuperAdminDashboard() {
 
                         </div>
 
+                      ) : (
+
+                        <div className="mt-5 bg-yellow-500/5 border border-yellow-500/10 rounded-xl p-4">
+
+                          <p className="text-sm text-yellow-400">
+                            No owner is linked to this hotel.
+                          </p>
+
+                        </div>
+
                       )}
 
                     </div>
 
-                    {/* STATUS */}
+                    {/* =================================================
+                        STATUS
+                    ================================================= */}
 
                     <div className="flex flex-col items-start xl:items-end gap-3">
 
                       <span
-                        className={`px-4 py-2 rounded-full text-sm font-semibold ${isActive
-                          ? "bg-green-500/20 text-green-400"
-                          : "bg-red-500/20 text-red-400"
-                          }`}
+                        className={`px-4 py-2 rounded-full text-sm font-semibold ${
+                          isActive
+                            ? "bg-green-500/20 text-green-400"
+                            : "bg-red-500/20 text-red-400"
+                        }`}
                       >
-
                         {isActive
                           ? "● Active"
                           : "● Inactive"}
-
                       </span>
+
+                      {hotel.setupCompleted !==
+                        undefined && (
+
+                        <span
+                          className={`px-3 py-1.5 rounded-lg text-xs font-semibold ${
+                            hotel.setupCompleted
+                              ? "bg-blue-500/10 text-blue-400"
+                              : "bg-yellow-500/10 text-yellow-400"
+                          }`}
+                        >
+                          {hotel.setupCompleted
+                            ? "Setup Complete"
+                            : "Setup Pending"}
+                        </span>
+
+                      )}
 
                     </div>
 
                   </div>
 
-                  {/* ACTIONS */}
+                  {/* =================================================
+                      ACTIONS
+                  ================================================= */}
 
                   <div className="flex flex-wrap gap-3 mt-5 pt-5 border-t border-white/10">
 
                     {isActive ? (
 
                       <button
+                        type="button"
                         disabled={isLoading}
                         onClick={() =>
                           deactivateHotel(
@@ -643,6 +909,7 @@ export default function SuperAdminDashboard() {
                     ) : (
 
                       <button
+                        type="button"
                         disabled={isLoading}
                         onClick={() =>
                           activateHotel(
@@ -665,6 +932,7 @@ export default function SuperAdminDashboard() {
                     {/* DELETE */}
 
                     <button
+                      type="button"
                       disabled={isLoading}
                       onClick={() =>
                         deleteHotel(
@@ -676,7 +944,9 @@ export default function SuperAdminDashboard() {
 
                       <FaTrash />
 
-                      Delete
+                      {isLoading
+                        ? "Please wait..."
+                        : "Delete"}
 
                     </button>
 
@@ -685,7 +955,6 @@ export default function SuperAdminDashboard() {
                 </div>
 
               );
-
             })}
 
           </div>
@@ -700,108 +969,174 @@ export default function SuperAdminDashboard() {
 
       {showModal && (
 
-        <div className="fixed inset-0 bg-black/70 z-50 flex justify-center items-center p-4 overflow-y-auto">
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex justify-center items-center p-4 overflow-y-auto">
 
-          <div className="bg-[#111827] border border-white/10 rounded-3xl w-full max-w-xl p-6 my-8">
+          <div className="bg-[#111827] border border-white/10 rounded-3xl w-full max-w-xl p-6 my-8 shadow-2xl">
 
-            <h2 className="text-2xl md:text-3xl font-bold mb-6">
-              Create Hotel
-            </h2>
+            {/* MODAL HEADER */}
+
+            <div className="flex items-center justify-between mb-6">
+
+              <div>
+                <h2 className="text-2xl md:text-3xl font-bold">
+                  Create Hotel
+                </h2>
+
+                <p className="text-gray-400 text-sm mt-1">
+                  Create a hotel and its owner account.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={closeModal}
+                disabled={
+                  actionLoading ===
+                  "create"
+                }
+                className="p-2 rounded-xl bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white disabled:opacity-50"
+              >
+                <FaTimes />
+              </button>
+
+            </div>
 
             {/* HOTEL NAME */}
 
+            <label className="block text-sm text-gray-300 mb-2">
+              Hotel Name *
+            </label>
+
             <input
               type="text"
-              placeholder="Hotel Name *"
-              value={formData.hotelName}
-              onChange={(e) =>
-                setFormData({
-                  ...formData,
-                  hotelName:
-                    e.target.value,
-                })
+              name="hotelName"
+              placeholder="Hotel Name"
+              value={
+                formData.hotelName
               }
-              className="w-full mb-4 bg-white/10 border border-white/10 rounded-xl px-4 py-3 outline-none"
+              onChange={
+                handleFormChange
+              }
+              disabled={
+                actionLoading ===
+                "create"
+              }
+              className="w-full mb-4 bg-white/10 border border-white/10 rounded-xl px-4 py-3 outline-none focus:border-orange-500 disabled:opacity-50"
             />
 
             {/* ADDRESS */}
 
+            <label className="block text-sm text-gray-300 mb-2">
+              Hotel Address
+            </label>
+
             <input
               type="text"
-              placeholder="Address"
-              value={formData.address}
-              onChange={(e) =>
-                setFormData({
-                  ...formData,
-                  address:
-                    e.target.value,
-                })
+              name="address"
+              placeholder="Hotel address"
+              value={
+                formData.address
               }
-              className="w-full mb-4 bg-white/10 border border-white/10 rounded-xl px-4 py-3 outline-none"
+              onChange={
+                handleFormChange
+              }
+              disabled={
+                actionLoading ===
+                "create"
+              }
+              className="w-full mb-4 bg-white/10 border border-white/10 rounded-xl px-4 py-3 outline-none focus:border-orange-500 disabled:opacity-50"
             />
 
             {/* PHONE */}
 
+            <label className="block text-sm text-gray-300 mb-2">
+              Hotel Phone
+            </label>
+
             <input
               type="text"
-              placeholder="Hotel Phone"
-              value={formData.phone}
-              onChange={(e) =>
-                setFormData({
-                  ...formData,
-                  phone:
-                    e.target.value,
-                })
+              name="phone"
+              placeholder="Hotel phone"
+              value={
+                formData.phone
               }
-              className="w-full mb-4 bg-white/10 border border-white/10 rounded-xl px-4 py-3 outline-none"
+              onChange={
+                handleFormChange
+              }
+              disabled={
+                actionLoading ===
+                "create"
+              }
+              className="w-full mb-4 bg-white/10 border border-white/10 rounded-xl px-4 py-3 outline-none focus:border-orange-500 disabled:opacity-50"
             />
 
             {/* OWNER NAME */}
 
+            <label className="block text-sm text-gray-300 mb-2">
+              Owner Name *
+            </label>
+
             <input
               type="text"
-              placeholder="Owner Name *"
-              value={formData.ownerName}
-              onChange={(e) =>
-                setFormData({
-                  ...formData,
-                  ownerName:
-                    e.target.value,
-                })
+              name="ownerName"
+              placeholder="Owner name"
+              value={
+                formData.ownerName
               }
-              className="w-full mb-4 bg-white/10 border border-white/10 rounded-xl px-4 py-3 outline-none"
+              onChange={
+                handleFormChange
+              }
+              disabled={
+                actionLoading ===
+                "create"
+              }
+              className="w-full mb-4 bg-white/10 border border-white/10 rounded-xl px-4 py-3 outline-none focus:border-orange-500 disabled:opacity-50"
             />
 
             {/* OWNER EMAIL */}
 
+            <label className="block text-sm text-gray-300 mb-2">
+              Owner Email *
+            </label>
+
             <input
               type="email"
-              placeholder="Owner Email *"
-              value={formData.ownerEmail}
-              onChange={(e) =>
-                setFormData({
-                  ...formData,
-                  ownerEmail:
-                    e.target.value,
-                })
+              name="ownerEmail"
+              placeholder="owner@example.com"
+              value={
+                formData.ownerEmail
               }
-              className="w-full mb-4 bg-white/10 border border-white/10 rounded-xl px-4 py-3 outline-none"
+              onChange={
+                handleFormChange
+              }
+              disabled={
+                actionLoading ===
+                "create"
+              }
+              className="w-full mb-4 bg-white/10 border border-white/10 rounded-xl px-4 py-3 outline-none focus:border-orange-500 disabled:opacity-50"
             />
 
             {/* PASSWORD */}
 
+            <label className="block text-sm text-gray-300 mb-2">
+              Owner Password *
+            </label>
+
             <input
               type="password"
-              placeholder="Owner Password *"
-              value={formData.ownerPassword}
-              onChange={(e) =>
-                setFormData({
-                  ...formData,
-                  ownerPassword:
-                    e.target.value,
-                })
+              name="ownerPassword"
+              placeholder="Minimum 6 characters"
+              value={
+                formData.ownerPassword
               }
-              className="w-full mb-6 bg-white/10 border border-white/10 rounded-xl px-4 py-3 outline-none"
+              onChange={
+                handleFormChange
+              }
+              disabled={
+                actionLoading ===
+                "create"
+              }
+              className="w-full mb-6 bg-white/10 border border-white/10 rounded-xl px-4 py-3 outline-none focus:border-orange-500 disabled:opacity-50"
             />
 
             {/* BUTTONS */}
@@ -809,23 +1144,45 @@ export default function SuperAdminDashboard() {
             <div className="flex gap-3">
 
               <button
-                onClick={() =>
-                  setShowModal(false)
+                type="button"
+                onClick={closeModal}
+                disabled={
+                  actionLoading ===
+                  "create"
                 }
-                className="flex-1 bg-white/10 hover:bg-white/20 py-3 rounded-xl"
+                className="flex-1 bg-white/10 hover:bg-white/20 py-3 rounded-xl disabled:opacity-50"
               >
                 Cancel
               </button>
 
               <button
+                type="button"
                 onClick={createHotel}
-                disabled={loading}
-                className="flex-1 bg-orange-500 hover:bg-orange-600 py-3 rounded-xl font-semibold disabled:opacity-50"
+                disabled={
+                  actionLoading ===
+                  "create"
+                }
+                className="flex-1 bg-orange-500 hover:bg-orange-600 py-3 rounded-xl font-semibold disabled:opacity-50 flex items-center justify-center gap-2"
               >
 
-                {loading
-                  ? "Creating..."
-                  : "Create Hotel"}
+                {actionLoading ===
+                "create" ? (
+
+                  <>
+                    <FaSyncAlt className="animate-spin" />
+
+                    Creating...
+                  </>
+
+                ) : (
+
+                  <>
+                    <FaPlus />
+
+                    Create Hotel
+                  </>
+
+                )}
 
               </button>
 

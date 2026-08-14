@@ -1,26 +1,17 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+
 import api from "../api/axios";
 import { HOTEL_THEME_CHOICES } from "../constants/hotelThemes";
-
-/* =========================================================
-   HOTEL THEMES
-========================================================= */
+import { useAuth } from "../context/AuthContext";
 
 export const HOTEL_THEMES = HOTEL_THEME_CHOICES;
 
-/* =========================================================
-   COMPONENT
-========================================================= */
-
 export default function HotelSetupPage() {
   const navigate = useNavigate();
+  const { user, login, logout } = useAuth();
 
   const [loading, setLoading] = useState(false);
-
-  /* =======================================================
-     FORM DATA
-  ======================================================= */
 
   const [formData, setFormData] = useState({
     name: "",
@@ -29,7 +20,7 @@ export default function HotelSetupPage() {
     type: "hotel",
     address: "",
     phone: "",
-    email: "",
+    email: user?.email || "",
     website: "",
     instagram: "",
     whatsapp: "",
@@ -39,20 +30,17 @@ export default function HotelSetupPage() {
   const [logoFile, setLogoFile] = useState(null);
   const [coverFile, setCoverFile] = useState(null);
 
-  /* =======================================================
-     SELECTED THEME
-  ======================================================= */
-
   const selectedTheme =
     HOTEL_THEMES.find(
       (theme) => theme.id === formData.themeId
     ) || HOTEL_THEMES[0];
 
-  const previewText = selectedTheme.text || "#FFFFFF";
+  const previewText =
+    selectedTheme.text || "#FFFFFF";
 
-  /* =======================================================
-     INPUT CHANGE
-  ======================================================= */
+  // =====================================================
+  // INPUT
+  // =====================================================
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -63,9 +51,9 @@ export default function HotelSetupPage() {
     }));
   };
 
-  /* =======================================================
-     THEME CHANGE
-  ======================================================= */
+  // =====================================================
+  // THEME
+  // =====================================================
 
   const handleThemeChange = (themeId) => {
     setFormData((prev) => ({
@@ -74,127 +62,286 @@ export default function HotelSetupPage() {
     }));
   };
 
-  /* =======================================================
-     SUBMIT
-  ======================================================= */
+  // =====================================================
+  // BACK
+  // =====================================================
+
+  const handleBack = () => {
+    /*
+     * Do NOT send the owner to the dashboard.
+     *
+     * They have not completed hotel setup yet.
+     *
+     * We clear the current session and return
+     * them to login.
+     */
+
+    logout();
+
+    navigate("/login", {
+      replace: true,
+    });
+  };
+
+  // =====================================================
+  // SUBMIT
+  // =====================================================
 
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (!formData.name.trim()) {
+    if (loading) return;
+
+    // -----------------------------------------------------
+    // VALIDATION
+    // -----------------------------------------------------
+
+    const hotelName = formData.name.trim();
+    const address = formData.address.trim();
+    const phone = formData.phone.trim();
+
+    if (!hotelName) {
       alert("Please enter your hotel name.");
+      return;
+    }
+
+    if (!address) {
+      alert("Please enter your hotel address.");
+      return;
+    }
+
+    if (!phone) {
+      alert("Please enter your hotel phone number.");
+      return;
+    }
+
+    // -----------------------------------------------------
+    // SESSION
+    // -----------------------------------------------------
+
+    const token = localStorage.getItem("token");
+
+    if (!token) {
+      alert(
+        "Your session has expired. Please login again."
+      );
+
+      navigate("/login", {
+        replace: true,
+      });
+
       return;
     }
 
     try {
       setLoading(true);
 
-      const token = localStorage.getItem("token");
-
-      if (!token) {
-        alert("Your session has expired. Please login again.");
-        navigate("/login");
-        return;
-      }
-
-      /* ---------------------------------------------------
-         FIND SELECTED THEME
-      --------------------------------------------------- */
+      // ---------------------------------------------------
+      // THEME
+      // ---------------------------------------------------
 
       const theme =
         HOTEL_THEMES.find(
           (item) => item.id === formData.themeId
         ) || HOTEL_THEMES[0];
 
-      /* ---------------------------------------------------
-         CREATE FORM DATA
-      --------------------------------------------------- */
+      // ---------------------------------------------------
+      // FORM DATA
+      // ---------------------------------------------------
 
       const form = new FormData();
 
-      /* BASIC INFORMATION */
+      form.append("name", hotelName);
+      form.append(
+        "tagline",
+        formData.tagline.trim()
+      );
 
-      form.append("name", formData.name.trim());
-      form.append("tagline", formData.tagline);
-      form.append("description", formData.description);
+      form.append(
+        "description",
+        formData.description.trim()
+      );
+
       form.append("type", formData.type);
 
-      /* CONTACT INFORMATION */
+      form.append("address", address);
+      form.append("phone", phone);
 
-      form.append("address", formData.address);
-      form.append("phone", formData.phone);
-      form.append("email", formData.email);
-      form.append("website", formData.website);
-      form.append("instagram", formData.instagram);
-      form.append("whatsapp", formData.whatsapp);
+      form.append(
+        "email",
+        formData.email.trim()
+      );
 
-      /* ---------------------------------------------------
-         THEME
+      form.append(
+        "website",
+        formData.website.trim()
+      );
 
-         We send BOTH the ID and actual colors.
+      form.append(
+        "instagram",
+        formData.instagram.trim()
+      );
 
-         This matches your Hotel schema:
+      form.append(
+        "whatsapp",
+        formData.whatsapp.trim()
+      );
 
-         theme: {
-           id,
-           primary,
-           secondary,
-           accent
-         }
-      --------------------------------------------------- */
+      // ---------------------------------------------------
+      // THEME
+      // ---------------------------------------------------
 
       form.append("themeId", theme.id);
-      form.append("themePrimary", theme.primary);
-      form.append("themeSecondary", theme.secondary);
-      form.append("themeAccent", theme.accent);
+      form.append(
+        "themePrimary",
+        theme.primary
+      );
 
-      /* ---------------------------------------------------
-         FILES
-      --------------------------------------------------- */
+      form.append(
+        "themeSecondary",
+        theme.secondary
+      );
+
+      form.append(
+        "themeAccent",
+        theme.accent
+      );
+
+      form.append(
+        "themeText",
+        theme.text || "#FFFFFF"
+      );
+
+      form.append(
+        "themeMode",
+        theme.mode || "dark"
+      );
+
+      // ---------------------------------------------------
+      // FILES
+      // ---------------------------------------------------
 
       if (logoFile) {
         form.append("logo", logoFile);
       }
 
       if (coverFile) {
-        form.append("coverImage", coverFile);
+        form.append(
+          "coverImage",
+          coverFile
+        );
       }
 
-      /* ---------------------------------------------------
-         API REQUEST
-      --------------------------------------------------- */
+      console.log(
+        "SUBMITTING HOTEL SETUP"
+      );
 
-      await api.put("/hotel/setup", form, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "multipart/form-data",
+      // ---------------------------------------------------
+      // API
+      // ---------------------------------------------------
+
+      const response = await api.put(
+        "/hotel/setup",
+        form,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      console.log(
+        "HOTEL SETUP RESPONSE:",
+        response.data
+      );
+
+      const updatedUser =
+        response.data?.user;
+
+      if (!updatedUser?.hotelId) {
+        throw new Error(
+          "Hotel was created, but it could not be linked to your owner account."
+        );
+      }
+
+      // ---------------------------------------------------
+      // VERY IMPORTANT
+      // UPDATE AUTH SESSION
+      // ---------------------------------------------------
+
+      /*
+       * Before setup:
+       *
+       * hotelId: null
+       *
+       * After setup:
+       *
+       * hotelId: "..."
+       *
+       * We must update AuthContext/localStorage.
+       */
+
+      login(
+        {
+          ...(user || {}),
+          ...updatedUser,
+          hotelId: updatedUser.hotelId,
+          accountStatus:
+            updatedUser.accountStatus || "active",
         },
-      });
+        token
+      );
 
-      alert("Hotel setup completed successfully!");
-
-      navigate("/owner/dashboard");
-    } catch (err) {
-      console.error("HOTEL SETUP ERROR:", err);
+      // ---------------------------------------------------
+      // SUCCESS
+      // ---------------------------------------------------
 
       alert(
-        err?.response?.data?.message ||
-          "Hotel setup failed. Please try again."
+        "Hotel setup completed successfully!"
       );
+
+      navigate(
+        "/owner/dashboard",
+        {
+          replace: true,
+        }
+      );
+
+    } catch (err) {
+      console.error(
+        "HOTEL SETUP ERROR:",
+        err
+      );
+
+      const message =
+        err?.response?.data?.message ||
+        err?.message ||
+        "Hotel setup failed. Please try again.";
+
+      alert(message);
+
     } finally {
       setLoading(false);
     }
   };
 
-  /* =======================================================
-     JSX
-  ======================================================= */
+  // =====================================================
+  // INPUT CLASS
+  // =====================================================
+
+  const inputClass =
+    "w-full p-3 rounded-xl outline-none text-black";
+
+  // =====================================================
+  // JSX
+  // =====================================================
 
   return (
     <div
       className="min-h-screen px-4 py-8 md:px-8"
       style={{
-        background: selectedTheme.secondary,
+        background:
+          selectedTheme.secondary,
         color: previewText,
       }}
     >
@@ -206,13 +353,34 @@ export default function HotelSetupPage() {
 
         <div className="mb-8">
 
-          <h1 className="text-3xl md:text-4xl font-bold">
-            Setup Your Hotel
+          <button
+            type="button"
+            onClick={handleBack}
+            disabled={loading}
+            className="mb-6 px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 transition disabled:opacity-50"
+          >
+            ← Back to Login
+          </button>
+
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/10 text-sm">
+            Step 2 of 2
+          </div>
+
+          <h1 className="text-3xl md:text-4xl font-bold mt-4">
+            Set Up Your Hotel
           </h1>
 
           <p className="mt-2 opacity-70">
-            Add your hotel information, branding and theme.
+            Your owner account is active. Complete
+            your hotel information before entering
+            your dashboard.
           </p>
+
+          {user && (
+            <div className="mt-4 text-sm opacity-60">
+              Account: {user.email}
+            </div>
+          )}
 
         </div>
 
@@ -225,25 +393,22 @@ export default function HotelSetupPage() {
           className="space-y-6"
         >
 
-          {/* =================================================
-              BASIC INFORMATION
-          ================================================= */}
+          {/* BASIC INFORMATION */}
 
           <section
             className="p-6 rounded-2xl border"
             style={{
-              background: "rgba(255,255,255,0.06)",
-              borderColor: "rgba(255,255,255,0.12)",
+              background:
+                "rgba(255,255,255,0.06)",
+              borderColor:
+                "rgba(255,255,255,0.12)",
             }}
           >
-
             <h2 className="text-xl font-bold mb-5">
               Basic Information
             </h2>
 
             <div className="grid md:grid-cols-2 gap-4">
-
-              {/* HOTEL NAME */}
 
               <div>
                 <label className="block text-sm mb-2">
@@ -257,11 +422,10 @@ export default function HotelSetupPage() {
                   onChange={handleChange}
                   placeholder="Enter hotel name"
                   required
-                  className="w-full p-3 rounded-xl outline-none text-black"
+                  disabled={loading}
+                  className={inputClass}
                 />
               </div>
-
-              {/* TYPE */}
 
               <div>
                 <label className="block text-sm mb-2">
@@ -272,7 +436,8 @@ export default function HotelSetupPage() {
                   name="type"
                   value={formData.type}
                   onChange={handleChange}
-                  className="w-full p-3 rounded-xl outline-none text-black"
+                  disabled={loading}
+                  className={inputClass}
                 >
                   <option value="hotel">
                     Hotel
@@ -296,8 +461,6 @@ export default function HotelSetupPage() {
                 </select>
               </div>
 
-              {/* TAGLINE */}
-
               <div>
                 <label className="block text-sm mb-2">
                   Tagline
@@ -309,15 +472,14 @@ export default function HotelSetupPage() {
                   value={formData.tagline}
                   onChange={handleChange}
                   placeholder="Example: Taste the difference"
-                  className="w-full p-3 rounded-xl outline-none text-black"
+                  disabled={loading}
+                  className={inputClass}
                 />
               </div>
 
-              {/* PHONE */}
-
               <div>
                 <label className="block text-sm mb-2">
-                  Phone
+                  Phone *
                 </label>
 
                 <input
@@ -326,16 +488,15 @@ export default function HotelSetupPage() {
                   value={formData.phone}
                   onChange={handleChange}
                   placeholder="Phone number"
-                  className="w-full p-3 rounded-xl outline-none text-black"
+                  required
+                  disabled={loading}
+                  className={inputClass}
                 />
               </div>
 
             </div>
 
-            {/* DESCRIPTION */}
-
             <div className="mt-4">
-
               <label className="block text-sm mb-2">
                 Description
               </label>
@@ -346,35 +507,30 @@ export default function HotelSetupPage() {
                 onChange={handleChange}
                 placeholder="Tell guests something about your hotel..."
                 rows={4}
-                className="w-full p-3 rounded-xl outline-none text-black resize-none"
+                disabled={loading}
+                className={`${inputClass} resize-none`}
               />
-
             </div>
-
           </section>
 
-          {/* =================================================
-              CONTACT
-          ================================================= */}
+          {/* CONTACT */}
 
           <section
             className="p-6 rounded-2xl border"
             style={{
-              background: "rgba(255,255,255,0.06)",
-              borderColor: "rgba(255,255,255,0.12)",
+              background:
+                "rgba(255,255,255,0.06)",
+              borderColor:
+                "rgba(255,255,255,0.12)",
             }}
           >
-
             <h2 className="text-xl font-bold mb-5">
               Contact Information
             </h2>
 
             <div className="grid md:grid-cols-2 gap-4">
 
-              {/* EMAIL */}
-
               <div>
-
                 <label className="block text-sm mb-2">
                   Email
                 </label>
@@ -384,18 +540,14 @@ export default function HotelSetupPage() {
                   name="email"
                   value={formData.email}
                   onChange={handleChange}
-                  placeholder="hotel@example.com"
-                  className="w-full p-3 rounded-xl outline-none text-black"
+                  disabled={loading}
+                  className={inputClass}
                 />
-
               </div>
 
-              {/* ADDRESS */}
-
               <div>
-
                 <label className="block text-sm mb-2">
-                  Address
+                  Address *
                 </label>
 
                 <input
@@ -404,15 +556,13 @@ export default function HotelSetupPage() {
                   value={formData.address}
                   onChange={handleChange}
                   placeholder="Hotel address"
-                  className="w-full p-3 rounded-xl outline-none text-black"
+                  required
+                  disabled={loading}
+                  className={inputClass}
                 />
-
               </div>
 
-              {/* WEBSITE */}
-
               <div>
-
                 <label className="block text-sm mb-2">
                   Website
                 </label>
@@ -423,15 +573,12 @@ export default function HotelSetupPage() {
                   value={formData.website}
                   onChange={handleChange}
                   placeholder="https://example.com"
-                  className="w-full p-3 rounded-xl outline-none text-black"
+                  disabled={loading}
+                  className={inputClass}
                 />
-
               </div>
 
-              {/* INSTAGRAM */}
-
               <div>
-
                 <label className="block text-sm mb-2">
                   Instagram
                 </label>
@@ -442,15 +589,12 @@ export default function HotelSetupPage() {
                   value={formData.instagram}
                   onChange={handleChange}
                   placeholder="@yourhotel"
-                  className="w-full p-3 rounded-xl outline-none text-black"
+                  disabled={loading}
+                  className={inputClass}
                 />
-
               </div>
 
-              {/* WHATSAPP */}
-
               <div>
-
                 <label className="block text-sm mb-2">
                   WhatsApp
                 </label>
@@ -461,27 +605,25 @@ export default function HotelSetupPage() {
                   value={formData.whatsapp}
                   onChange={handleChange}
                   placeholder="WhatsApp number"
-                  className="w-full p-3 rounded-xl outline-none text-black"
+                  disabled={loading}
+                  className={inputClass}
                 />
-
               </div>
 
             </div>
-
           </section>
 
-          {/* =================================================
-              BRANDING
-          ================================================= */}
+          {/* BRANDING */}
 
           <section
             className="p-6 rounded-2xl border"
             style={{
-              background: "rgba(255,255,255,0.06)",
-              borderColor: "rgba(255,255,255,0.12)",
+              background:
+                "rgba(255,255,255,0.06)",
+              borderColor:
+                "rgba(255,255,255,0.12)",
             }}
           >
-
             <h2 className="text-xl font-bold mb-2">
               Branding
             </h2>
@@ -492,10 +634,7 @@ export default function HotelSetupPage() {
 
             <div className="grid md:grid-cols-2 gap-5">
 
-              {/* LOGO */}
-
               <div>
-
                 <label className="block text-sm mb-2">
                   Hotel Logo
                 </label>
@@ -503,9 +642,11 @@ export default function HotelSetupPage() {
                 <input
                   type="file"
                   accept="image/png,image/jpeg,image/webp"
+                  disabled={loading}
                   onChange={(e) =>
                     setLogoFile(
-                      e.target.files?.[0] || null
+                      e.target.files?.[0] ||
+                      null
                     )
                   }
                   className="w-full p-3 rounded-xl bg-white text-black"
@@ -516,13 +657,9 @@ export default function HotelSetupPage() {
                     Selected: {logoFile.name}
                   </p>
                 )}
-
               </div>
 
-              {/* COVER */}
-
               <div>
-
                 <label className="block text-sm mb-2">
                   Cover Image
                 </label>
@@ -530,9 +667,11 @@ export default function HotelSetupPage() {
                 <input
                   type="file"
                   accept="image/png,image/jpeg,image/webp"
+                  disabled={loading}
                   onChange={(e) =>
                     setCoverFile(
-                      e.target.files?.[0] || null
+                      e.target.files?.[0] ||
+                      null
                     )
                   }
                   className="w-full p-3 rounded-xl bg-white text-black"
@@ -543,42 +682,34 @@ export default function HotelSetupPage() {
                     Selected: {coverFile.name}
                   </p>
                 )}
-
               </div>
 
             </div>
-
           </section>
 
-          {/* =================================================
-              THEMES
-          ================================================= */}
+          {/* THEMES */}
 
           <section
             className="p-6 rounded-2xl border"
             style={{
-              background: "rgba(255,255,255,0.06)",
-              borderColor: "rgba(255,255,255,0.12)",
+              background:
+                "rgba(255,255,255,0.06)",
+              borderColor:
+                "rgba(255,255,255,0.12)",
             }}
           >
+            <h2 className="text-xl font-bold">
+              Choose Your Theme
+            </h2>
 
-            <div className="mb-5">
-
-              <h2 className="text-xl font-bold">
-                Choose Your Theme
-              </h2>
-
-              <p className="text-sm opacity-70 mt-1">
-                This theme will be used for your hotel's
-                guest-facing menu and branding.
-              </p>
-
-            </div>
+            <p className="text-sm opacity-70 mt-1 mb-5">
+              This theme will be used for your
+              hotel's guest-facing menu.
+            </p>
 
             <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
 
               {HOTEL_THEMES.map((theme) => {
-
                 const selected =
                   formData.themeId === theme.id;
 
@@ -589,22 +720,27 @@ export default function HotelSetupPage() {
                     onClick={() =>
                       handleThemeChange(theme.id)
                     }
-                    className="text-left rounded-2xl p-4 border-2 transition hover:scale-[1.02]"
+                    disabled={loading}
+                    className="text-left rounded-2xl p-4 border-2 transition hover:scale-[1.02] disabled:opacity-60"
                     style={{
-                      background: `linear-gradient(135deg, ${theme.secondary} 0%, ${theme.primary} 100%)`,
-                      borderColor: selected
-                        ? theme.accent
-                        : "rgba(255,255,255,0.16)",
-                      color: theme.text || "#FFFFFF",
+                      background:
+                        `linear-gradient(135deg, ${theme.secondary} 0%, ${theme.primary} 100%)`,
+                      borderColor:
+                        selected
+                          ? theme.accent
+                          : "rgba(255,255,255,0.16)",
+                      color:
+                        theme.text ||
+                        "#FFFFFF",
                     }}
                   >
-
                     <div className="flex items-center justify-between">
 
                       <h3
                         className="font-bold"
                         style={{
-                          color: theme.accent,
+                          color:
+                            theme.accent,
                         }}
                       >
                         {theme.label}
@@ -614,96 +750,104 @@ export default function HotelSetupPage() {
                         <span
                           className="text-xs px-2 py-1 rounded-full"
                           style={{
-                            background: theme.accent,
-                            color: "#000",
+                            background:
+                              theme.accent,
+                            color:
+                              "#000",
                           }}
                         >
                           Selected
                         </span>
                       )}
-
                     </div>
-
-                    {/* COLOR PREVIEW */}
 
                     <div className="flex gap-2 mt-4">
 
                       <span
                         className="w-8 h-8 rounded-full border border-white/20"
                         style={{
-                          background: theme.primary,
+                          background:
+                            theme.primary,
                         }}
                       />
 
                       <span
                         className="w-8 h-8 rounded-full border border-white/20"
                         style={{
-                          background: theme.secondary,
+                          background:
+                            theme.secondary,
                         }}
                       />
 
                       <span
                         className="w-8 h-8 rounded-full border border-white/20"
                         style={{
-                          background: theme.accent,
+                          background:
+                            theme.accent,
                         }}
                       />
 
                     </div>
-
                   </button>
                 );
               })}
 
             </div>
-
           </section>
 
-          {/* =================================================
-              LIVE PREVIEW
-          ================================================= */}
+          {/* PREVIEW */}
 
           <section
             className="rounded-2xl overflow-hidden border"
             style={{
-              background: selectedTheme.secondary,
-              borderColor: selectedTheme.accent,
+              background:
+                selectedTheme.secondary,
+              borderColor:
+                selectedTheme.accent,
             }}
           >
-
             <div
               className="p-6"
               style={{
-                background: selectedTheme.primary,
+                background:
+                  selectedTheme.primary,
               }}
             >
-
-              <p className="text-sm opacity-80" style={{ color: previewText }}>
+              <p
+                className="text-sm opacity-80"
+                style={{
+                  color: previewText,
+                }}
+              >
                 LIVE PREVIEW
               </p>
 
-              <h2 className="text-2xl md:text-3xl font-bold mt-2" style={{ color: previewText }}>
-                {formData.name || "Your Hotel Name"}
+              <h2
+                className="text-2xl md:text-3xl font-bold mt-2"
+                style={{
+                  color: previewText,
+                }}
+              >
+                {formData.name ||
+                  "Your Hotel Name"}
               </h2>
 
-              <p className="mt-1 opacity-80" style={{ color: previewText }}>
+              <p
+                className="mt-1 opacity-80"
+                style={{
+                  color: previewText,
+                }}
+              >
                 {formData.tagline ||
                   "Your hotel tagline will appear here"}
               </p>
-
             </div>
 
             <div className="p-6">
 
               <div className="grid md:grid-cols-3 gap-4">
 
-                <div
-                  className="p-4 rounded-xl"
-                  style={{
-                    background:
-                      "rgba(255,255,255,0.08)",
-                  }}
-                >
+                <div className="p-4 rounded-xl bg-white/5">
                   <p className="text-sm opacity-70">
                     Primary
                   </p>
@@ -711,20 +855,15 @@ export default function HotelSetupPage() {
                   <p
                     className="font-bold mt-1"
                     style={{
-                      color: selectedTheme.primary,
+                      color:
+                        selectedTheme.primary,
                     }}
                   >
                     {selectedTheme.primary}
                   </p>
                 </div>
 
-                <div
-                  className="p-4 rounded-xl"
-                  style={{
-                    background:
-                      "rgba(255,255,255,0.08)",
-                  }}
-                >
+                <div className="p-4 rounded-xl bg-white/5">
                   <p className="text-sm opacity-70">
                     Secondary
                   </p>
@@ -732,20 +871,15 @@ export default function HotelSetupPage() {
                   <p
                     className="font-bold mt-1"
                     style={{
-                      color: selectedTheme.accent,
+                      color:
+                        selectedTheme.accent,
                     }}
                   >
                     {selectedTheme.secondary}
                   </p>
                 </div>
 
-                <div
-                  className="p-4 rounded-xl"
-                  style={{
-                    background:
-                      "rgba(255,255,255,0.08)",
-                  }}
-                >
+                <div className="p-4 rounded-xl bg-white/5">
                   <p className="text-sm opacity-70">
                     Accent
                   </p>
@@ -753,7 +887,8 @@ export default function HotelSetupPage() {
                   <p
                     className="font-bold mt-1"
                     style={{
-                      color: selectedTheme.accent,
+                      color:
+                        selectedTheme.accent,
                     }}
                   >
                     {selectedTheme.accent}
@@ -762,43 +897,55 @@ export default function HotelSetupPage() {
 
               </div>
 
-              {/* PREVIEW BUTTON */}
-
               <button
                 type="button"
                 className="mt-5 px-6 py-3 rounded-xl font-bold"
                 style={{
-                  background: selectedTheme.accent,
-                  color: selectedTheme.secondary,
+                  background:
+                    selectedTheme.accent,
+                  color:
+                    selectedTheme.secondary,
                 }}
               >
                 Example Button
               </button>
 
             </div>
-
           </section>
 
           {/* =================================================
-              SUBMIT
+              ACTIONS
           ================================================= */}
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full py-4 rounded-2xl font-bold text-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
-            style={{
-              background: selectedTheme.primary,
-              color: "#FFFFFF",
-            }}
-          >
-            {loading
-              ? "Saving Hotel..."
-              : "Complete Hotel Setup"}
-          </button>
+          <div className="flex flex-col sm:flex-row gap-4">
+
+            <button
+              type="button"
+              onClick={handleBack}
+              disabled={loading}
+              className="sm:w-1/3 py-4 rounded-2xl font-bold text-lg bg-white/10 hover:bg-white/20 transition disabled:opacity-50"
+            >
+              ← Back to Login
+            </button>
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="sm:flex-1 py-4 rounded-2xl font-bold text-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
+              style={{
+                background:
+                  selectedTheme.primary,
+                color: "#FFFFFF",
+              }}
+            >
+              {loading
+                ? "Saving Hotel..."
+                : "Complete Hotel Setup & Continue →"}
+            </button>
+
+          </div>
 
         </form>
-
       </div>
     </div>
   );
