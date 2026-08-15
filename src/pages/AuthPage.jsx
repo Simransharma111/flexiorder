@@ -38,6 +38,9 @@ export default function AuthPage({ mode = "login" }) {
     confirmPassword: "",
   });
 
+  const [consentShare, setConsentShare] = useState(false);
+  const [consentPrivacy, setConsentPrivacy] = useState(false);
+
   // =====================================================
   // PAGE TITLE
   // =====================================================
@@ -263,6 +266,11 @@ export default function AuthPage({ mode = "login" }) {
         setFormError("Passwords do not match.");
         return;
       }
+
+      if (!consentShare || !consentPrivacy) {
+        setFormError("Please tick both boxes: agree to share your data and confirm you have read the Privacy Policy.");
+        return;
+      }
     }
 
     // ===================================================
@@ -285,6 +293,10 @@ export default function AuthPage({ mode = "login" }) {
 
             phone:
               formData.phone.trim(),
+
+            dataSharingConsent: true,
+
+            privacyConsentAt: new Date().toISOString(),
 
             password,
           }
@@ -741,6 +753,41 @@ export default function AuthPage({ mode = "login" }) {
                   disabled={loading}
                   className={inputClass}
                 />
+              )}
+
+              {/* CONSENT */}
+
+              {isRegister && (
+                <div className="flex flex-col gap-2 rounded-card border border-hairline bg-app px-3 py-3">
+                  <label className="flex cursor-pointer items-start gap-2.5 text-xs font-semibold text-ink-secondary">
+                    <input
+                      type="checkbox"
+                      checked={consentShare}
+                      onChange={(event) => setConsentShare(event.target.checked)}
+                      disabled={loading}
+                      className="mt-0.5 h-4 w-4 accent-brand"
+                    />
+                    <span>
+                      I agree to share my name, email, and phone with FlexiOrder to create my account and hotel.
+                    </span>
+                  </label>
+                  <label className="flex cursor-pointer items-start gap-2.5 text-xs font-semibold text-ink-secondary">
+                    <input
+                      type="checkbox"
+                      checked={consentPrivacy}
+                      onChange={(event) => setConsentPrivacy(event.target.checked)}
+                      disabled={loading}
+                      className="mt-0.5 h-4 w-4 accent-brand"
+                    />
+                    <span>
+                      I have read and agree to the{" "}
+                      <Link to="/privacy" target="_blank" rel="noreferrer" className="font-bold text-brand hover:text-brand-strong">
+                        Privacy Policy
+                      </Link>
+                      .
+                    </span>
+                  </label>
+                </div>
               )}
 
               {/* FORGOT PASSWORD */}
