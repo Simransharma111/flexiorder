@@ -109,3 +109,6 @@ Thumbs.db
 
 *.tmp
 *.temp
+
+# Play upload key credentials
+android/keystore.properties
