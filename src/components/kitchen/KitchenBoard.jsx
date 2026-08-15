@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FiMoreVertical } from "react-icons/fi";
 import OperationalOrderCard from "../orders/OperationalOrderCard";
+import OrderDetailsSheet from "./OrderDetailsSheet";
 import {
   groupOrdersByLocation,
   nextOrderStatus,
@@ -32,6 +33,7 @@ export default function KitchenBoard({
   godModeEnabled = false,
 }) {
   const [actionGroup, setActionGroup] = useState(null);
+  const [detailsGroup, setDetailsGroup] = useState(null);
   const [choosingCancellationReason, setChoosingCancellationReason] = useState(false);
   const sheetRef = useRef(null);
   const lastGodModeActivation = useRef(new Map());
@@ -128,11 +130,7 @@ export default function KitchenBoard({
                 key={group.key}
                 group={group}
                 surface={surface}
-                compact={godModeEnabled
-                  ? surface === "kitchen" && lane.key === "ready"
-                  : surface === "kitchen"
-                    ? false
-                    : lane.key !== "new" && !(surface === "waiter" && lane.key === "ready")}
+                compact={godModeEnabled && surface === "kitchen" && lane.key === "ready"}
                 godModeEnabled={godModeEnabled}
               onPrimary={
                 // Kitchen: suppress primary tap on ready (no further kitchen action).
@@ -191,6 +189,9 @@ export default function KitchenBoard({
               </div>
             ) : (
               <div className="ops-action-sheet__actions">
+                <button type="button" className="ops-action-sheet__details" onClick={() => { setDetailsGroup(actionGroup); closeActions(); }}>
+                  Order details
+                </button>
                 {actionGroup.orders[0]?.status === "paused" ? (
                   <button type="button" onClick={() => runAction("preparing")}>Resume preparing</button>
                 ) : (
@@ -208,6 +209,8 @@ export default function KitchenBoard({
           </section>
         </div>
       )}
+
+      {detailsGroup && <OrderDetailsSheet group={detailsGroup} surface={surface} onClose={() => setDetailsGroup(null)} />}
     </section>
   );
 }

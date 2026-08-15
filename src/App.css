@@ -2232,3 +2232,35 @@ img {
   border-color: var(--primary) !important;
   background: var(--primary-light) !important;
 }
+
+
+/* ---- Order details sheet ---- */
+.ops-order-details { max-width: 460px; }
+.ops-order-details__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.ops-order-details__head h2 { margin: 0; font-size: 20px; }
+.ops-order-details__head p { margin: 2px 0 0; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ops-muted); }
+.ops-order-details__meta {
+  display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px;
+  font-size: 12px; color: var(--ops-muted);
+}
+.ops-order-details__meta span { display: inline-flex; align-items: center; gap: 4px; }
+.ops-order-details__blocks { margin-top: 12px; display: grid; gap: 10px; }
+.ops-order-details__block { border: 1px solid var(--ops-border); border-radius: 10px; padding: 8px 10px; background: var(--ops-subtle); }
+.ops-order-details__block-title { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ops-muted); margin-bottom: 4px; }
+.ops-order-details__row { display: flex; align-items: baseline; gap: 8px; padding: 4px 0; font-size: 14px; color: var(--ops-ink); }
+.ops-order-details__qty { font-weight: 800; min-width: 32px; }
+.ops-order-details__name { flex: 1; }
+.ops-order-details__price { font-weight: 700; font-variant-numeric: tabular-nums; }
+.ops-order-details__empty { margin: 0; font-size: 13px; color: #b91c1c; }
+.ops-order-details__note {
+  display: flex; gap: 6px; align-items: flex-start; margin-top: 10px;
+  font-size: 13px; color: #7a3e00; background: var(--ops-new-bg);
+  padding: 8px 10px; border-radius: 8px;
+}
+.ops-order-details__foot {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-top: 12px; padding-top: 10px; border-top: 1px dashed var(--ops-border);
+  font-size: 14px; color: var(--ops-muted);
+}
+.ops-order-details__total { font-size: 20px; font-weight: 800; color: var(--ops-ink); font-variant-numeric: tabular-nums; }
+.ops-action-sheet__details { border-style: solid !important; font-weight: 700; }
