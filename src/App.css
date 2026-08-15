@@ -1456,8 +1456,8 @@ img {
 .guest-feature-banner strong { font-size: 16px; }
 .guest-feature-banner span { max-width: 70%; overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
 
-.guest-secondary-actions { max-width: 760px; margin: 8px auto 0; padding: 0 10px; text-align: right; }
-.guest-secondary-actions button { min-height: 38px; border: 0; background: transparent; color: var(--primary-ink, var(--primary)); font-size: 13px; font-weight: 750; }
+.guest-secondary-actions { max-width: 760px; margin: 8px auto 0; padding: 0 10px; display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 4px 14px; }
+.guest-secondary-actions button, .guest-secondary-actions a { min-height: 38px; display: inline-flex; align-items: center; border: 0; background: transparent; color: var(--primary-ink, var(--primary)); font-size: 13px; font-weight: 750; text-decoration: none; cursor: pointer; }
 .guest-secondary-actions svg { display: inline; margin-right: 4px; vertical-align: -2px; }
 .guest-food-filters { max-width: 760px; margin: 8px auto 0; padding: 0 10px; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .guest-food-filters > div { display: flex; gap: 6px; }
@@ -1891,6 +1891,7 @@ img {
 .owner-about__link strong { display: block; font-size: 14px; font-weight: 750; }
 .owner-about__link small { color: var(--ops-muted); font-size: 12px; }
 .owner-about__version { margin: 0; text-align: center; color: var(--ops-muted); font-size: 11px; letter-spacing: .4px; }
+.owner-about__version a { color: var(--primary); font-weight: 700; }
 
 /* Menu manager: merchandising tag + veg badge */
 .owner-tag { display: inline-flex; align-items: center; gap: 4px; border: 1px solid color-mix(in srgb, var(--primary) 22%, transparent); border-radius: 8px; background: var(--primary-light, #e8f2f0); padding: 3px 8px; color: var(--primary-ink, var(--primary)); font-size: 10px; font-weight: 700; }
@@ -2264,3 +2265,32 @@ img {
 }
 .ops-order-details__total { font-size: 20px; font-weight: 800; color: var(--ops-ink); font-variant-numeric: tabular-nums; }
 .ops-action-sheet__details { border-style: solid !important; font-weight: 700; }
+
+
+/* ---- Privacy policy page ---- */
+.privacy-page {
+  min-height: 100dvh;
+  background: var(--app-bg, #fff);
+  color: var(--app-ink, #1c2120);
+  padding: 24px 20px 64px;
+}
+.privacy-page__head, .privacy-page__body { max-width: 720px; margin: 0 auto; }
+.privacy-page__back {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 13px; font-weight: 700; color: var(--brand-base, #d97706);
+  text-decoration: none; margin-bottom: 18px;
+}
+.privacy-page h1 { font-size: 26px; font-weight: 800; margin: 0; }
+.privacy-page__updated { font-size: 12px; color: #6b7280; font-weight: 600; margin: 6px 0 10px; }
+.privacy-page__intro { font-size: 14px; color: #4b5563; }
+.privacy-page__section { margin-top: 22px; }
+.privacy-page__section h2 { font-size: 16px; font-weight: 800; margin: 0 0 6px; }
+.privacy-page__section p { font-size: 14px; line-height: 1.65; color: #374151; margin: 0 0 8px; }
+.privacy-page__contact a { color: var(--brand-base, #d97706); font-weight: 700; }
+
+.privacy-page__deletion { border: 1px solid #fde68a; background: #fffbeb; border-radius: 12px; padding: 14px 16px; }
+.privacy-page__deletion-button {
+  display: inline-flex; align-items: center; gap: 8px; margin-top: 8px;
+  padding: 10px 16px; border-radius: 10px; font-size: 14px; font-weight: 800;
+  background: var(--brand-base, #d97706); color: #fff; text-decoration: none;
+}

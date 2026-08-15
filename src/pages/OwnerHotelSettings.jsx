@@ -278,6 +278,7 @@ const saveRequestRevision = settingsRevision.current;
 const res = await api.patch(
   "/hotel/profile",
   {
+    name: hotel.name,
     tagline: hotel.tagline,
     description: hotel.description,
     address: hotel.address,
@@ -668,6 +669,28 @@ Hotel Information
 
 
 
+
+<div className="grid md:grid-cols-2 gap-4 mb-4">
+<input
+value={hotel.name || ""}
+onChange={e=>updateField("name", e.target.value)}
+placeholder="Hotel name"
+className="p-3 rounded-xl text-black"
+/>
+<input
+value={hotel.tagline || ""}
+onChange={e=>updateField("tagline", e.target.value)}
+placeholder="Tagline"
+className="p-3 rounded-xl text-black"
+/>
+</div>
+
+<input
+value={hotel.address || ""}
+onChange={e=>updateField("address", e.target.value)}
+placeholder="Address"
+className="w-full p-3 rounded-xl text-black mb-4"
+/>
 
 <textarea
 

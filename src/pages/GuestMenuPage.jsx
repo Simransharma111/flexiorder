@@ -35,12 +35,15 @@ import {
   writeGuestActiveOrders,
 } from "../utils/guestOrderState";
 import { applyHotelSettingsUpdate } from "../utils/featureSettings";
+import { toBrandLinkUrl, toInstagramUrl } from "../utils/brandLinks";
 
 import {
   FiSearch,
   FiShoppingBag,
   FiCalendar,
   FiChevronRight,
+  FiGlobe,
+  FiInstagram,
 } from "react-icons/fi";
 
 const enabledFlag = (value) => value === true || value === 1 ||
@@ -836,11 +839,28 @@ table={table}
 {/* QUICK ACTIONS */}
 
 
-{orderingEnabled && (
-  <div className="guest-secondary-actions">
-    <button type="button" onClick={openSchedule}><FiCalendar /> Schedule order</button>
-  </div>
-)}
+{(() => {
+  const websiteUrl = toBrandLinkUrl(hotel?.website);
+  const instagramUrl = toInstagramUrl(hotel?.instagram);
+  if (!orderingEnabled && !websiteUrl && !instagramUrl) return null;
+  return (
+    <div className="guest-secondary-actions">
+      {orderingEnabled && (
+        <button type="button" onClick={openSchedule}><FiCalendar /> Schedule order</button>
+      )}
+      {websiteUrl && (
+        <a href={websiteUrl} target="_blank" rel="noreferrer" aria-label={`${hotel?.name || "Hotel"} website`}>
+          <FiGlobe /> Website
+        </a>
+      )}
+      {instagramUrl && (
+        <a href={instagramUrl} target="_blank" rel="noreferrer" aria-label={`${hotel?.name || "Hotel"} on Instagram`}>
+          <FiInstagram /> Instagram
+        </a>
+      )}
+    </div>
+  );
+})()}
 
 
 

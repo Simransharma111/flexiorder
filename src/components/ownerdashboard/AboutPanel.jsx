@@ -1,3 +1,4 @@
+import { DATA_DELETION_MAILTO } from "../../constants/privacyPolicy";
 import { FiArrowRight, FiZap, FiTarget, FiShield } from "react-icons/fi";
 import { CONTACTS } from "../../constants/contacts";
 
@@ -76,7 +77,10 @@ export default function AboutPanel() {
         })}
       </div>
 
-      <p className="owner-about__version">FlexiOrder for Owners</p>
+      <p className="owner-about__version">
+        FlexiOrder for Owners · <a href="/privacy">Privacy Policy</a> ·{" "}
+        <a href={DATA_DELETION_MAILTO}>Request data deletion</a>
+      </p>
     </section>
   );
 }

@@ -16,6 +16,7 @@ const AuthPage = lazy(() => import("./pages/AuthPage"));
 const ForgotPasswordPage = lazy(() => import("./pages/ForgotPasswordPage"));
 const ResetPasswordPage = lazy(() => import("./pages/ResetPasswordPage"));
 const GuestMenuPage = lazy(() => import("./pages/GuestMenuPage"));
+const PrivacyPolicyPage = lazy(() => import("./pages/PrivacyPolicyPage"));
 const CartPage = lazy(() => import("./pages/CartPage"));
 const TrackOrderPage = lazy(() => import("./pages/TrackOrderPage"));
 const OwnerDashboard = lazy(() => import("./pages/OwnerDashboard"));
@@ -71,6 +72,8 @@ export default function App() {
           path="/reset-password/:token"
           element={<HomeRedirect><ResetPasswordPage /></HomeRedirect>}
         />
+
+        <Route path="/privacy" element={<PrivacyPolicyPage />} />
 
         {/* Guest QR Menu */}
         <Route

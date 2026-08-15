@@ -40,6 +40,9 @@ export default function LandingPage() {
             <a href="/login" className="text-xs font-semibold text-ink-secondary hover:text-ink">
               Login
             </a>
+            <a href="/privacy" className="text-xs font-semibold text-ink-secondary hover:text-ink">
+              Privacy Policy
+            </a>
           </nav>
         </div>
       </footer>
