@@ -28,6 +28,7 @@ export default function AuthPage({ mode = "login" }) {
 
   const [formError, setFormError] = useState("");
   const [suggestLogin, setSuggestLogin] = useState(false);
+  const [suggestReset, setSuggestReset] = useState(false);
 
   const [formData, setFormData] = useState({
     name: "",
@@ -56,6 +57,7 @@ export default function AuthPage({ mode = "login" }) {
 
     if (formError) setFormError("");
     if (suggestLogin) setSuggestLogin(false);
+    if (suggestReset) setSuggestReset(false);
 
     setFormData((prev) => ({
       ...prev,
@@ -496,6 +498,9 @@ export default function AuthPage({ mode = "login" }) {
           (err.response?.status === 409 ||
             /already exists/i.test(String(message))),
       );
+      setSuggestReset(
+        !isRegister && /invalid credentials/i.test(String(message)),
+      );
     } finally {
       setLoading(false);
     }
@@ -647,6 +652,14 @@ export default function AuthPage({ mode = "login" }) {
                       {" "}
                       <Link to="/login" className="underline underline-offset-2">
                         Log in instead
+                      </Link>
+                    </>
+                  )}
+                  {suggestReset && (
+                    <>
+                      {" "}
+                      <Link to="/forgot-password" className="underline underline-offset-2">
+                        Forgot password?
                       </Link>
                     </>
                   )}
