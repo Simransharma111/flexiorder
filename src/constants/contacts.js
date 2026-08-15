@@ -5,8 +5,8 @@ export const CONTACTS = [
   {
     icon: FiMail,
     label: "Email",
-    value: "ishwrknt@gmail.com",
-    href: "mailto:ishwrknt@gmail.com",
+    value: "flexiorderofficial@gmail.com",
+    href: "mailto:flexiorderofficial@gmail.com",
   },
   {
     icon: FiPhone,

@@ -91,6 +91,6 @@ export const PRIVACY_POLICY = [
 ];
 
 
-const DELETION_MAIL = CONTACTS.find((c) => c.href?.startsWith("mailto:"))?.value || "ishwrknt@gmail.com";
+const DELETION_MAIL = CONTACTS.find((c) => c.href?.startsWith("mailto:"))?.value || "flexiorderofficial@gmail.com";
 
 export const DATA_DELETION_MAILTO = `mailto:${DELETION_MAIL}?subject=FlexiOrder%20Data%20Deletion&body=Please%20delete%20my%20FlexiOrder%20account%20and%20data.%0A%0ARegistered%20email%3A%20%0AHotel%20name%3A%20%0AReason%20(optional)%3A%20`;
