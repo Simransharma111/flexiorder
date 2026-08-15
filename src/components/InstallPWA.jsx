@@ -76,7 +76,7 @@ export default function InstallPWA() {
     return (
       <div className="fixed bottom-5 left-1/2 -translate-x-1/2 w-[92%] max-w-md z-[9999]">
         <div className="bg-[#111827] border border-white/10 text-white rounded-3xl p-4 shadow-2xl backdrop-blur-lg">
-          <h3 className="font-bold text-lg">
+          <h3 className="font-extrabold text-base">
             Install App
           </h3>
 
@@ -103,14 +103,14 @@ export default function InstallPWA() {
 
   return (
     <div className="fixed bottom-5 left-1/2 -translate-x-1/2 w-[92%] max-w-md z-[9999]">
-      <div className="bg-[#111827] border border-white/10 text-white rounded-3xl p-4 shadow-2xl flex items-center justify-between gap-4 backdrop-blur-lg">
+      <div className="bg-white border border-hairline text-ink rounded-panel p-4 shadow-pop flex items-center justify-between gap-4">
 
         <div>
-          <h3 className="font-bold text-lg">
+          <h3 className="font-extrabold text-base">
             Install App
           </h3>
 
-          <p className="text-xs text-gray-400">
+          <p className="text-xs text-ink-secondary">
             Faster ordering experience
           </p>
         </div>
@@ -118,14 +118,14 @@ export default function InstallPWA() {
         <div className="flex gap-2">
           <button
             onClick={handleInstall}
-            className="px-4 py-2 rounded-xl font-semibold bg-orange-500 hover:bg-orange-600"
+            className="min-h-10 px-4 rounded-card text-sm font-bold bg-brand text-white hover:bg-brand-strong transition"
           >
             Install
           </button>
 
           <button
             onClick={handleClose}
-            className="px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20"
+            className="min-h-10 px-3 rounded-card text-sm font-bold text-ink-secondary hover:bg-subtle transition"
           >
             Later
           </button>

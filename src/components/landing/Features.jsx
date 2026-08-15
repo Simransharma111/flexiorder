@@ -1,127 +1,89 @@
-import { motion } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
 import {
   FiSmartphone,
   FiUsers,
   FiGrid,
+  FiWifiOff,
+  FiSliders,
   FiBarChart2,
-  FiShield,
-  FiCpu,
 } from "react-icons/fi";
 
-const features = [
+const FEATURES = [
   {
     icon: FiSmartphone,
-    title: "QR Ordering",
-    desc: "Customers scan a QR code, browse the menu, and place orders without downloading an app.",
-    color: "from-sky-500 to-cyan-500",
-  },
-  {
-    icon: FiUsers,
-    title: "Staff Ordering",
-    desc: "Waiters can instantly create orders using a beautiful POS interface.",
-    color: "from-indigo-500 to-violet-500",
+    title: "QR menu",
+    description: "Guests scan, browse and order. Nothing to install.",
   },
   {
     icon: FiGrid,
-    title: "Kitchen Display",
-    desc: "Incoming orders automatically appear on the kitchen dashboard in real time.",
-    color: "from-orange-500 to-red-500",
+    title: "Kitchen display",
+    description: "Dense order board with New, Preparing and Ready at a glance.",
+  },
+  {
+    icon: FiUsers,
+    title: "Waiter workspace",
+    description: "Take orders by table, room or takeaway in a few taps.",
+  },
+  {
+    icon: FiWifiOff,
+    title: "Offline-first",
+    description: "Orders save locally and sync when the connection returns.",
+  },
+  {
+    icon: FiSliders,
+    title: "Menu control",
+    description: "One-tap availability, bulk edits, discounts and GST.",
   },
   {
     icon: FiBarChart2,
-    title: "Analytics",
-    desc: "Track sales, popular dishes, revenue and peak hours with live reports.",
-    color: "from-green-500 to-emerald-500",
-  },
-  {
-    icon: FiShield,
-    title: "Role Management",
-    desc: "Separate permissions for owners, managers, cashiers, waiters and kitchen staff.",
-    color: "from-pink-500 to-rose-500",
-  },
-  {
-    icon: FiCpu,
-    title: "Smart Automation",
-    desc: "Real-time updates, notifications and business insights powered by automation.",
-    color: "from-purple-500 to-fuchsia-500",
+    title: "Reports",
+    description: "Revenue, orders and item history by day, week or month.",
   },
 ];
 
 export default function Features() {
+  const reduce = useReducedMotion();
+
   return (
-    <section
-      id="features"
-      className="bg-slate-950 py-28 text-white"
-    >
-      <div className="mx-auto max-w-7xl px-6">
-
+    <section id="features" className="bg-canvas py-16 sm:py-24">
+      <div className="mx-auto max-w-content px-4 sm:px-6">
         <motion.div
-          initial={{ opacity: 0, y: 40 }}
+          initial={reduce ? false : { opacity: 0, y: 16 }}
           whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ duration: .6 }}
-          className="text-center"
+          viewport={{ once: true, margin: "-80px" }}
+          transition={{ duration: 0.45, ease: "easeOut" }}
+          className="max-w-xl"
         >
-          <span className="rounded-full border border-blue-500/20 bg-blue-500/10 px-4 py-2 text-sm text-blue-300">
-            EVERYTHING YOU NEED
-          </span>
-
-          <h2 className="mt-6 text-5xl font-black">
-            Powerful Features
-          </h2>
-
-          <p className="mx-auto mt-6 max-w-3xl text-lg text-slate-400">
-            Built to simplify restaurant operations from the first order
-            to the final payment.
+          <p className="text-xs font-bold uppercase tracking-widest text-brand">
+            Features
           </p>
+          <h2 className="mt-3 text-3xl font-extrabold tracking-tight text-ink sm:text-4xl">
+            Everything a busy restaurant uses daily
+          </h2>
         </motion.div>
 
-        <div className="mt-20 grid gap-8 md:grid-cols-2 xl:grid-cols-3">
-
-          {features.map((feature, index) => {
-            const Icon = feature.icon;
-
-            return (
-              <motion.div
-                key={feature.title}
-                initial={{ opacity: 0, y: 40 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{
-                  duration: .5,
-                  delay: index * .08,
-                }}
-                whileHover={{
-                  y: -10,
-                  scale: 1.03,
-                }}
-                className="group relative overflow-hidden rounded-3xl border border-white/10 bg-white/5 p-8 backdrop-blur-xl"
-              >
-
-                <div
-                  className={`mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br ${feature.color}`}
-                >
-                  <Icon size={28} />
-                </div>
-
-                <h3 className="text-2xl font-bold">
-                  {feature.title}
-                </h3>
-
-                <p className="mt-4 leading-7 text-slate-400">
-                  {feature.desc}
-                </p>
-
-                <div
-                  className={`absolute -right-12 -bottom-12 h-36 w-36 rounded-full bg-gradient-to-br ${feature.color} opacity-10 blur-3xl transition-all duration-500 group-hover:scale-150`}
-                />
-
-              </motion.div>
-            );
-          })}
-
+        <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {FEATURES.map((feature, index) => (
+            <motion.div
+              key={feature.title}
+              initial={reduce ? false : { opacity: 0, y: 16 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: "-60px" }}
+              transition={{ duration: 0.4, delay: index * 0.06, ease: "easeOut" }}
+              className="rounded-sheet border border-hairline bg-white p-5 shadow-card"
+            >
+              <span className="grid h-11 w-11 place-items-center rounded-card bg-brand-light text-brand">
+                <feature.icon size={20} aria-hidden="true" />
+              </span>
+              <h3 className="mt-4 text-base font-extrabold text-ink">
+                {feature.title}
+              </h3>
+              <p className="mt-1.5 text-sm leading-6 text-ink-secondary">
+                {feature.description}
+              </p>
+            </motion.div>
+          ))}
         </div>
-
       </div>
     </section>
   );

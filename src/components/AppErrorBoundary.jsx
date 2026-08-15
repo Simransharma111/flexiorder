@@ -15,16 +15,19 @@ export default class AppErrorBoundary extends Component {
     if (!this.state.error) return this.props.children;
 
     return (
-      <main className="flex min-h-screen items-center justify-center bg-slate-950 p-6 text-white">
-        <div className="w-full max-w-md rounded-2xl border border-white/10 bg-white/5 p-6 text-center">
-          <h1 className="text-xl font-bold">FlexiOrder could not open this screen</h1>
-          <p className="mt-2 text-sm text-slate-300">
+      <main className="flex min-h-screen items-center justify-center bg-canvas p-6 text-ink">
+        <div className="w-full max-w-md rounded-panel border border-hairline bg-white p-8 text-center shadow-card">
+          <span className="mx-auto grid h-12 w-12 place-items-center rounded-card bg-brand text-lg font-extrabold text-white">
+            F
+          </span>
+          <h1 className="mt-5 text-xl font-extrabold tracking-tight">FlexiOrder could not open this screen</h1>
+          <p className="mt-2 text-sm leading-6 text-ink-secondary">
             Check your connection, then reload to use the latest version.
           </p>
           <button
             type="button"
             onClick={() => window.location.reload()}
-            className="mt-5 rounded-xl bg-blue-600 px-5 py-3 font-semibold hover:bg-blue-700"
+            className="mt-6 min-h-11 rounded-card bg-brand px-5 text-sm font-bold text-white transition hover:bg-brand-strong"
           >
             Reload app
           </button>

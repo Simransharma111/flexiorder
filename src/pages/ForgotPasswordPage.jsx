@@ -45,83 +45,73 @@ export default function ForgotPasswordPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center px-6 py-10 relative overflow-hidden">
-
-      <div className="absolute top-0 left-0 h-[500px] w-[500px] rounded-full bg-blue-600/20 blur-[150px]" />
-
-      <div className="absolute bottom-0 right-0 h-[500px] w-[500px] rounded-full bg-cyan-500/20 blur-[150px]" />
-
-      <div className="relative w-full max-w-md">
+    <div className="flex min-h-screen items-center justify-center bg-canvas px-4 py-10 text-ink">
+      <div className="w-full max-w-md">
 
         <Link
           to="/login"
-          className="inline-flex items-center gap-2 text-slate-400 hover:text-white mb-8 transition"
+          className="mb-6 inline-flex items-center gap-2 text-sm font-bold text-ink-secondary transition hover:text-ink"
         >
-          <FiArrowLeft />
-          Back to Login
+          <FiArrowLeft aria-hidden="true" />
+          Back to login
         </Link>
 
-        <div className="rounded-[32px] border border-white/10 bg-white/5 backdrop-blur-xl p-8 shadow-2xl">
+        <div className="rounded-panel border border-hairline bg-white p-6 shadow-card sm:p-8">
+          <span className="grid h-12 w-12 place-items-center rounded-card bg-brand-light text-brand">
+            <FiMail size={22} aria-hidden="true" />
+          </span>
 
-          <div className="text-center">
+          <h1 className="mt-5 text-2xl font-extrabold tracking-tight">
+            Reset your password
+          </h1>
 
-            <div className="mx-auto w-16 h-16 rounded-2xl bg-blue-500/10 flex items-center justify-center text-blue-400 text-2xl">
-              <FiMail />
-            </div>
+          <p className="mt-2 text-sm leading-6 text-ink-secondary">
+            Enter your account email and we'll send a reset link.
+          </p>
 
-            <h1 className="text-3xl font-bold mt-6">
-              Forgot Password?
-            </h1>
-
-            <p className="mt-3 text-slate-400">
-              Enter your email and we'll send you a
-              password reset link.
-            </p>
-
-          </div>
-
-          <form
-            onSubmit={handleSubmit}
-            className="mt-8 space-y-5"
-          >
-
-            <input
-              type="email"
-              placeholder="Email Address"
-              value={email}
-              onChange={(e) =>
-                setEmail(e.target.value)
-              }
-              autoComplete="email"
-              className="w-full rounded-2xl bg-slate-900/70 border border-white/10 px-5 py-4 outline-none focus:border-blue-500 transition"
-            />
-
-            {error && (
-              <div className="rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 p-4 text-sm">
-                {error}
-              </div>
-            )}
-
-            {message && (
-              <div className="rounded-xl bg-green-500/10 border border-green-500/20 text-green-400 p-4 text-sm">
-                {message}
-              </div>
-            )}
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full rounded-2xl bg-blue-600 py-4 font-bold text-lg hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+          {message ? (
+            <p
+              role="status"
+              className="mt-6 rounded-card border border-status-ready-line/40 bg-status-ready-surface px-3.5 py-3 text-sm font-semibold text-status-ready-ink"
             >
-              {loading
-                ? "Sending..."
-                : "Send Reset Link"}
-            </button>
+              {message}
+            </p>
+          ) : (
+            <form onSubmit={handleSubmit} className="mt-6 space-y-4" noValidate>
+              {error && (
+                <p
+                  role="alert"
+                  className="rounded-card border border-status-delayed-line/40 bg-status-delayed-surface px-3.5 py-2.5 text-sm font-semibold text-status-delayed-ink"
+                >
+                  {error}
+                </p>
+              )}
 
-          </form>
+              <input
+                type="email"
+                name="email"
+                placeholder="Email Address"
+                value={email}
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  if (error) setError("");
+                }}
+                autoComplete="email"
+                inputMode="email"
+                disabled={loading}
+                className="w-full rounded-card border border-hairline bg-white px-4 py-3.5 text-[15px] text-ink placeholder:text-ink-disabled focus:border-brand focus:ring-2 focus:ring-brand/20 disabled:opacity-60"
+              />
 
+              <button
+                type="submit"
+                disabled={loading}
+                className="min-h-12 w-full rounded-card bg-brand px-4 text-sm font-bold text-white transition hover:bg-brand-strong disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {loading ? "Sending..." : "Send reset link"}
+              </button>
+            </form>
+          )}
         </div>
-
       </div>
     </div>
   );

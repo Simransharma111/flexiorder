@@ -1,4 +1,12 @@
-import { categoryName } from "./menuCategories";
+import api from "../api/axios";
+import { buildDishFormData } from "./menuData";
+import {
+  categoryKey,
+  categoryName,
+  dishCategoryName,
+  findCategoryByName,
+  normalizeCategoryRecord,
+} from "./menuCategories";
 
 export const MENU_TRANSFER_FORMAT = "flexiorder-menu";
 export const MENU_TRANSFER_VERSION = 1;
@@ -244,4 +252,215 @@ export const parseMenuImport = (source, sizeInBytes) => {
     exportedAt,
     dishes: dishes.map(normalizePortableDish),
   };
+};
+
+/* =====================================================
+   FALLBACK IMPORT VIA SINGLE-DISH ENDPOINTS
+===================================================== */
+
+/*
+ * Older deployments do not expose POST /menu/import. Replicate the same
+ * import with the long-standing single-category/single-dish endpoints so
+ * the portable menu format keeps working everywhere. Mirrors the bulk
+ * endpoint semantics: categories are resolved before any dish write,
+ * duplicate (name, category) pairs are skipped, and the result follows
+ * { success, imported, skipped, errors: 0, total }.
+ */
+
+// Byte-identical to the backend menuTransferKey separator (NUL character).
+const importKeyJoiner = String.fromCharCode(0);
+
+const importDuplicateKey = (name, category) =>
+  `${String(category || "").trim().toLocaleLowerCase()}${importKeyJoiner}${String(name || "")
+    .trim()
+    .toLocaleLowerCase()}`;
+
+const importFailureMessage = (error, fallback) =>
+  error?.response?.data?.message || error?.message || fallback;
+
+const DUPLICATE_MESSAGE_PATTERN = /already exists|duplicate/i;
+
+const readCategoryCatalog = async (hotelId) => {
+  const response = await api.get(`/menu/categories/${hotelId}`);
+  const source = Array.isArray(response.data)
+    ? response.data
+    : Array.isArray(response.data?.categories)
+      ? response.data.categories
+      : [];
+
+  return source
+    .map(normalizeCategoryRecord)
+    .filter((category) => category && category.name);
+};
+
+export const importMenuViaSingleDishEndpoints = async (
+  payload,
+  { hotelId, existingDishes = [], onProgress } = {}
+) => {
+  if (!hotelId) {
+    throw new Error("A valid hotel is required to import this menu.");
+  }
+
+  let categories = await readCategoryCatalog(hotelId);
+
+  /*
+   * CATEGORIES
+   *
+   * Resolve every category before writing any dish, matching the bulk
+   * endpoint. Missing categories are created; existing ones gain any
+   * file-only subcategories (existing order preserved).
+   */
+  const requirements = new Map();
+
+  payload.dishes.forEach((dish) => {
+    const key = categoryKey(dish.category);
+    const requirement =
+      requirements.get(key) || {
+        name: dish.category,
+        subCategories: [],
+        knownSubKeys: new Set(),
+        matched: null,
+      };
+    if (
+      dish.subCategory &&
+      !requirement.knownSubKeys.has(categoryKey(dish.subCategory))
+    ) {
+      requirement.knownSubKeys.add(categoryKey(dish.subCategory));
+      requirement.subCategories.push(dish.subCategory);
+    }
+    requirements.set(key, requirement);
+  });
+
+  for (const [key, requirement] of requirements) {
+    let match = findCategoryByName(categories, requirement.name);
+
+    if (!match) {
+      try {
+        const response = await api.post("/menu/category", {
+          name: requirement.name,
+          subCategories: requirement.subCategories,
+        });
+        const created = normalizeCategoryRecord(
+          response.data?.category || response.data
+        );
+        if (!created || !created.name) {
+          throw new Error("The restaurant did not confirm the new category.");
+        }
+        categories = [
+          ...categories.filter(
+            (category) => categoryKey(category) !== categoryKey(created)
+          ),
+          created,
+        ];
+        requirement.matched = created;
+        continue;
+      } catch (error) {
+        // A parallel session may have created the category: refresh once.
+        categories = await readCategoryCatalog(hotelId);
+        match = findCategoryByName(categories, requirement.name);
+        if (!match) {
+          throw new Error(
+            importFailureMessage(
+              error,
+              `Could not create category “${requirement.name}”.`
+            ),
+            { cause: error }
+          );
+        }
+      }
+    }
+
+    const existingSubs = Array.isArray(match.subCategories)
+      ? match.subCategories
+      : [];
+    const existingSubKeys = new Set(
+      existingSubs.map((sub) => categoryKey(sub))
+    );
+    const additions = requirement.subCategories.filter(
+      (sub) => !existingSubKeys.has(categoryKey(sub))
+    );
+
+    if (additions.length) {
+      const response = await api.put(`/menu/category/${match._id}`, {
+        name: match.name,
+        subCategories: [...existingSubs, ...additions],
+      });
+      const updated = normalizeCategoryRecord(
+        response.data?.category || response.data
+      );
+      if (updated && updated.name) {
+        categories = categories.map((category) =>
+          categoryKey(category) === key ? updated : category
+        );
+        match = updated;
+      }
+    }
+
+    requirement.matched = match;
+  }
+
+  /*
+   * DISHES
+   *
+   * Duplicate names inside a category are skipped — against the existing
+   * menu snapshot and repeats within the file itself (bulk parity).
+   */
+  const usedKeys = new Set(
+    existingDishes.map((dish) =>
+      importDuplicateKey(dish?.name, dishCategoryName(dish))
+    )
+  );
+
+  let imported = 0;
+  let skipped = 0;
+  const total = payload.dishes.length;
+  onProgress?.(0, total);
+
+  for (const dish of payload.dishes) {
+    const key = importDuplicateKey(dish.name, dish.category);
+    if (usedKeys.has(key)) {
+      skipped += 1;
+    } else {
+      usedKeys.add(key);
+      const category = requirements.get(categoryKey(dish.category))?.matched;
+      if (!category) {
+        throw new Error(
+          `Category “${dish.category}” could not be resolved for “${dish.name}”.`
+        );
+      }
+
+      const formData = buildDishFormData(
+        {
+          ...dish,
+          category: category.name,
+          categoryId: category._id,
+          categoryName: category.name,
+        },
+        {
+          clientMutationId: `menu-import-${Date.now()}-${imported + skipped + 1}`,
+          restaurant: hotelId,
+        }
+      );
+
+      try {
+        await api.post("/menu/dish", formData);
+        imported += 1;
+      } catch (error) {
+        const message = String(error?.response?.data?.message || "");
+        if (DUPLICATE_MESSAGE_PATTERN.test(message)) {
+          // Menu changed since the snapshot: another session added this
+          // dish. Count it as skipped, matching the bulk endpoint.
+          skipped += 1;
+        } else {
+          throw new Error(
+            `${imported} dishes imported and ${skipped} skipped before the import stopped: ${importFailureMessage(error, "a dish could not be created.")}`,
+            { cause: error }
+          );
+        }
+      }
+    }
+    onProgress?.(imported + skipped, total);
+  }
+
+  return { success: true, imported, skipped, errors: 0, total };
 };

@@ -1,263 +1,162 @@
-import { motion } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
 import { Link } from "react-router-dom";
 import {
   FiArrowRight,
-  FiPlay,
-  FiShoppingBag,
-  FiUsers,
-  FiTrendingUp,
-  FiCheckCircle,
+  FiWifiOff,
+  FiSmartphone,
+  FiZap,
 } from "react-icons/fi";
 
-export default function Hero() {
+const FACTS = [
+  { icon: FiSmartphone, text: "Guests order without an app" },
+  { icon: FiWifiOff, text: "Staff keep working offline" },
+  { icon: FiZap, text: "One tap advances every order" },
+];
+
+const fadeUp = (reduce, delay = 0) => ({
+  initial: reduce ? false : { opacity: 0, y: 16 },
+  animate: { opacity: 1, y: 0 },
+  transition: { duration: 0.45, delay, ease: "easeOut" },
+});
+
+function BoardCard({ edge, status, statusClass, location, time, children, note }) {
   return (
-    <section className="relative overflow-hidden bg-slate-950 pt-40 pb-24 text-white">
+    <div className={`rounded-card border border-hairline border-l-4 bg-white p-3 shadow-card ${edge}`}>
+      <div className="flex items-baseline justify-between gap-2">
+        <p className="text-sm font-extrabold text-ink">{location}</p>
+        <span className={`text-[11px] font-bold ${statusClass}`}>{status}</span>
+      </div>
+      <p className="mt-1 text-xs text-ink-secondary">{children}</p>
+      {note ? (
+        <p className="mt-2 rounded-sm bg-note-surface px-2 py-1 text-[11px] font-semibold text-note-ink">
+          {note}
+        </p>
+      ) : null}
+      <p className="mt-2 text-[11px] font-medium text-ink-disabled">{time}</p>
+    </div>
+  );
+}
 
-      {/* Background Glow */}
+function ProductPreview() {
+  return (
+    <div
+      className="w-full max-w-md rounded-panel border border-hairline bg-white p-4 shadow-lift"
+      aria-hidden="true"
+    >
+      <div className="flex items-center justify-between border-b border-hairline pb-3">
+        <div className="flex items-center gap-2">
+          <span className="grid h-7 w-7 place-items-center rounded-md bg-brand text-xs font-extrabold text-white">
+            F
+          </span>
+          <p className="text-sm font-extrabold text-ink">Kitchen board</p>
+        </div>
+        <span className="flex items-center gap-1.5 text-[11px] font-bold text-ink-secondary">
+          <span className="h-2 w-2 rounded-full bg-brand" />
+          Online
+        </span>
+      </div>
 
-      <div className="absolute left-0 top-0 h-[500px] w-[500px] rounded-full bg-blue-600/20 blur-[150px]" />
+      <div className="mt-3 flex gap-2 text-[11px] font-bold">
+        <span className="rounded-full bg-status-new-surface px-2.5 py-1 text-status-new-ink">New · 1</span>
+        <span className="rounded-full bg-status-preparing-surface px-2.5 py-1 text-status-preparing-ink">Preparing · 1</span>
+        <span className="rounded-full bg-status-ready-surface px-2.5 py-1 text-status-ready-ink">Ready · 1</span>
+      </div>
 
-      <div className="absolute right-0 bottom-0 h-[500px] w-[500px] rounded-full bg-purple-600/20 blur-[150px]" />
-
-      <div className="relative mx-auto grid max-w-7xl items-center gap-16 px-6 lg:grid-cols-2">
-
-        {/* Left */}
-
-        <motion.div
-          initial={false}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: .8 }}
+      <div className="mt-3 grid gap-2.5">
+        <BoardCard
+          edge="border-l-status-new-line"
+          status="New"
+          statusClass="text-status-new-line"
+          location="Table 8"
+          time="Waiting 2 min"
+          note="Less spicy, allergy: peanuts"
         >
+          2× Paneer Tikka · 1× Masala Dosa
+        </BoardCard>
+        <div className="grid grid-cols-2 gap-2.5">
+          <BoardCard
+            edge="border-l-status-preparing-line"
+            status="Preparing"
+            statusClass="text-status-preparing-line"
+            location="Table 3"
+            time="Started 12 min ago"
+          >
+            1× Veg Biryani · 2× Butter Naan
+          </BoardCard>
+          <BoardCard
+            edge="border-l-status-ready-line"
+            status="Ready"
+            statusClass="text-status-ready-line"
+            location="Takeaway"
+            time="Ready for pickup"
+          >
+            2× Cold Coffee
+          </BoardCard>
+        </div>
+      </div>
+    </div>
+  );
+}
 
-          <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-blue-500/20 bg-blue-500/10 px-4 py-2 text-sm text-blue-300">
-            Built for busy restaurant teams
-          </div>
+export default function Hero() {
+  const reduce = useReducedMotion();
 
-          <h1 className="text-5xl font-black leading-tight lg:text-7xl">
+  return (
+    <section className="relative overflow-hidden bg-canvas pb-16 pt-28 sm:pb-24 sm:pt-36">
+      <div
+        className="pointer-events-none absolute -top-32 right-0 h-96 w-96 rounded-full bg-brand-light blur-3xl"
+        aria-hidden="true"
+      />
 
-            Run Your
-
-            <span className="block bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent">
-              Restaurant
-            </span>
-
-            Smarter.
-          </h1>
-
-          <p className="mt-8 max-w-xl text-lg leading-8 text-slate-300">
-
-            Everything your restaurant needs in one place.
-
-            QR Ordering.
-
-            Waiter Ordering.
-
-            Kitchen Display.
-
-            Staff Management.
-
-            Analytics.
-
+      <div className="relative mx-auto grid max-w-content items-center gap-12 px-4 sm:px-6 lg:grid-cols-2">
+        <motion.div {...fadeUp(reduce)}>
+          <p className="inline-flex items-center rounded-full border border-hairline bg-white px-3 py-1.5 text-xs font-bold text-brand">
+            QR-first restaurant ordering
           </p>
 
-          <div className="mt-10 flex flex-wrap gap-4">
+          <h1 className="mt-5 text-4xl font-extrabold leading-[1.1] tracking-tight text-ink sm:text-5xl">
+            Ordering that keeps up with a busy kitchen.
+          </h1>
 
+          <p className="mt-5 max-w-lg text-base leading-7 text-ink-secondary sm:text-lg">
+            Guests scan a QR and order from their table. Waiters, kitchen
+            and owner stay in sync — even when the internet drops.
+          </p>
+
+          <div className="mt-8 flex flex-wrap gap-3">
             <Link
               to="/register"
-              className="flex items-center gap-2 rounded-2xl bg-blue-600 px-7 py-4 font-semibold transition hover:bg-blue-700"
+              className="inline-flex min-h-12 items-center gap-2 rounded-card bg-brand px-6 text-sm font-bold text-white transition hover:bg-brand-strong"
             >
-
-              Start Free Trial
-
-              <FiArrowRight />
-
+              Register your restaurant
+              <FiArrowRight aria-hidden="true" />
             </Link>
-
             <a
               href="#workflow"
-              className="flex items-center gap-2 rounded-2xl border border-white/10 px-7 py-4 transition hover:bg-white/10"
+              className="inline-flex min-h-12 items-center rounded-card border border-hairline bg-white px-6 text-sm font-bold text-ink transition hover:border-edge"
             >
-
-              <FiPlay />
-
-              See How It Works
-
+              See how it works
             </a>
-
           </div>
 
-          <div className="mt-12 flex flex-wrap gap-8">
-
-            <div>
-
-              <h2 className="text-2xl font-bold">QR-first</h2>
-
-              <p className="text-slate-400">
-                No customer app
-              </p>
-
-            </div>
-
-            <div>
-
-              <h2 className="text-2xl font-bold">Offline-aware</h2>
-
-              <p className="text-slate-400">
-                Staff queues
-              </p>
-
-            </div>
-
-            <div>
-
-              <h2 className="text-2xl font-bold">Live workflow</h2>
-
-              <p className="text-slate-400">
-                Waiter and kitchen
-              </p>
-
-            </div>
-
-          </div>
-
+          <ul className="mt-10 grid gap-3 sm:grid-cols-3">
+            {FACTS.map((fact) => (
+              <li key={fact.text} className="flex items-center gap-2.5">
+                <span className="grid h-8 w-8 shrink-0 place-items-center rounded-card bg-brand-light text-brand">
+                  <fact.icon size={16} aria-hidden="true" />
+                </span>
+                <span className="text-xs font-semibold leading-4 text-ink-secondary">
+                  {fact.text}
+                </span>
+              </li>
+            ))}
+          </ul>
         </motion.div>
 
-        {/* Right */}
-
-        <motion.div
-          initial={false}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 1 }}
-          className="relative"
-        >
-
-          {/* Main Dashboard */}
-
-          <div className="rounded-3xl border border-white/10 bg-white/5 p-8 backdrop-blur-xl shadow-2xl">
-
-            <div className="grid grid-cols-2 gap-5">
-
-              <Stat
-                icon={<FiTrendingUp />}
-                title="Revenue"
-                value="₹18,240"
-              />
-
-              <Stat
-                icon={<FiShoppingBag />}
-                title="Orders"
-                value="128"
-              />
-
-              <Stat
-                icon={<FiUsers />}
-                title="Staff"
-                value="15"
-              />
-
-              <Stat
-                icon={<FiCheckCircle />}
-                title="Completed"
-                value="97%"
-              />
-
-            </div>
-
-            <div className="mt-8 rounded-2xl bg-slate-900/70 p-5">
-
-              <div className="mb-4 flex justify-between">
-
-                <span className="font-semibold">
-
-                  Incoming Orders
-
-                </span>
-
-                <span className="text-emerald-400">
-
-                  LIVE
-
-                </span>
-
-              </div>
-
-              <Order table="Table 8" item="2 Burgers" />
-
-              <Order table="Table 5" item="Pizza + Coke" />
-
-              <Order table="Table 2" item="Pasta" />
-
-            </div>
-
-          </div>
-
-          {/* Floating Card */}
-
-          <motion.div
-            animate={{ y: [-10, 10, -10] }}
-            transition={{
-              duration: 5,
-              repeat: Infinity,
-            }}
-            className="absolute -left-10 top-10 rounded-2xl border border-white/10 bg-white/10 p-4 backdrop-blur-xl"
-          >
-
-            <p className="text-sm text-slate-400">
-
-              Kitchen Status
-
-            </p>
-
-            <h3 className="mt-2 text-2xl font-bold text-emerald-400">
-
-              12 Active
-
-            </h3>
-
-          </motion.div>
-
+        <motion.div {...fadeUp(reduce, 0.15)} className="flex justify-center lg:justify-end">
+          <ProductPreview />
         </motion.div>
-
       </div>
-
     </section>
-  );
-}
-
-function Stat({ icon, title, value }) {
-  return (
-    <div className="rounded-2xl bg-slate-900/70 p-5">
-      <div className="text-blue-400 text-xl">
-        {icon}
-      </div>
-
-      <p className="mt-3 text-sm text-slate-400">
-        {title}
-      </p>
-
-      <h2 className="mt-1 text-2xl font-bold">
-        {value}
-      </h2>
-    </div>
-  );
-}
-
-function Order({ table, item }) {
-  return (
-    <div className="mb-3 flex items-center justify-between rounded-xl bg-white/5 p-3">
-      <div>
-        <p className="font-medium">
-          {table}
-        </p>
-
-        <p className="text-sm text-slate-400">
-          {item}
-        </p>
-      </div>
-
-      <span className="rounded-full bg-emerald-500/20 px-3 py-1 text-xs text-emerald-400">
-        New
-      </span>
-    </div>
   );
 }

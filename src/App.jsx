@@ -13,6 +13,8 @@ import { OWNER_ROLES, RESTAURANT_ROLES } from "./constants/roles";
 
 const LandingPage = lazy(() => import("./pages/LandingPage"));
 const AuthPage = lazy(() => import("./pages/AuthPage"));
+const ForgotPasswordPage = lazy(() => import("./pages/ForgotPasswordPage"));
+const ResetPasswordPage = lazy(() => import("./pages/ResetPasswordPage"));
 const GuestMenuPage = lazy(() => import("./pages/GuestMenuPage"));
 const CartPage = lazy(() => import("./pages/CartPage"));
 const TrackOrderPage = lazy(() => import("./pages/TrackOrderPage"));
@@ -58,6 +60,16 @@ export default function App() {
         <Route
           path="/register"
           element={<HomeRedirect><AuthPage mode="register" /></HomeRedirect>}
+        />
+
+        <Route
+          path="/forgot-password"
+          element={<HomeRedirect><ForgotPasswordPage /></HomeRedirect>}
+        />
+
+        <Route
+          path="/reset-password/:token"
+          element={<HomeRedirect><ResetPasswordPage /></HomeRedirect>}
         />
 
         {/* Guest QR Menu */}

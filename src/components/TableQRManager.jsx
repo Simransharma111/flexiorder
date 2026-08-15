@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { QRCodeCanvas } from "qrcode.react";
 
 import {
+  FiEdit2,
   FiExternalLink,
   FiRefreshCw,
   FiTrash2,
@@ -37,6 +38,12 @@ export default function TableQRManager() {
   const [assigningQR, setAssigningQR] = useState(null);
 
   const [removingQR, setRemovingQR] = useState(null);
+
+  const [editingTable, setEditingTable] = useState(null);
+
+  const [editingName, setEditingName] = useState("");
+
+  const [renaming, setRenaming] = useState(null);
 
   // =====================================================
   // AUTH HEADER
@@ -314,6 +321,60 @@ export default function TableQRManager() {
     }
   };
 
+  const startRename = (table) => {
+        setEditingTable(table._id);
+        setEditingName(table.tableNumber);
+        setOpenMenu(null);
+      };
+
+  const cancelRename = () => {
+    setEditingTable(null);
+    setEditingName("");
+  };
+
+  const renameTable = async (table) => {
+    const trimmedName = editingName.trim();
+
+    if (!trimmedName || trimmedName === table.tableNumber) {
+      cancelRename();
+
+      return;
+    }
+
+    try {
+      setRenaming(table._id);
+
+      const res = await api.put(
+        `/table/${table._id}`,
+        { tableNumber: trimmedName },
+        getAuthConfig()
+      );
+
+      const updated = res.data?.table;
+
+      setTables((current) =>
+        current.map((item) =>
+          item._id === table._id ? { ...item, ...updated } : item
+        )
+      );
+
+      cancelRename();
+    } catch (err) {
+      if (err?.response?.status === 404) {
+        alert(
+          "Renaming tables needs the latest server update. The QR link and orders keep working, but the name can only be changed after the backend is redeployed."
+        );
+      } else {
+        alert(
+          err.response?.data?.message ||
+            "Failed to rename"
+        );
+      }
+    } finally {
+      setRenaming(null);
+    }
+  };
+
   // =====================================================
   // TOGGLE THREE DOT MENU
   // =====================================================
@@ -356,9 +417,7 @@ export default function TableQRManager() {
   return (
     <div
       className="
-        min-h-screen
-        bg-slate-950
-        text-white
+        text-ink
         p-4
         md:p-6
       "
@@ -370,10 +429,11 @@ export default function TableQRManager() {
       <div
         className="
           mb-8
-          rounded-3xl
-          bg-white/5
+          rounded-panel
+          bg-white
           border
-          border-white/10
+          border-hairline
+          shadow-card
           p-5
         "
       >
@@ -390,7 +450,7 @@ export default function TableQRManager() {
           <p
             className="
               text-sm
-              text-slate-400
+              text-ink-secondary
               mt-1
             "
           >
@@ -417,14 +477,16 @@ export default function TableQRManager() {
               setType(e.target.value)
             }
             className="
-              bg-slate-900
+              bg-white
               border
-              border-white/10
-              rounded-xl
+              border-hairline
+              rounded-card
               px-4
               py-3
-              outline-none
-              text-white
+              text-ink
+              focus:border-brand
+              focus:ring-2
+              focus:ring-brand/20
             "
           >
             <option value="table">
@@ -455,14 +517,17 @@ export default function TableQRManager() {
             }
             className="
               flex-1
-              bg-white/10
+              bg-white
               border
-              border-white/10
-              rounded-xl
+              border-hairline
+              rounded-card
               px-4
               py-3
-              outline-none
-              placeholder:text-slate-500
+              text-ink
+              placeholder:text-ink-disabled
+              focus:border-brand
+              focus:ring-2
+              focus:ring-brand/20
             "
           />
 
@@ -472,11 +537,10 @@ export default function TableQRManager() {
             onClick={createTable}
             disabled={loading}
             className="
-              bg-orange-500
-              hover:bg-orange-600
+              owner-accent-bg
               disabled:opacity-50
               disabled:cursor-not-allowed
-              rounded-xl
+              rounded-card
               px-6
               py-3
               font-bold
@@ -505,7 +569,7 @@ export default function TableQRManager() {
           className="
             mb-5
             text-center
-            text-slate-400
+            text-ink-secondary
             text-sm
           "
         >
@@ -521,10 +585,11 @@ export default function TableQRManager() {
         tables.length === 0 && (
           <div
             className="
-              rounded-3xl
-              bg-white/5
+              rounded-panel
+              bg-white
               border
-              border-white/10
+              border-hairline
+              shadow-card
               p-10
               text-center
             "
@@ -533,7 +598,7 @@ export default function TableQRManager() {
               className="
                 mx-auto
                 text-4xl
-                text-slate-500
+                text-ink-disabled
                 mb-4
               "
             />
@@ -550,7 +615,7 @@ export default function TableQRManager() {
             <p
               className="
                 text-sm
-                text-slate-400
+                text-ink-secondary
                 mt-2
               "
             >
@@ -592,12 +657,12 @@ export default function TableQRManager() {
               key={table._id}
               className="
                 relative
-                rounded-3xl
-                bg-white/5
+                rounded-panel
+                bg-white
                 border
-                border-white/10
+                border-hairline
+                shadow-card
                 p-5
-                hover:border-orange-500/40
                 transition
               "
             >
@@ -620,7 +685,7 @@ export default function TableQRManager() {
                       flex
                       items-center
                       gap-2
-                      text-orange-400
+                      owner-accent
                       text-xs
                       font-bold
                       uppercase
@@ -636,18 +701,57 @@ export default function TableQRManager() {
                     {table.type}
                   </div>
 
-                  <h2
-                    className="
-                      text-xl
-                      font-black
-                      mt-2
-                    "
-                  >
-                    {table.type ===
-                    "room"
-                      ? `Room ${table.tableNumber}`
-                      : `Table ${table.tableNumber}`}
-                  </h2>
+                  {editingTable === table._id ? (
+                    <div className="mt-2 flex items-center gap-2">
+                      <input
+                        value={editingName}
+                        onChange={(event) => setEditingName(event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter") {
+                            renameTable(table);
+                          }
+                          if (event.key === "Escape") {
+                            cancelRename();
+                          }
+                        }}
+                        autoFocus
+                        disabled={renaming === table._id}
+                        aria-label={table.type === "room" ? "Room name" : "Table name"}
+                        className="owner-input w-32 px-2.5 py-2 text-base font-bold"
+                      />
+
+                      <button
+                        type="button"
+                        onClick={() => renameTable(table)}
+                        disabled={renaming === table._id}
+                        className="owner-accent-bg px-3 py-2 rounded-lg text-xs font-bold disabled:opacity-60"
+                      >
+                        {renaming === table._id ? "Saving..." : "Save"}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={cancelRename}
+                        disabled={renaming === table._id}
+                        className="px-3 py-2 rounded-lg text-xs font-bold border border-hairline text-ink-secondary hover:text-ink disabled:opacity-60"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  ) : (
+                    <h2
+                      className="
+                        text-xl
+                        font-black
+                        mt-2
+                      "
+                    >
+                      {table.type ===
+                      "room"
+                        ? `Room ${table.tableNumber}`
+                        : `Table ${table.tableNumber}`}
+                    </h2>
+                  )}
                 </div>
 
                 {/* THREE DOT MENU */}
@@ -665,8 +769,10 @@ export default function TableQRManager() {
                     }
                     className="
                       p-2
-                      rounded-xl
-                      hover:bg-white/10
+                      rounded-card
+                      text-ink-secondary
+                      hover:bg-subtle
+                      hover:text-ink
                       transition
                     "
                   >
@@ -681,15 +787,38 @@ export default function TableQRManager() {
                         right-0
                         top-10
                         w-44
-                        bg-slate-900
+                        bg-white
                         border
-                        border-white/10
-                        rounded-xl
-                        shadow-xl
+                        border-hairline
+                        rounded-card
+                        shadow-pop
                         z-20
                         overflow-hidden
                       "
                     >
+                      {/* RENAME */}
+
+                      <button
+                        onClick={() =>
+                          startRename(table)
+                        }
+                        className="
+                          w-full
+                          px-4
+                          py-3
+                          text-left
+                          text-ink
+                          hover:bg-subtle
+                          flex
+                          gap-2
+                          items-center
+                        "
+                      >
+                        <FiEdit2 />
+
+                        Edit name
+                      </button>
+
                       {/* REASSIGN */}
 
                       <button
@@ -704,7 +833,8 @@ export default function TableQRManager() {
                           px-4
                           py-3
                           text-left
-                          hover:bg-white/10
+                          text-ink
+                          hover:bg-subtle
                           flex
                           gap-2
                           items-center
@@ -733,8 +863,8 @@ export default function TableQRManager() {
                             px-4
                             py-3
                             text-left
-                            hover:bg-red-500/20
-                            text-red-400
+                            hover:bg-status-delayed-surface
+                            text-status-delayed-ink
                             flex
                             gap-2
                             items-center
@@ -791,7 +921,7 @@ export default function TableQRManager() {
                       className="
                         text-2xl
                         mb-2
-                        text-slate-400
+                        text-ink-disabled
                       "
                     />
 
@@ -816,7 +946,7 @@ export default function TableQRManager() {
                 <p
                   className="
                     text-xs
-                    text-slate-400
+                    text-ink-secondary
                     truncate
                     flex-1
                   "
@@ -840,8 +970,8 @@ export default function TableQRManager() {
                     whitespace-nowrap
                     ${
                       hasQR
-                        ? "bg-green-500/20 text-green-400"
-                        : "bg-slate-500/20 text-slate-400"
+                        ? "bg-status-ready-surface text-status-ready-ink"
+                        : "bg-subtle text-ink-secondary"
                     }
                   `}
                 >
@@ -867,9 +997,8 @@ export default function TableQRManager() {
                     items-center
                     justify-center
                     gap-2
-                    bg-orange-500
-                    hover:bg-orange-600
-                    rounded-xl
+                    owner-accent-bg
+                    rounded-card
                     py-3
                     font-bold
                     transition
@@ -892,10 +1021,10 @@ export default function TableQRManager() {
                   className="
                     mt-4
                     p-4
-                    rounded-2xl
-                    bg-white/5
+                    rounded-card
+                    bg-canvas
                     border
-                    border-white/10
+                    border-hairline
                     space-y-3
                   "
                 >
@@ -911,7 +1040,7 @@ export default function TableQRManager() {
                   <p
                     className="
                       text-xs
-                      text-slate-400
+                      text-ink-secondary
                     "
                   >
                     Enter the new QR ID.
@@ -944,14 +1073,17 @@ export default function TableQRManager() {
                     disabled={isAssigning}
                     className="
                       w-full
-                      bg-white/10
+                      bg-white
                       border
-                      border-white/10
-                      rounded-xl
+                      border-hairline
+                      rounded-card
                       px-4
                       py-3
-                      outline-none
-                      placeholder:text-slate-500
+                      text-ink
+                      focus:border-brand
+                      focus:ring-2
+                      focus:ring-brand/20
+                      placeholder:text-ink-disabled
                       disabled:opacity-50
                     "
                   />
@@ -973,10 +1105,11 @@ export default function TableQRManager() {
                       }
                       className="
                         flex-1
-                        bg-blue-500
-                        hover:bg-blue-600
+                        bg-status-preparing-line
+                        text-white
+                        hover:brightness-95
                         disabled:opacity-50
-                        rounded-xl
+                        rounded-card
                         py-3
                         font-bold
                         transition
@@ -1007,9 +1140,12 @@ export default function TableQRManager() {
                       }}
                       className="
                         px-4
-                        rounded-xl
-                        bg-white/10
-                        hover:bg-white/20
+                        rounded-card
+                        border
+                        border-hairline
+                        bg-white
+                        text-ink
+                        hover:bg-subtle
                         transition
                       "
                     >
@@ -1055,14 +1191,17 @@ export default function TableQRManager() {
                     disabled={isAssigning}
                     className="
                       w-full
-                      bg-white/10
+                      bg-white
                       border
-                      border-white/10
-                      rounded-xl
+                      border-hairline
+                      rounded-card
                       px-4
                       py-3
-                      outline-none
-                      placeholder:text-slate-500
+                      text-ink
+                      focus:border-brand
+                      focus:ring-2
+                      focus:ring-brand/20
+                      placeholder:text-ink-disabled
                       disabled:opacity-50
                     "
                   />
@@ -1076,10 +1215,11 @@ export default function TableQRManager() {
                     disabled={isAssigning}
                     className="
                       w-full
-                      bg-green-500
-                      hover:bg-green-600
+                      bg-status-ready-line
+                      text-white
+                      hover:brightness-95
                       disabled:opacity-50
-                      rounded-xl
+                      rounded-card
                       py-3
                       font-bold
                       transition

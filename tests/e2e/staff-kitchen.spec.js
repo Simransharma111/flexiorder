@@ -857,7 +857,6 @@ test("waiter ordering toggle rolls back a failed save and uses confirmed server 
 
   await page.goto("/owner/order");
   await page.getByRole("button", { name: "More waiter options" }).click();
-  await page.getByRole("button", { name: /More settings/ }).click();
   const pauseButton = page.getByRole("button", { name: "Pause customer ordering" });
   await pauseButton.click();
   await expect(pauseButton).toBeEnabled();

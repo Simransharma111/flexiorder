@@ -1,136 +1,110 @@
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { FiMenu, FiX, FiArrowRight } from "react-icons/fi";
+import { FiMenu, FiX } from "react-icons/fi";
+
+const LINKS = [
+  { label: "Features", href: "#features" },
+  { label: "How it works", href: "#workflow" },
+  { label: "Contact", href: "#contact" },
+];
 
 export default function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
 
   useEffect(() => {
-    const handleScroll = () => {
-      setScrolled(window.scrollY > 20);
-    };
-
-    window.addEventListener("scroll", handleScroll);
-
+    const handleScroll = () => setScrolled(window.scrollY > 12);
+    handleScroll();
+    window.addEventListener("scroll", handleScroll, { passive: true });
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
-  const links = [
-    { label: "Features", href: "#features" },
-    { label: "How it Works", href: "#workflow" },
-    { label: "Contact", href: "#contact" },
-  ];
-
   return (
     <header
-      className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
-        scrolled
-          ? "bg-slate-950/75 backdrop-blur-xl border-b border-white/10"
-          : "bg-transparent"
+      className={`fixed inset-x-0 top-0 z-50 border-b bg-white/90 backdrop-blur transition-shadow ${
+        scrolled ? "border-hairline shadow-card" : "border-transparent"
       }`}
     >
-      <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
-
-        {/* Logo */}
-
+      <div className="mx-auto flex h-16 max-w-content items-center justify-between px-4 sm:px-6">
         <Link
           to="/"
-          className="flex items-center gap-3 text-white font-bold text-2xl"
+          className="flex items-center gap-2.5"
+          aria-label="FlexiOrder home"
         >
-          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-r from-blue-500 to-indigo-600 shadow-lg">
+          <span className="grid h-9 w-9 place-items-center rounded-card bg-brand text-lg font-extrabold text-white">
             F
-          </div>
-
-          <div>
-            <div>FlexiOrder</div>
-            <div className="text-xs font-normal text-slate-400">
-              Hospitality Platform
-            </div>
-          </div>
+          </span>
+          <span className="text-lg font-extrabold tracking-tight text-ink">
+            FlexiOrder
+          </span>
         </Link>
 
-        {/* Desktop */}
-
-        <nav className="hidden items-center gap-10 lg:flex">
-          {links.map((item) => (
+        <nav className="hidden items-center gap-8 md:flex" aria-label="Primary">
+          {LINKS.map((item) => (
             <a
               key={item.label}
               href={item.href}
-              className="text-slate-300 transition hover:text-white"
+              className="text-sm font-semibold text-ink-secondary transition hover:text-ink"
             >
               {item.label}
             </a>
           ))}
         </nav>
 
-        {/* Actions */}
-
-        <div className="hidden items-center gap-4 lg:flex">
-
+        <div className="hidden items-center gap-2 md:flex">
           <Link
             to="/login"
-            className="text-slate-300 hover:text-white transition"
+            className="rounded-card px-4 py-2 text-sm font-bold text-ink-secondary transition hover:bg-subtle hover:text-ink"
           >
             Login
           </Link>
-
           <Link
             to="/register"
-            className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-3 font-semibold text-white transition hover:bg-blue-700"
+            className="rounded-card bg-brand px-4 py-2 text-sm font-bold text-white transition hover:bg-brand-strong"
           >
-            Start Free Trial
-
-            <FiArrowRight />
+            Register
           </Link>
-
         </div>
-
-        {/* Mobile */}
 
         <button
           type="button"
-          onClick={() => setMobileOpen(!mobileOpen)}
-          className="text-white lg:hidden"
+          onClick={() => setMobileOpen((open) => !open)}
+          className="grid h-11 w-11 place-items-center rounded-card text-ink md:hidden"
           aria-label={mobileOpen ? "Close navigation" : "Open navigation"}
           aria-expanded={mobileOpen}
         >
-          {mobileOpen ? <FiX size={26} /> : <FiMenu size={26} />}
+          {mobileOpen ? <FiX size={24} /> : <FiMenu size={24} />}
         </button>
-
       </div>
 
       {mobileOpen && (
-        <div className="border-t border-white/10 bg-slate-950 lg:hidden">
-
-          <div className="flex flex-col px-6 py-6">
-
-            {links.map((item) => (
+        <div className="border-t border-hairline bg-white md:hidden">
+          <nav className="flex flex-col px-4 py-3" aria-label="Mobile">
+            {LINKS.map((item) => (
               <a
                 key={item.label}
                 href={item.href}
-                className="py-3 text-slate-300"
+                onClick={() => setMobileOpen(false)}
+                className="rounded-card px-3 py-3 text-sm font-semibold text-ink-secondary hover:bg-subtle hover:text-ink"
               >
                 {item.label}
               </a>
             ))}
-
-            <Link
-              to="/login"
-              className="mt-4 py-3 text-slate-300"
-            >
-              Login
-            </Link>
-
-            <Link
-              to="/register"
-              className="mt-3 rounded-xl bg-blue-600 px-5 py-3 text-center font-semibold text-white"
-            >
-              Start Free Trial
-            </Link>
-
-          </div>
-
+            <div className="mt-2 grid grid-cols-2 gap-2 pb-2">
+              <Link
+                to="/login"
+                className="rounded-card border border-hairline px-4 py-3 text-center text-sm font-bold text-ink"
+              >
+                Login
+              </Link>
+              <Link
+                to="/register"
+                className="rounded-card bg-brand px-4 py-3 text-center text-sm font-bold text-white"
+              >
+                Register
+              </Link>
+            </div>
+          </nav>
         </div>
       )}
     </header>

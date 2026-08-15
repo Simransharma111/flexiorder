@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 
 import api from "../api/axios";
 import { HOTEL_THEME_CHOICES } from "../constants/hotelThemes";
+import { readableText } from "../utils/hotelTheme";
 import { useAuth } from "../context/AuthContext";
 
 export const HOTEL_THEMES = HOTEL_THEME_CHOICES;
@@ -37,6 +38,33 @@ export default function HotelSetupPage() {
 
   const previewText =
     selectedTheme.text || "#FFFFFF";
+
+  const isLightTheme =
+    selectedTheme.mode !== "dark";
+
+  // Glass sections must stay visible on light palettes too
+  const sectionStyle = isLightTheme
+    ? {
+        background:
+          "rgba(255,255,255,0.68)",
+        borderColor:
+          "rgba(23,32,29,0.14)",
+      }
+    : {
+        background:
+          "rgba(255,255,255,0.06)",
+        borderColor:
+          "rgba(255,255,255,0.12)",
+      };
+
+  const accentButtonStyle = {
+    background:
+      selectedTheme.accent,
+    color: readableText(
+      selectedTheme.accent,
+      selectedTheme.text || "#111827"
+    ),
+  };
 
   // =====================================================
   // INPUT
@@ -357,12 +385,12 @@ export default function HotelSetupPage() {
             type="button"
             onClick={handleBack}
             disabled={loading}
-            className="mb-6 px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 transition disabled:opacity-50"
+            className="mb-6 px-4 py-2 rounded-xl bg-black/10 hover:bg-black/15 transition disabled:opacity-50"
           >
             ← Back to Login
           </button>
 
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/10 text-sm">
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-black/10 text-sm font-semibold">
             Step 2 of 2
           </div>
 
@@ -397,12 +425,7 @@ export default function HotelSetupPage() {
 
           <section
             className="p-6 rounded-2xl border"
-            style={{
-              background:
-                "rgba(255,255,255,0.06)",
-              borderColor:
-                "rgba(255,255,255,0.12)",
-            }}
+            style={sectionStyle}
           >
             <h2 className="text-xl font-bold mb-5">
               Basic Information
@@ -517,12 +540,7 @@ export default function HotelSetupPage() {
 
           <section
             className="p-6 rounded-2xl border"
-            style={{
-              background:
-                "rgba(255,255,255,0.06)",
-              borderColor:
-                "rgba(255,255,255,0.12)",
-            }}
+            style={sectionStyle}
           >
             <h2 className="text-xl font-bold mb-5">
               Contact Information
@@ -617,12 +635,7 @@ export default function HotelSetupPage() {
 
           <section
             className="p-6 rounded-2xl border"
-            style={{
-              background:
-                "rgba(255,255,255,0.06)",
-              borderColor:
-                "rgba(255,255,255,0.12)",
-            }}
+            style={sectionStyle}
           >
             <h2 className="text-xl font-bold mb-2">
               Branding
@@ -691,12 +704,7 @@ export default function HotelSetupPage() {
 
           <section
             className="p-6 rounded-2xl border"
-            style={{
-              background:
-                "rgba(255,255,255,0.06)",
-              borderColor:
-                "rgba(255,255,255,0.12)",
-            }}
+            style={sectionStyle}
           >
             <h2 className="text-xl font-bold">
               Choose Your Theme
@@ -764,7 +772,7 @@ export default function HotelSetupPage() {
                     <div className="flex gap-2 mt-4">
 
                       <span
-                        className="w-8 h-8 rounded-full border border-white/20"
+                        className="w-8 h-8 rounded-full border border-black/20"
                         style={{
                           background:
                             theme.primary,
@@ -772,7 +780,7 @@ export default function HotelSetupPage() {
                       />
 
                       <span
-                        className="w-8 h-8 rounded-full border border-white/20"
+                        className="w-8 h-8 rounded-full border border-black/20"
                         style={{
                           background:
                             theme.secondary,
@@ -780,7 +788,7 @@ export default function HotelSetupPage() {
                       />
 
                       <span
-                        className="w-8 h-8 rounded-full border border-white/20"
+                        className="w-8 h-8 rounded-full border border-black/20"
                         style={{
                           background:
                             theme.accent,
@@ -847,7 +855,7 @@ export default function HotelSetupPage() {
 
               <div className="grid md:grid-cols-3 gap-4">
 
-                <div className="p-4 rounded-xl bg-white/5">
+                <div className="p-4 rounded-xl bg-white/60 border border-black/10">
                   <p className="text-sm opacity-70">
                     Primary
                   </p>
@@ -863,7 +871,7 @@ export default function HotelSetupPage() {
                   </p>
                 </div>
 
-                <div className="p-4 rounded-xl bg-white/5">
+                <div className="p-4 rounded-xl bg-white/60 border border-black/10">
                   <p className="text-sm opacity-70">
                     Secondary
                   </p>
@@ -879,7 +887,7 @@ export default function HotelSetupPage() {
                   </p>
                 </div>
 
-                <div className="p-4 rounded-xl bg-white/5">
+                <div className="p-4 rounded-xl bg-white/60 border border-black/10">
                   <p className="text-sm opacity-70">
                     Accent
                   </p>
@@ -900,12 +908,7 @@ export default function HotelSetupPage() {
               <button
                 type="button"
                 className="mt-5 px-6 py-3 rounded-xl font-bold"
-                style={{
-                  background:
-                    selectedTheme.accent,
-                  color:
-                    selectedTheme.secondary,
-                }}
+                style={accentButtonStyle}
               >
                 Example Button
               </button>
@@ -923,7 +926,7 @@ export default function HotelSetupPage() {
               type="button"
               onClick={handleBack}
               disabled={loading}
-              className="sm:w-1/3 py-4 rounded-2xl font-bold text-lg bg-white/10 hover:bg-white/20 transition disabled:opacity-50"
+              className="sm:w-1/3 py-4 rounded-2xl font-bold text-lg bg-black/10 hover:bg-black/15 transition disabled:opacity-50"
             >
               ← Back to Login
             </button>
@@ -932,11 +935,7 @@ export default function HotelSetupPage() {
               type="submit"
               disabled={loading}
               className="sm:flex-1 py-4 rounded-2xl font-bold text-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
-              style={{
-                background:
-                  selectedTheme.primary,
-                color: "#FFFFFF",
-              }}
+              style={accentButtonStyle}
             >
               {loading
                 ? "Saving Hotel..."

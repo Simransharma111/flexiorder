@@ -8,6 +8,7 @@ import {
   FiBarChart2,
   FiBox,
   FiPackage,
+  FiDroplet,
   FiSettings,
   FiShoppingBag,
   FiTable,
@@ -25,6 +26,8 @@ import Sidebar from "../components/ownerdashboard/Sidebar";
 
 import DashboardHome from "../components/ownerdashboard/DashboardHome";
 import Orders from "../components/ownerdashboard/Orders";
+import ThemeSettings from "../components/ownerdashboard/ThemeSettings";
+import AboutPanel from "../components/ownerdashboard/AboutPanel";
 
 import OwnerMenuManager from "../components/OwnerMenuManager";
 import TableQRManager from "../components/TableQRManager";
@@ -63,6 +66,13 @@ feature:"menu"
 },
 
 {
+key:"themes",
+label:"Themes",
+icon:FiDroplet,
+feature:"settings"
+},
+
+{
 key:"orders",
 label:"History",
 icon:FiShoppingBag,
@@ -79,7 +89,8 @@ feature:"settings"
 key:"staff",
 label:"Staff",
 icon:FiUsers,
-feature:"staffManagement"
+feature:"staffManagement",
+startsMore:true
 },
 
 {
@@ -615,7 +626,7 @@ hotel={hotel}
 
 activeTab={activeTab}
 
-navItems={navItems}
+navItems={[...navItems, { key: "about", label: "About Us" }]}
 
 newOrderCount={newOrderCount}
 
@@ -763,6 +774,20 @@ activeTab==="analytics" &&
 
 
 
+
+{
+activeTab==="themes" &&
+
+<ThemeSettings hotel={hotel} onHotelChange={setHotel}/>
+
+}
+
+{
+activeTab==="about" &&
+
+<AboutPanel/>
+
+}
 
 {
 activeTab==="settings" &&

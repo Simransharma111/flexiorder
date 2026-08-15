@@ -1,8 +1,32 @@
 import { useCallback, useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
+import { FiClock } from "react-icons/fi";
 
 import api from "../api/axios";
 import socket from "../socket";
+
+const STEP_LABELS = ["Received", "Preparing", "Ready", "Delivered"];
+
+const STEP_DESCRIPTIONS = {
+  Received: "The restaurant has your order.",
+  Preparing: "The kitchen is working on it.",
+  Ready: "Your order is ready for pickup.",
+  Delivered: "Served. Enjoy your meal!",
+};
+
+function TrackerShell({ children }) {
+  return (
+    <div className="min-h-screen bg-canvas text-ink">
+      <header className="flex h-14 items-center gap-2.5 border-b border-hairline bg-white px-4">
+        <span className="grid h-8 w-8 place-items-center rounded-card bg-brand text-sm font-extrabold text-white">
+          F
+        </span>
+        <p className="text-sm font-extrabold tracking-tight">Order tracking</p>
+      </header>
+      <main className="mx-auto w-full max-w-lg px-4 py-6">{children}</main>
+    </div>
+  );
+}
 
 export default function TrackOrderPage() {
 
@@ -66,12 +90,12 @@ export default function TrackOrderPage() {
   }, [fetchOrder, orderId]);
 
   // STATUS STEPS
-const steps = [
-  "pending",
-  "preparing",
-  "ready",
-  "delivered",
-];
+  const steps = [
+    "pending",
+    "preparing",
+    "ready",
+    "delivered",
+  ];
 
   const publicStatus =
     order?.status === "accepted"
@@ -83,198 +107,200 @@ const steps = [
 
   // LOADING
   if (loading) {
-
     return (
-      <div className="min-h-screen bg-[#0F172A] text-white flex justify-center items-center text-2xl">
-        Loading...
-      </div>
+      <TrackerShell>
+        <div
+          className="animate-pulse space-y-4"
+          aria-label="Loading order status"
+        >
+          <div className="h-8 w-40 rounded-card bg-subtle" />
+          <div className="h-56 rounded-panel border border-hairline bg-white" />
+          <div className="h-32 rounded-panel border border-hairline bg-white" />
+        </div>
+      </TrackerShell>
     );
   }
 
   // NO ORDER
   if (!order) {
     return (
-      <div className="min-h-screen bg-[#0F172A] text-white flex justify-center items-center text-2xl">
-        Order not found
-      </div>
+      <TrackerShell>
+        <div className="rounded-panel border border-hairline bg-white px-6 py-12 text-center shadow-card">
+          <h1 className="text-xl font-extrabold">Order not found</h1>
+          <p className="mt-2 text-sm text-ink-secondary">
+            Check the tracking link or ask the restaurant staff.
+          </p>
+        </div>
+      </TrackerShell>
     );
   }
 
   // CANCELLED
   if (order.status === "cancelled") {
     return (
-      <div className="min-h-screen bg-[#0F172A] text-white flex items-center justify-center px-4">
-        <div className="bg-white/5 border border-red-500/30 rounded-3xl p-10 text-center max-w-lg w-full">
-          <div className="text-7xl mb-5">❌</div>
-          <h1 className="text-4xl font-black text-red-500">
-            Order Cancelled
+      <TrackerShell>
+        <div className="rounded-panel border border-status-delayed-line/40 bg-white px-6 py-12 text-center shadow-card">
+          <span
+            className="mx-auto grid h-14 w-14 place-items-center rounded-full bg-status-delayed-surface text-2xl"
+            aria-hidden="true"
+          >
+            ✕
+          </span>
+          <h1 className="mt-5 text-2xl font-extrabold text-status-delayed-ink">
+            Order cancelled
           </h1>
-          <p className="text-gray-300 mt-5 text-lg">
-            Unfortunately your order was cancelled by staff.
-          </p>
-          <p className="text-gray-500 mt-3">
-            Please contact the restaurant or place a new order.
+          <p className="mt-3 text-sm leading-6 text-ink-secondary">
+            This order was cancelled by staff. Please contact the restaurant
+            or place a new order.
           </p>
         </div>
-      </div>
+      </TrackerShell>
     );
   }
 
+  const statusLabel =
+    publicStatus === "pending"
+      ? "Received"
+      : STEP_LABELS[currentStep] || "Received";
+
+  const statusClass =
+    publicStatus === "ready" || publicStatus === "delivered"
+      ? "bg-status-ready-surface text-status-ready-ink"
+      : publicStatus === "preparing"
+        ? "bg-status-preparing-surface text-status-preparing-ink"
+        : "bg-status-new-surface text-status-new-ink";
+
+  const barColor =
+    publicStatus === "ready" || publicStatus === "delivered"
+      ? "bg-status-ready-line"
+      : publicStatus === "preparing"
+        ? "bg-status-preparing-line"
+        : "bg-status-new-line";
+
+  const location =
+    order.locationNumber || order.roomNumber
+      ? `${order.locationType === "room" ? "Room" : "Table"} ${
+          order.locationNumber || order.roomNumber
+        }`
+      : null;
+
   return (
 
-    <div className="min-h-screen bg-[#0F172A] text-white px-4 py-10">
-
-      <div className="max-w-3xl mx-auto">
-
-        {/* HEADER */}
-
-        <div className="text-center">
-
-          <h1 className="text-5xl font-bold">
-            Order Tracking
+    <TrackerShell>
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-extrabold tracking-tight">
+            {location || "Your order"}
           </h1>
-
-          <p className="text-gray-400 mt-4">
-            Live order updates
-          </p>
-
-        </div>
-
-        {/* ORDER CARD */}
-
-        <div className="bg-white/5 border border-white/10 rounded-3xl p-8 mt-10">
-
-          <div className="flex justify-between items-center flex-wrap gap-4">
-
-            <div>
-
-              <p className="text-gray-400">
-                Order ID
-              </p>
-
-              <h2 className="text-lg font-bold mt-2 break-all">
-                {order._id}
-              </h2>
-
-            </div>
-
-            <div>
-
-              <p className="text-gray-400">
-                Estimated Time
-              </p>
-
-              <h2 className="text-3xl font-bold mt-2 text-orange-400">
-                {order.estimatedTime} mins
-              </h2>
-
-            </div>
-
-          </div>
-
-          {/* ITEMS */}
-
-          <div className="mt-10 space-y-4">
-
-            {(order.items || []).map((item, index) => (
-
-              <div
-                key={index}
-                className="flex justify-between items-center bg-white/5 rounded-2xl px-5 py-4"
-              >
-
-                <div>
-
-                  <h3 className="font-semibold text-lg">
-                    {item.name}
-                  </h3>
-
-                  <p className="text-gray-400 text-sm mt-1">
-                    Qty: {item.quantity}
-                  </p>
-
-                </div>
-
-              </div>
-
-            ))}
-
-          </div>
-
-          {/* TRACKING */}
-
-          <div className="mt-12">
-
-            <div className="flex justify-between items-center relative">
-
-              {/* LINE */}
-
-              <div className="absolute top-5 left-0 w-full h-1 bg-white/10 rounded-full"></div>
-
-              <div
-                className="absolute top-5 left-0 h-1 bg-orange-500 rounded-full transition-all duration-500"
-                style={{
-                  width: `${
-                    currentStep <= 0
-                      ? 0
-                      : (currentStep /
-                          (steps.length - 1)) *
-                        100
-                  }%`,
-                }}
-              ></div>
-
-              {/* STEPS */}
-
-              {steps.map((step, index) => {
-
-                const active =
-                  index <= currentStep;
-
-                return (
-
-                  <div
-                    key={step}
-                    className="relative z-10 flex flex-col items-center"
-                  >
-
-                    <div
-                      className={`w-10 h-10 rounded-full flex items-center justify-center font-bold ${
-                        active
-                          ? "bg-orange-500"
-                          : "bg-white/10"
-                      }`}
-                    >
-                      {index + 1}
-                    </div>
-
-                    <p className="mt-3 capitalize text-sm">
-                      {step === "pending" ? "Received" : step}
-                    </p>
-
-                  </div>
-
-                );
+          {order.createdAt ? (
+            <p className="mt-0.5 text-xs font-medium text-ink-disabled">
+              Placed{" "}
+              {new Date(order.createdAt).toLocaleTimeString([], {
+                hour: "numeric",
+                minute: "2-digit",
               })}
-
-            </div>
-
-          </div>
-
-          {/* STATUS */}
-
-          <div className="mt-12 text-center">
-
-            <h2 className="text-4xl font-bold capitalize text-orange-400">
-              {publicStatus === "pending" ? "Received" : publicStatus}
-            </h2>
-
-          </div>
-
+            </p>
+          ) : null}
         </div>
 
+        <span
+          className={`rounded-full px-3.5 py-1.5 text-sm font-bold ${statusClass}`}
+          role="status"
+          aria-live="polite"
+        >
+          {statusLabel}
+        </span>
       </div>
 
-    </div>
+      {Number.isFinite(Number(order.estimatedTime)) && order.estimatedTime > 0 ? (
+        <p className="mt-4 flex items-center gap-2 rounded-card border border-hairline bg-white px-4 py-3 text-sm font-bold text-ink shadow-card">
+          <FiClock className="text-brand" aria-hidden="true" />
+          About {order.estimatedTime} min
+        </p>
+      ) : null}
+
+      {/* PROGRESS */}
+
+      <div className="mt-4 rounded-panel border border-hairline bg-white p-5 shadow-card">
+        <ol className="relative">
+          {steps.map((step, index) => {
+            const label = STEP_LABELS[index];
+            const isDone = index < currentStep;
+            const isCurrent = index === currentStep;
+
+            return (
+              <li key={step} className="relative flex gap-3.5 pb-6 last:pb-0">
+                {index < steps.length - 1 ? (
+                  <span
+                    className={`absolute left-[13px] top-7 h-[calc(100%-20px)] w-0.5 rounded-full ${
+                      isDone ? barColor : "bg-hairline"
+                    }`}
+                    aria-hidden="true"
+                  />
+                ) : null}
+
+                <span
+                  className={`grid h-7 w-7 shrink-0 place-items-center rounded-full border text-xs font-extrabold ${
+                    isDone
+                      ? `border-transparent text-white ${barColor}`
+                      : isCurrent
+                        ? "border-transparent bg-white text-ink ring-2 ring-inset"
+                        : "border-hairline bg-white text-ink-disabled"
+                  } ${isCurrent ? statusClass : ""}`}
+                  aria-hidden="true"
+                >
+                  {index + 1}
+                </span>
+
+                <div>
+                  <p
+                    className={`text-sm font-bold ${
+                      isCurrent || isDone ? "text-ink" : "text-ink-disabled"
+                    }`}
+                  >
+                    {label}
+                    {isCurrent ? (
+                      <span className="sr-only">(current status)</span>
+                    ) : null}
+                  </p>
+                  {isCurrent ? (
+                    <p className="mt-0.5 text-xs leading-5 text-ink-secondary">
+                      {STEP_DESCRIPTIONS[label]}
+                    </p>
+                  ) : null}
+                </div>
+              </li>
+            );
+          })}
+        </ol>
+      </div>
+
+      {/* ITEMS */}
+
+      <section
+        aria-label="Ordered items"
+        className="mt-4 rounded-panel border border-hairline bg-white p-5 shadow-card"
+      >
+        <h2 className="text-sm font-extrabold">Items</h2>
+
+        <ul className="mt-3 divide-y divide-hairline">
+          {(order.items || []).map((item, index) => (
+            <li
+              key={index}
+              className="flex items-baseline justify-between gap-3 py-2.5 text-sm"
+            >
+              <span className="font-semibold text-ink">{item.name}</span>
+              <span className="shrink-0 font-bold text-ink-secondary">
+                ×{item.quantity}
+              </span>
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      <p className="mt-5 text-center text-xs text-ink-disabled">
+        Updates automatically while this page is open.
+      </p>
+    </TrackerShell>
   );
 }

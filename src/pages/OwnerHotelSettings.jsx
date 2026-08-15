@@ -8,7 +8,6 @@ import {
   FaImage,
 } from "react-icons/fa";
 
-import { HOTEL_THEME_CHOICES } from "../constants/hotelThemes";
 import { getHotelThemeStyle, resolveHotelTheme } from "../utils/hotelTheme";
 import {
   APP_LEVELS,
@@ -538,25 +537,6 @@ setLoading(false);
 
 
 
-
-const changeTheme=(theme)=>{
-  setHotel((previous) => {
-    const next = {
-      ...previous,
-      theme: {
-        id: theme.id,
-        primary: theme.primary,
-        secondary: theme.secondary,
-        accent: theme.accent,
-        brand: theme.brand,
-        text: theme.text || "#FFFFFF",
-        mode: theme.mode || "dark",
-      },
-    };
-    return next;
-  });
-
-};
 
 const resolvedTheme = resolveHotelTheme(hotel);
 const resolvedPrimary = resolvedTheme.brand;
@@ -1219,141 +1199,7 @@ p-6
 ===================================================== */}
 
 
-<section className="
-bg-white/10
-border
-border-white/20
-rounded-3xl
-p-6
-">
 
-
-<h2 className="
-text-2xl
-font-bold
-mb-5
-">
-
-Theme
-
-</h2>
-
-
-
-<div className="
-grid
-md:grid-cols-3
-gap-4
-">
-
-
-{
-  HOTEL_THEME_CHOICES.map((theme) => (
-
-<button
-
-key={theme.id}
-
-onClick={()=>changeTheme(theme)}
-
-className="
-p-5
-rounded-2xl
-text-left
-border-2
-"
-
-style={{
-
-background:
-theme.secondary,
-
-borderColor:
-hotel?.theme?.id === theme.id
-?
-theme.accent
-:
-"transparent"
-
-}}
-
->
-
-
-<h3
-style={{
-color:theme.accent
-}}
-
-className="font-bold"
->
-
-{theme.label}
-
-</h3>
-
-
-
-
-<div className="
-flex
-gap-2
-mt-4
-">
-
-<span
-className="
-w-8
-h-8
-rounded-full
-"
-style={{
-background:theme.primary
-}}
-/>
-
-
-<span
-className="
-w-8
-h-8
-rounded-full
-"
-style={{
-background:theme.secondary
-}}
-/>
-
-
-
-<span
-className="
-w-8
-h-8
-rounded-full
-"
-style={{
-background:theme.accent
-}}
-/>
-
-
-</div>
-
-
-</button>
-
-
-))
-}
-
-
-
-</div>
-
-
-
-</section>
 
 
 

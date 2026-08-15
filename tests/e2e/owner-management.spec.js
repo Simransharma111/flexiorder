@@ -78,11 +78,11 @@ test("owner theme selection applies immediately and survives reload", async ({ p
   });
 
   await page.goto("/owner/dashboard");
-  await openOwnerTab(page, "Settings");
+  await openOwnerTab(page, "Themes");
   await page.getByRole("button", { name: /Lavender Hues/ }).click();
   await expect(page.locator(".owner-shell")).toHaveCSS("--primary", "#a78bfa");
   const savedDialog = page.waitForEvent("dialog");
-  await page.getByRole("button", { name: "Save Branding" }).click();
+  await page.getByRole("button", { name: "Save Theme" }).click();
   await (await savedDialog).accept();
 
   await page.reload();
@@ -507,6 +507,72 @@ test("demo menu import survives reload, reimports as skips, and re-exports equiv
   await page.getByRole("button", { name: "Export menu" }).click();
   const reExported = await readDownloadJson(await downloadPromise);
   expect(reExported.dishes).toEqual(demo.dishes);
+});
+
+test("menu import falls back to single-dish writes when the bulk route is missing (404)", async ({ page }) => {
+  const demo = JSON.parse(await readFile(demoMenuFile, "utf8"));
+  const expectedCategories = [...new Set(demo.dishes.map((d) => d.category))];
+  let serverMenu = [];
+  let serverCategories = [];
+  let bulkCalls = 0;
+  const categoryPosts = [];
+  const dishPosts = [];
+
+  await page.unroute("**/hotel/me");
+  await page.route("**/hotel/me", (route) => fulfillJson(route, {
+    hotel: { ...hotel, featureSettings: { appLevel: "advanced" } },
+  }));
+  await page.route("**/menu/hotel-1", (route) => fulfillJson(route, serverMenu));
+  await page.route("**/menu/categories/**", (route) => fulfillJson(route, serverCategories));
+  await page.route("**/menu/import", (route) =>
+    (bulkCalls += 1,
+    route.fulfill({
+      status: 404,
+      contentType: "text/html",
+      body: "Cannot POST /api/menu/import",
+    }))
+  );
+  await page.route("**/menu/category", (route) => {
+    if (route.request().method() !== "POST") return route.fallback();
+    const body = route.request().postDataJSON();
+    categoryPosts.push(body);
+    const created = {
+      _id: `abcdef0123456789abcdef${String(categoryPosts.length).padStart(2, "0")}`,
+      name: body.name,
+      subCategories: body.subCategories || [],
+      isActive: true,
+    };
+    serverCategories = [...serverCategories, created];
+    return fulfillJson(route, created);
+  });
+  await page.route("**/menu/dish", (route) => {
+    if (route.request().method() !== "POST") return route.fallback();
+    const index = dishPosts.length;
+    dishPosts.push(route.request().postData() || "");
+    const source = demo.dishes[index];
+    const created = {
+      ...source,
+      _id: `fallback-imported-${index + 1}`,
+      categoryId: { _id: `cat-${index + 1}`, name: source.category },
+    };
+    serverMenu = [...serverMenu, created];
+    return fulfillJson(route, { dish: created });
+  });
+  page.on("dialog", (dialog) => dialog.accept());
+
+  await page.goto("/owner/dashboard");
+  await openOwnerTab(page, "Menu");
+  await page.locator('input[type="file"][accept*="json"]').setInputFiles(demoMenuFile);
+
+  await expect(page.getByRole("status")).toContainText(
+    `${demo.dishes.length} dishes imported. 0 skipped.`
+  );
+  expect(bulkCalls).toBe(1);
+  expect(categoryPosts.map((c) => c.name)).toEqual(expectedCategories);
+  expect(dishPosts).toHaveLength(demo.dishes.length);
+  await expect(
+    page.getByText("Demo Paneer Tikka", { exact: true }).filter({ visible: true })
+  ).toHaveCount(1);
 });
 
 test("menu import rejects invalid and offline files without a write", async ({ page, context }) => {

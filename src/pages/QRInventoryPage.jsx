@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import { FiDownload, FiCopy, FiCheck, FiGrid, FiAlertCircle } from "react-icons/fi";
 import api from "../api/axios";
 import jsPDF from "jspdf";
+import { downloadFile, isNativeApp } from "../utils/fileDownload";
 
 export default function QRInventoryPage() {
   const [count, setCount] = useState(10);
@@ -10,6 +11,7 @@ export default function QRInventoryPage() {
   const [downloading, setDownloading] = useState(false);
   const [error, setError] = useState(null);
   const [copiedId, setCopiedId] = useState(null);
+  const [savedTo, setSavedTo] = useState(null);
   const resultRef = useRef(null);
 
   // ── Generate ─────────────────────────────────────────────────────────────
@@ -20,6 +22,7 @@ export default function QRInventoryPage() {
       const res = await api.post("/qr/generate", { count: Number(count) });
       const codes = res.data?.qrCodes || [];
       setQrs(codes);
+      setSavedTo(null);
       // Scroll to results so Download PDF is immediately visible
       setTimeout(() => resultRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 100);
     } catch (err) {
@@ -53,7 +56,12 @@ export default function QRInventoryPage() {
         pdf.text(qr.qrId, x + QR_SIZE / 2, y + QR_SIZE + 6, { align: "center" });
       });
 
-      pdf.save(`flexi-qr-codes-${qrs.length}.pdf`);
+      const filename = `flexi-qr-codes-${qrs.length}.pdf`;
+      const blob = pdf.output("blob");
+      const saved = await downloadFile(blob, filename);
+      setSavedTo(saved?.label || null);
+    } catch (err) {
+      setError(err?.message || "Could not save the QR PDF. Please try again.");
     } finally {
       setDownloading(false);
     }
@@ -211,6 +219,11 @@ export default function QRInventoryPage() {
               <FiDownload size={18} />
               {downloading ? "Building PDF…" : "Download All as PDF"}
             </button>
+            {savedTo && (
+              <p role="status" style={{ margin: "10px 0 0", fontSize: "13px", color: "var(--ops-muted)" }}>
+                Saved to <strong>{savedTo}</strong>
+              </p>
+            )}
           </div>
         </div>
       )}

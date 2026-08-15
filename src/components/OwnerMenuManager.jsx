@@ -25,6 +25,7 @@ import {
 } from "../utils/offlineMenu";
 import { getRestaurantId } from "../utils/storageScope";
 import {
+  importMenuViaSingleDishEndpoints,
   MENU_TRANSFER_MAX_BYTES,
   parseMenuImport,
   serializeMenuExport,
@@ -81,6 +82,7 @@ export default function OwnerMenuManager({
   const [activeCategory, setActiveCategory] = useState("All");
   const [showForm, setShowForm] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState(null);
   const [loadError, setLoadError] = useState("");
   const [feedback, setFeedback] = useState("");
 
@@ -537,10 +539,28 @@ export default function OwnerMenuManager({
       setLoadError("");
       setFeedback("");
 
-      const response = await api.post("/menu/import", payload, {
-        headers: { "Content-Type": "application/json" },
-        maxBodyLength: MENU_TRANSFER_MAX_BYTES,
-      });
+      let response;
+      try {
+        response = await api.post("/menu/import", payload, {
+          headers: { "Content-Type": "application/json" },
+          maxBodyLength: MENU_TRANSFER_MAX_BYTES,
+        });
+      } catch (error) {
+        if (error?.response?.status !== 404) throw error;
+
+        /*
+         * Older backends do not expose the bulk import route. Replicate the
+         * import with the single-category/single-dish endpoints instead.
+         */
+        setImportProgress([0, payload.dishes.length]);
+        response = {
+          data: await importMenuViaSingleDishEndpoints(payload, {
+            hotelId,
+            existingDishes: dishes,
+            onProgress: (done, total) => setImportProgress([done, total]),
+          }),
+        };
+      }
       const imported = response.data?.imported;
       const skipped = response.data?.skipped;
       const errors = response.data?.errors;
@@ -573,6 +593,7 @@ export default function OwnerMenuManager({
       );
     } finally {
       setImporting(false);
+      setImportProgress(null);
     }
   };
 
@@ -638,7 +659,9 @@ export default function OwnerMenuManager({
                 <FiUpload />
 
                 {importing
-                  ? "Importing..."
+                  ? importProgress
+                    ? `Importing ${importProgress[0]}/${importProgress[1]}...`
+                    : "Importing..."
                   : "Import menu"}
 
                 <input
@@ -673,7 +696,7 @@ export default function OwnerMenuManager({
           <button
             type="button"
             onClick={openAddForm}
-            className="flex items-center justify-center gap-2 rounded-xl bg-orange-500 px-5 py-3 font-semibold text-white transition hover:bg-orange-600"
+            className="owner-accent-bg flex items-center justify-center gap-2 rounded-xl px-5 py-3 font-semibold"
           >
             <FiPlus />
             Add Dish
@@ -764,7 +787,7 @@ export default function OwnerMenuManager({
             onChange={(event) =>
               setSearch(event.target.value)
             }
-            className="w-full bg-gray-50 border border-gray-200 rounded-lg pl-10 pr-4 py-3 outline-none focus:ring-2 focus:ring-orange-400"
+            className="owner-input w-full bg-gray-50 rounded-lg pl-10 pr-4 py-3 outline-none"
           />
         </div>
       </div>
@@ -781,7 +804,7 @@ export default function OwnerMenuManager({
             className={`whitespace-nowrap px-4 py-2 rounded-lg text-sm font-medium transition ${
               categoryKey(activeCategory) ===
               categoryKey(category)
-                ? "bg-gray-900 text-white"
+                ? "owner-accent-bg"
                 : "bg-white border border-gray-200 text-gray-600 hover:bg-gray-100"
             }`}
           >
@@ -842,7 +865,7 @@ export default function OwnerMenuManager({
               <button
                 type="button"
                 onClick={openAddForm}
-                className="mt-4 inline-flex items-center gap-2 bg-orange-500 text-white px-4 py-2.5 rounded-lg font-semibold hover:bg-orange-600"
+                className="owner-accent-bg mt-4 inline-flex items-center gap-2 px-4 py-2.5 rounded-lg font-semibold"
               >
                 <FiPlus />
                 Add Dish
@@ -934,13 +957,9 @@ export default function OwnerMenuManager({
 
                     <td className="px-5 py-4">
                       {dish.foodType === "veg" ? (
-                        <span className="text-green-600 text-xs font-bold">
-                          🟢 Veg
-                        </span>
+                        <span className="veg-badge is-veg">Veg</span>
                       ) : (
-                        <span className="text-red-600 text-xs font-bold">
-                          🔴 Non-Veg
-                        </span>
+                        <span className="veg-badge is-nonveg">Non-Veg</span>
                       )}
                     </td>
 
@@ -1113,13 +1132,9 @@ export default function OwnerMenuManager({
 
                     <div className="flex flex-wrap gap-2 mt-2">
                       {dish.foodType === "veg" ? (
-                        <span className="text-green-600 text-xs font-semibold">
-                          🟢 Veg
-                        </span>
+                        <span className="veg-badge is-veg">Veg</span>
                       ) : (
-                        <span className="text-red-600 text-xs font-semibold">
-                          🔴 Non-Veg
-                        </span>
+                        <span className="veg-badge is-nonveg">Non-Veg</span>
                       )}
 
                       {dish.isAvailable ? (
@@ -1238,7 +1253,7 @@ export default function OwnerMenuManager({
 
 function SmallTag({ children }) {
   return (
-    <span className="inline-flex items-center gap-1 px-2 py-1 bg-orange-50 text-orange-700 rounded-md text-[10px] font-semibold">
+    <span className="owner-tag">
       <FiStar size={9} />
       {children}
     </span>

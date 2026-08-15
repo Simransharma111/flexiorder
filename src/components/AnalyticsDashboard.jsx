@@ -167,8 +167,8 @@ export default function AnalyticsDashboard({ orders = [], advancedEnabled = fals
               aria-pressed={rangeMode === value}
               className={`min-h-11 rounded-lg border px-4 text-sm font-bold transition ${
                 rangeMode === value
-                  ? "border-orange-500 bg-orange-500 text-white"
-                  : "border-white/20 bg-white/5 text-white/80 hover:bg-white/10"
+                  ? "owner-accent-bg border-transparent"
+                  : "border-hairline bg-white text-ink-secondary hover:bg-subtle"
               }`}
               onClick={() => setRangeMode(value)}
             >
@@ -180,30 +180,30 @@ export default function AnalyticsDashboard({ orders = [], advancedEnabled = fals
         <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(240px,1.4fr)]">
           <div className="grid gap-3 sm:grid-cols-2">
             {rangeMode === "monthly" && (
-              <label className="grid gap-1 text-xs font-bold text-white/70">
+              <label className="grid gap-1 text-xs font-bold text-ink-secondary">
                 Month
                 <input
                   type="month"
                   value={selectedMonth}
                   onChange={(event) => setSelectedMonth(event.target.value)}
-                  className="min-h-11 rounded-lg border border-white/20 bg-white/10 px-3 text-sm text-white [color-scheme:dark]"
+                  className="owner-input min-h-11 px-3 text-sm"
                 />
               </label>
             )}
 
             {rangeMode === "quarterly" && (
               <>
-                <label className="grid gap-1 text-xs font-bold text-white/70">
+                <label className="grid gap-1 text-xs font-bold text-ink-secondary">
                   Quarter
                   <select
                     value={selectedQuarter}
                     onChange={(event) => setSelectedQuarter(Number(event.target.value))}
-                    className="min-h-11 rounded-lg border border-white/20 bg-slate-900 px-3 text-sm text-white"
+                    className="owner-input min-h-11 px-3 text-sm"
                   >
                     {[1, 2, 3, 4].map((quarter) => <option key={quarter} value={quarter}>Q{quarter}</option>)}
                   </select>
                 </label>
-                <label className="grid gap-1 text-xs font-bold text-white/70">
+                <label className="grid gap-1 text-xs font-bold text-ink-secondary">
                   Year
                   <input
                     type="number"
@@ -217,7 +217,7 @@ export default function AnalyticsDashboard({ orders = [], advancedEnabled = fals
                         setSelectedYear(new Date().getFullYear());
                       }
                     }}
-                    className="min-h-11 rounded-lg border border-white/20 bg-white/10 px-3 text-sm text-white"
+                    className="owner-input min-h-11 px-3 text-sm"
                   />
                 </label>
               </>
@@ -225,39 +225,39 @@ export default function AnalyticsDashboard({ orders = [], advancedEnabled = fals
 
             {rangeMode === "custom" && (
               <>
-                <label className="grid gap-1 text-xs font-bold text-white/70">
+                <label className="grid gap-1 text-xs font-bold text-ink-secondary">
                   Start date
                   <input
                     type="date"
                     value={customStart}
                     onChange={(event) => setCustomStart(event.target.value)}
-                    className="min-h-11 rounded-lg border border-white/20 bg-white/10 px-3 text-sm text-white [color-scheme:dark]"
+                    className="owner-input min-h-11 px-3 text-sm"
                   />
                 </label>
-                <label className="grid gap-1 text-xs font-bold text-white/70">
+                <label className="grid gap-1 text-xs font-bold text-ink-secondary">
                   End date
                   <input
                     type="date"
                     value={customEnd}
                     min={customStart || undefined}
                     onChange={(event) => setCustomEnd(event.target.value)}
-                    className="min-h-11 rounded-lg border border-white/20 bg-white/10 px-3 text-sm text-white [color-scheme:dark]"
+                    className="owner-input min-h-11 px-3 text-sm"
                   />
                 </label>
               </>
             )}
           </div>
 
-          <label className="grid gap-1 text-xs font-bold text-white/70">
+          <label className="grid gap-1 text-xs font-bold text-ink-secondary">
             Search by name or order
-            <span className="flex min-h-11 items-center gap-2 rounded-lg border border-white/20 bg-white/10 px-3 focus-within:border-orange-400">
+            <span className="owner-input flex min-h-11 items-center gap-2 px-3">
               <FiSearch aria-hidden="true" />
               <input
                 type="search"
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
                 placeholder="Guest, dish, order ID, table or room"
-                className="min-w-0 flex-1 bg-transparent text-sm text-white outline-none placeholder:text-white/40"
+                className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-ink-disabled"
               />
             </span>
           </label>
@@ -266,7 +266,7 @@ export default function AnalyticsDashboard({ orders = [], advancedEnabled = fals
         {range.error ? (
           <div className="ops-inline-error" role="alert">{range.error}</div>
         ) : (
-          <p className="text-xs text-white/60" role="status">
+          <p className="text-xs text-ink-secondary" role="status">
             Showing {filteredOrdersForTimeframe.length} {filteredOrdersForTimeframe.length === 1 ? "order" : "orders"} for {range.label}. Comparing with {previousRange?.label}.
           </p>
         )}
@@ -284,8 +284,8 @@ export default function AnalyticsDashboard({ orders = [], advancedEnabled = fals
               key={m.key} 
               className={`transition-all duration-200 transform hover:scale-[1.02] ${
                 isSelected 
-                  ? "border-orange-500 bg-orange-500/10 shadow-lg shadow-orange-500/5" 
-                  : "border-white/10 bg-white/5 hover:border-white/20"
+                  ? "owner-accent-ring shadow-card" 
+                  : "border-hairline bg-white hover:border-edge shadow-card"
               }`}
               onClick={() => {
                 if (m.key === "pending" || m.key === "completed") {
@@ -296,20 +296,20 @@ export default function AnalyticsDashboard({ orders = [], advancedEnabled = fals
               }}
             >
               <div className="flex justify-between w-full items-start">
-                <span className="text-white/60 text-xs font-medium uppercase tracking-wider">{m.label}</span>
-                <Icon className={isSelected ? "text-orange-400" : "text-white/40"} size={16} />
+                <span className="text-xs font-medium uppercase tracking-wider">{m.label}</span>
+                <Icon className={isSelected ? "owner-accent" : "text-ink-disabled"} size={16} />
               </div>
-              <strong className="text-white text-2xl font-black mt-2 tracking-tight block">
+              <strong className="text-2xl font-black mt-2 tracking-tight block">
                 {m.value}
               </strong>
               <small className={`text-[11px] font-semibold ${
                 m.comparison.percent === null
-                  ? "text-white/45"
+                  ? "text-ink-disabled"
                   : m.comparison.percent === 0
-                    ? "text-white/60"
+                    ? "text-ink-secondary"
                     : (m.lowerIsBetter ? m.comparison.percent < 0 : m.comparison.percent > 0)
-                      ? "text-emerald-400"
-                      : "text-rose-400"
+                      ? "text-emerald-600"
+                      : "text-rose-600"
               }`}>
                 {m.comparison.label}
               </small>
@@ -322,14 +322,14 @@ export default function AnalyticsDashboard({ orders = [], advancedEnabled = fals
       <article className="analytics-chart-card mt-6">
         <div className="analytics-chart-card__head mb-4">
           <div>
-            <h2 className="capitalize font-bold text-lg text-white">
+            <h2 className="capitalize mb-0">
               {selectedMetric === "revenue" ? "Revenue Trends" : selectedMetric === "orders" ? "Order Volume" : "Average Order Value (AOV)"}
             </h2>
-            <p className="text-white/60 text-xs">
+            <p>
               {range.error ? "Choose a valid reporting period" : `${range.label} · ${chartUsesWeeklyBuckets ? "Weekly" : "Daily"} breakdown`}
             </p>
           </div>
-          {advancedEnabled && <button type="button" onClick={downloadCSV} className="text-xs bg-white/10 hover:bg-white/20 text-white px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition"><FiDownload /> Export today&apos;s CSV</button>}
+          {advancedEnabled && <button type="button" onClick={downloadCSV} className="gap-1.5"><FiDownload /> Export today&apos;s CSV</button>}
         </div>
 
         {chartData.some(d => d.revenue > 0 || d.orders > 0) ? (
@@ -339,55 +339,55 @@ export default function AnalyticsDashboard({ orders = [], advancedEnabled = fals
                 <AreaChart data={chartData} margin={{ top: 8, right: 8, left: -18, bottom: 8 }}>
                   <defs>
                     <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#f97316" stopOpacity={0.4}/>
-                      <stop offset="95%" stopColor="#f97316" stopOpacity={0}/>
+                      <stop offset="5%" stopColor="#00796B" stopOpacity={0.4}/>
+                      <stop offset="95%" stopColor="#00796B" stopOpacity={0}/>
                     </linearGradient>
                   </defs>
-                  <CartesianGrid stroke="rgba(255,255,255,0.06)" strokeDasharray="3 3" vertical={false} />
-                  <XAxis dataKey="name" stroke="rgba(255,255,255,0.4)" tick={{ fill: "rgba(255,255,255,0.6)", fontSize: 11 }} tickLine={false} axisLine={false} />
-                  <YAxis stroke="rgba(255,255,255,0.4)" tickFormatter={(v) => `₹${v}`} tick={{ fill: "rgba(255,255,255,0.6)", fontSize: 11 }} tickLine={false} axisLine={false} />
+                  <CartesianGrid stroke="rgba(23,32,29,0.08)" strokeDasharray="3 3" vertical={false} />
+                  <XAxis dataKey="name" stroke="rgba(23,32,29,0.35)" tick={{ fill: "rgba(23,32,29,0.6)", fontSize: 11 }} tickLine={false} axisLine={false} />
+                  <YAxis stroke="rgba(23,32,29,0.35)" tickFormatter={(v) => `₹${v}`} tick={{ fill: "rgba(23,32,29,0.6)", fontSize: 11 }} tickLine={false} axisLine={false} />
                   <Tooltip 
-                    cursor={{ stroke: "rgba(255,255,255,0.1)", strokeWidth: 1 }} 
-                    contentStyle={{ background: "rgba(17,24,39,0.95)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 12, color: "#fff" }} 
+                    cursor={{ stroke: "rgba(23,32,29,0.15)", strokeWidth: 1 }} 
+                    contentStyle={{ background: "#ffffff", border: "1px solid #dce4e1", borderRadius: 10, color: "#17201d", boxShadow: "0 8px 24px rgba(23,32,29,0.14)" }} 
                     formatter={(v) => [currency(v), "Revenue"]}
                   />
-                  <Area type="monotone" dataKey="revenue" stroke="#f97316" strokeWidth={2.5} fillOpacity={1} fill="url(#colorRevenue)" />
+                  <Area type="monotone" dataKey="revenue" stroke="#00796B" strokeWidth={2.5} fillOpacity={1} fill="url(#colorRevenue)" />
                 </AreaChart>
               ) : selectedMetric === "orders" ? (
                 <BarChart data={chartData} margin={{ top: 8, right: 8, left: -18, bottom: 8 }}>
-                  <CartesianGrid stroke="rgba(255,255,255,0.06)" strokeDasharray="3 3" vertical={false} />
-                  <XAxis dataKey="name" stroke="rgba(255,255,255,0.4)" tick={{ fill: "rgba(255,255,255,0.6)", fontSize: 11 }} tickLine={false} axisLine={false} />
-                  <YAxis allowDecimals={false} stroke="rgba(255,255,255,0.4)" tick={{ fill: "rgba(255,255,255,0.6)", fontSize: 11 }} tickLine={false} axisLine={false} />
+                  <CartesianGrid stroke="rgba(23,32,29,0.08)" strokeDasharray="3 3" vertical={false} />
+                  <XAxis dataKey="name" stroke="rgba(23,32,29,0.35)" tick={{ fill: "rgba(23,32,29,0.6)", fontSize: 11 }} tickLine={false} axisLine={false} />
+                  <YAxis allowDecimals={false} stroke="rgba(23,32,29,0.35)" tick={{ fill: "rgba(23,32,29,0.6)", fontSize: 11 }} tickLine={false} axisLine={false} />
                   <Tooltip 
-                    cursor={{ fill: "rgba(255,255,255,0.03)" }}
-                    contentStyle={{ background: "rgba(17,24,39,0.95)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 12, color: "#fff" }}
+                    cursor={{ fill: "rgba(23,32,29,0.06)" }}
+                    contentStyle={{ background: "#ffffff", border: "1px solid #dce4e1", borderRadius: 10, color: "#17201d", boxShadow: "0 8px 24px rgba(23,32,29,0.14)" }}
                     formatter={(v) => [v, "Orders"]}
                   />
-                  <Bar dataKey="orders" fill="#f97316" radius={[6, 6, 0, 0]} maxBarSize={48} />
+                  <Bar dataKey="orders" fill="#00796B" radius={[6, 6, 0, 0]} maxBarSize={48} />
                 </BarChart>
               ) : (
                 <AreaChart data={chartData} margin={{ top: 8, right: 8, left: -18, bottom: 8 }}>
                   <defs>
                     <linearGradient id="colorAov" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.4}/>
-                      <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
+                      <stop offset="5%" stopColor="#2563EB" stopOpacity={0.4}/>
+                      <stop offset="95%" stopColor="#2563EB" stopOpacity={0}/>
                     </linearGradient>
                   </defs>
-                  <CartesianGrid stroke="rgba(255,255,255,0.06)" strokeDasharray="3 3" vertical={false} />
-                  <XAxis dataKey="name" stroke="rgba(255,255,255,0.4)" tick={{ fill: "rgba(255,255,255,0.6)", fontSize: 11 }} tickLine={false} axisLine={false} />
-                  <YAxis stroke="rgba(255,255,255,0.4)" tickFormatter={(v) => `₹${v}`} tick={{ fill: "rgba(255,255,255,0.6)", fontSize: 11 }} tickLine={false} axisLine={false} />
+                  <CartesianGrid stroke="rgba(23,32,29,0.08)" strokeDasharray="3 3" vertical={false} />
+                  <XAxis dataKey="name" stroke="rgba(23,32,29,0.35)" tick={{ fill: "rgba(23,32,29,0.6)", fontSize: 11 }} tickLine={false} axisLine={false} />
+                  <YAxis stroke="rgba(23,32,29,0.35)" tickFormatter={(v) => `₹${v}`} tick={{ fill: "rgba(23,32,29,0.6)", fontSize: 11 }} tickLine={false} axisLine={false} />
                   <Tooltip 
-                    cursor={{ stroke: "rgba(255,255,255,0.1)", strokeWidth: 1 }} 
-                    contentStyle={{ background: "rgba(17,24,39,0.95)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 12, color: "#fff" }}
+                    cursor={{ stroke: "rgba(23,32,29,0.15)", strokeWidth: 1 }} 
+                    contentStyle={{ background: "#ffffff", border: "1px solid #dce4e1", borderRadius: 10, color: "#17201d", boxShadow: "0 8px 24px rgba(23,32,29,0.14)" }}
                     formatter={(v) => [currency(v), "AOV"]}
                   />
-                  <Area type="monotone" dataKey="aov" stroke="#3b82f6" strokeWidth={2.5} fillOpacity={1} fill="url(#colorAov)" />
+                  <Area type="monotone" dataKey="aov" stroke="#2563EB" strokeWidth={2.5} fillOpacity={1} fill="url(#colorAov)" />
                 </AreaChart>
               )}
             </ResponsiveContainer>
           </div>
         ) : (
-          <div className="analytics-empty py-16 flex flex-col items-center justify-center text-white/40"><FiTrendingUp size={36} /><strong className="text-white mt-2 block">No data in this period</strong><span>Trend charts will populate as orders are completed.</span></div>
+          <div className="analytics-empty py-16 flex flex-col items-center justify-center"><FiTrendingUp size={36} /><strong className="mt-2 block">No data in this period</strong><span>Trend charts will populate as orders are completed.</span></div>
         )}
       </article>
 
@@ -395,8 +395,8 @@ export default function AnalyticsDashboard({ orders = [], advancedEnabled = fals
       <article className="analytics-chart-card mt-6">
         <div className="analytics-chart-card__head mb-4">
           <div>
-            <h2 className="font-bold text-lg text-white">Popular Dishes</h2>
-            <p className="text-white/60 text-xs">Quantity ordered by dish in this period</p>
+            <h2>Popular Dishes</h2>
+            <p>Quantity ordered by dish in this period</p>
           </div>
         </div>
 
@@ -405,14 +405,14 @@ export default function AnalyticsDashboard({ orders = [], advancedEnabled = fals
             <div className="analytics-chart w-full h-[260px]" aria-label="Popular dishes chart">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={popularDishes} margin={{ top: 8, right: 8, left: -18, bottom: 8 }}>
-                  <CartesianGrid stroke="rgba(255,255,255,0.06)" strokeDasharray="3 3" vertical={false} />
-                  <XAxis dataKey="name" stroke="rgba(255,255,255,0.4)" tick={{ fill: "rgba(255,255,255,0.6)", fontSize: 11 }} tickLine={false} axisLine={false} />
-                  <YAxis allowDecimals={false} stroke="rgba(255,255,255,0.4)" tick={{ fill: "rgba(255,255,255,0.6)", fontSize: 11 }} tickLine={false} axisLine={false} />
+                  <CartesianGrid stroke="rgba(23,32,29,0.08)" strokeDasharray="3 3" vertical={false} />
+                  <XAxis dataKey="name" stroke="rgba(23,32,29,0.35)" tick={{ fill: "rgba(23,32,29,0.6)", fontSize: 11 }} tickLine={false} axisLine={false} />
+                  <YAxis allowDecimals={false} stroke="rgba(23,32,29,0.35)" tick={{ fill: "rgba(23,32,29,0.6)", fontSize: 11 }} tickLine={false} axisLine={false} />
                   <Tooltip 
-                    cursor={{ fill: "rgba(255,255,255,0.03)" }} 
-                    contentStyle={{ background: "rgba(17,24,39,0.95)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 12, color: "#fff" }} 
+                    cursor={{ fill: "rgba(23,32,29,0.06)" }} 
+                    contentStyle={{ background: "#ffffff", border: "1px solid #dce4e1", borderRadius: 10, color: "#17201d", boxShadow: "0 8px 24px rgba(23,32,29,0.14)" }} 
                   />
-                  <Bar dataKey="qty" fill="#10b981" radius={[6, 6, 0, 0]} maxBarSize={48} />
+                  <Bar dataKey="qty" fill="#16A34A" radius={[6, 6, 0, 0]} maxBarSize={48} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -420,14 +420,14 @@ export default function AnalyticsDashboard({ orders = [], advancedEnabled = fals
             {/* List View of Popular Dishes */}
             <div className="flex flex-col justify-center gap-2.5">
               {popularDishes.map((dish, i) => (
-                <div key={dish.name} className="flex justify-between items-center bg-white/5 border border-white/10 rounded-xl px-4 py-3 hover:bg-white/10 transition">
+                <div key={dish.name} className="flex justify-between items-center bg-canvas border border-hairline rounded-card px-4 py-3 transition">
                   <div className="flex items-center gap-3">
-                    <span className="w-6 h-6 rounded-full bg-emerald-500/10 text-emerald-400 flex items-center justify-center font-bold text-xs">
+                    <span className="w-6 h-6 rounded-full bg-status-ready-surface text-status-ready-ink flex items-center justify-center font-bold text-xs">
                       {i + 1}
                     </span>
-                    <span className="text-white text-sm font-semibold">{dish.name}</span>
+                    <span className="text-ink text-sm font-semibold">{dish.name}</span>
                   </div>
-                  <strong className="text-white text-sm bg-white/10 px-2.5 py-1 rounded-lg">
+                  <strong className="text-ink text-sm bg-white border border-hairline px-2.5 py-1 rounded-card">
                     {dish.qty} orders
                   </strong>
                 </div>
@@ -435,7 +435,7 @@ export default function AnalyticsDashboard({ orders = [], advancedEnabled = fals
             </div>
           </div>
         ) : (
-          <div className="analytics-empty py-16 flex flex-col items-center justify-center text-white/40"><FiTrendingUp size={36} /><strong className="text-white mt-2 block">No dish performance yet</strong><span>Popular dishes will appear after orders are completed.</span></div>
+          <div className="analytics-empty py-16 flex flex-col items-center justify-center"><FiTrendingUp size={36} /><strong className="mt-2 block">No dish performance yet</strong><span>Popular dishes will appear after orders are completed.</span></div>
         )}
       </article>
         </>

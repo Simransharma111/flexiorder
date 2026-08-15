@@ -32,7 +32,7 @@ export const contrastRatio = (first, second) => {
   return (lighter + 0.05) / (darker + 0.05);
 };
 
-const readableText = (color, preferred = "#17201d", minimum = 4.5) => {
+export const readableText = (color, preferred = "#17201d", minimum = 4.5) => {
   const dark = "#17201d";
   const light = "#f8fafc";
   if (contrastRatio(color, preferred) >= minimum) return preferred;
@@ -68,9 +68,13 @@ const strengthenForeground = (color, background, toward, minimum) => {
 };
 
 export const resolveHotelTheme = (hotel) => {
-  const saved = hotel?.theme || {};
-  const id = saved.id || saved.themeId;
-  const preset = HOTEL_THEMES[id] || FALLBACK_THEME;
+  const rawSaved = hotel?.theme || {};
+  const id = rawSaved.id || rawSaved.themeId;
+  const knownPreset = id ? HOTEL_THEMES[id] : null;
+  const preset = knownPreset || FALLBACK_THEME;
+  // Ids this app no longer ships (e.g. backend "stormy_morning" defaults) always
+  // resolve to the light default instead of leaking dark surfaces.
+  const saved = knownPreset || !id ? rawSaved : {};
   const brandOnlyLegacy = !id && (saved.primary || saved.primaryColor) &&
     !saved.secondary && !saved.secondaryColor && !saved.accent && !saved.accentColor && !saved.text;
   const primary = brandOnlyLegacy
@@ -86,13 +90,20 @@ export const resolveHotelTheme = (hotel) => {
 
   return {
     ...preset,
-    id: id || preset.id,
+    id: knownPreset ? id : preset.id,
     primary,
     secondary,
     accent,
     brand,
     text,
-    mode: ["light", "dark"].includes(saved.mode) ? saved.mode : preset.mode,
+    // A known palette owns its mode — a saved "dark" leaked by old backend
+    // defaults must not darken a light palette like mint_glow. Id-less custom
+    // palettes still honor their explicit mode.
+    mode: knownPreset
+      ? preset.mode
+      : ["light", "dark"].includes(saved.mode)
+        ? saved.mode
+        : preset.mode,
     onAccent: readableText(brand),
   };
 };

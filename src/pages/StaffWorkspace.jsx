@@ -33,8 +33,7 @@ export default function StaffWorkspace() {
   const [refreshing, setRefreshing] = useState(false);
   const [updatingOrdering, setUpdatingOrdering] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [moreOpen, setMoreOpen] = useState(false);
-  const settingsRevision = useRef(0);
+    const settingsRevision = useRef(0);
   const orderingRequestRevision = useRef(0);
   const currentRole = readStoredSession().user?.role;
 
@@ -218,23 +217,18 @@ export default function StaffWorkspace() {
       </header>
 
       {menuOpen && (
-        <div className="ops-sheet-backdrop" onClick={() => { setMenuOpen(false); setMoreOpen(false); }}>
+        <div className="ops-sheet-backdrop" onClick={() => setMenuOpen(false)}>
           <aside className="ops-tools-sheet" onClick={(event) => event.stopPropagation()}>
             <div className="ops-tools-sheet__brand"><strong>{hotel?.name || "Restaurant"}</strong><span>Waiter workspace</span></div>
             {canSwitch && <button type="button" onClick={() => navigate("/kitchen")}>Kitchen workspace</button>}
-            <button type="button" onClick={() => setMoreOpen((prev) => !prev)}>{moreOpen ? "▲ Fewer options" : "▾ More settings"}</button>
-            {moreOpen && (
-              <>
-                {["owner", "superadmin"].includes(currentRole) && (
-                  <button type="button" onClick={() => navigate("/owner/dashboard")}>Manage restaurant</button>
-                )}
-                {canEditMenu && <button type="button" onClick={() => navigate("/staff/menu")}>Edit menu</button>}
-                {canUseDisplay && <button type="button" onClick={() => navigate("/display")}>Public order display</button>}
-                {canChangeOrdering && <button type="button" onClick={toggleOrdering} disabled={updatingOrdering}><FiPower /> {hotel?.orderingEnabled === false ? "Turn customer ordering on" : "Pause customer ordering"}</button>}
-              </>
+            {["owner", "superadmin"].includes(currentRole) && (
+              <button type="button" onClick={() => navigate("/owner/dashboard")}>Manage restaurant</button>
             )}
+            {canEditMenu && <button type="button" onClick={() => navigate("/staff/menu")}>Edit menu</button>}
+            {canUseDisplay && <button type="button" onClick={() => navigate("/display")}>Public order display</button>}
+            {canChangeOrdering && <button type="button" onClick={toggleOrdering} disabled={updatingOrdering}><FiPower /> {hotel?.orderingEnabled === false ? "Turn customer ordering on" : "Pause customer ordering"}</button>}
             <button type="button" onClick={logout}><FiLogOut /> Sign out</button>
-            <button type="button" className="ops-sheet-cancel" onClick={() => { setMenuOpen(false); setMoreOpen(false); }}><FiX /> Close</button>
+            <button type="button" className="ops-sheet-cancel" onClick={() => setMenuOpen(false)}><FiX /> Close</button>
           </aside>
         </div>
       )}

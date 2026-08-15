@@ -7,6 +7,8 @@ import {
   receiptPrintHtml,
   receiptShareText,
 } from "../../utils/orderReceipt";
+import { Share } from "@capacitor/share";
+import { downloadFile, isNativeApp, writeTempShareFile } from "../../utils/fileDownload";
 
 export default function OrderReceiptActions({ order, hotel }) {
   const receipt = useMemo(() => buildOrderReceipt(order, hotel), [hotel, order]);
@@ -19,24 +21,53 @@ export default function OrderReceiptActions({ order, hotel }) {
     if (confirming) confirmRef.current?.focus();
   }, [confirming]);
 
-  const download = () => {
+  const download = async () => {
+    if (working) return;
+    setWorking(true);
+    setMessage("");
     try {
       const blob = createOrderReceiptPdfBlob(receipt);
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = receiptFilename(receipt);
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.setTimeout(() => URL.revokeObjectURL(url), 30000);
-      setMessage("Receipt downloaded.");
+      const filename = receiptFilename(receipt);
+      if (isNativeApp()) {
+        const saved = await downloadFile(blob, filename);
+        setMessage(`Saved to ${saved.label || `Downloads/FlexiOrder/${filename}`}.`);
+      } else {
+        await downloadFile(blob, filename);
+        setMessage("Receipt downloaded.");
+      }
     } catch {
-      setMessage("Could not create the PDF. Try Print instead.");
+      setMessage("Could not create or save the PDF. Try Print instead.");
+    } finally {
+      setWorking(false);
     }
   };
 
-  const print = () => {
+  const print = async () => {
+    if (working) return;
+    // In the app shell, open the PDF through the native share/print sheet:
+    // backable, shareable, and prints via the device's print service.
+    if (isNativeApp()) {
+      setWorking(true);
+      setMessage("");
+      try {
+        const blob = createOrderReceiptPdfBlob(receipt);
+        const uri = await writeTempShareFile(blob, receiptFilename(receipt));
+        await Share.share({
+          title: `${receipt.restaurant.name} receipt`,
+          text: "Receipt PDF",
+          url: uri,
+          dialogTitle: "Print or share this receipt",
+        });
+        setMessage("PDF opened. Pick Print or any app to share it.");
+      } catch (error) {
+        setMessage(error?.name === "AbortError"
+          ? "Sheet dismissed. Nothing was printed."
+          : "Could not open the PDF sheet. Try Download to save it first.");
+      } finally {
+        setWorking(false);
+      }
+      return;
+    }
     const printWindow = window.open("", "_blank");
     if (!printWindow) {
       setMessage("Print was blocked. Allow pop-ups and try again.");

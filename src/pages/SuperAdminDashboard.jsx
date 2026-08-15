@@ -10,11 +10,17 @@ import {
   FaPowerOff,
   FaSyncAlt,
   FaTimes,
+  FaSignOutAlt,
 } from "react-icons/fa";
 
 import api from "../api/axios";
 import { useNavigate } from "react-router-dom";
 import { clearAuthSession } from "../utils/session.js";
+
+const inputClass =
+  "w-full rounded-card border border-hairline bg-white px-4 py-3 text-[15px] text-ink placeholder:text-ink-disabled focus:border-brand focus:ring-2 focus:ring-brand/20 disabled:opacity-50";
+
+const labelClass = "mb-1.5 block text-sm font-bold text-ink";
 
 export default function SuperAdminDashboard() {
   const navigate = useNavigate();
@@ -32,6 +38,10 @@ export default function SuperAdminDashboard() {
   const [showModal, setShowModal] = useState(false);
 
   const [error, setError] = useState("");
+
+  const [modalError, setModalError] = useState("");
+
+  const [notice, setNotice] = useState(null);
 
   const [formData, setFormData] = useState({
     hotelName: "",
@@ -51,14 +61,7 @@ export default function SuperAdminDashboard() {
       setLoading(true);
       setError("");
 
-      console.log("FETCHING HOTELS...");
-
       const res = await api.get("/admin/hotels");
-
-      console.log(
-        "GET HOTELS RESPONSE:",
-        res.data
-      );
 
       /*
        * Backend response:
@@ -92,16 +95,6 @@ export default function SuperAdminDashboard() {
         err
       );
 
-      console.error(
-        "STATUS:",
-        err?.response?.status
-      );
-
-      console.error(
-        "DATA:",
-        err?.response?.data
-      );
-
       const message =
         err?.response?.data?.message ||
         "Failed to fetch hotels.";
@@ -129,6 +122,8 @@ export default function SuperAdminDashboard() {
   const handleFormChange = (e) => {
     const { name, value } = e.target;
 
+    if (modalError) setModalError("");
+
     setFormData((prev) => ({
       ...prev,
       [name]: value,
@@ -148,6 +143,7 @@ export default function SuperAdminDashboard() {
       ownerEmail: "",
       ownerPassword: "",
     });
+    setModalError("");
   };
 
   // =====================================================
@@ -181,27 +177,27 @@ export default function SuperAdminDashboard() {
       formData.ownerPassword.trim();
 
     if (!hotelName) {
-      alert("Please enter hotel name.");
+      setModalError("Please enter hotel name.");
       return;
     }
 
     if (!ownerName) {
-      alert("Please enter owner name.");
+      setModalError("Please enter owner name.");
       return;
     }
 
     if (!ownerEmail) {
-      alert("Please enter owner email.");
+      setModalError("Please enter owner email.");
       return;
     }
 
     if (!ownerPassword) {
-      alert("Please enter owner password.");
+      setModalError("Please enter owner password.");
       return;
     }
 
     if (ownerPassword.length < 6) {
-      alert(
+      setModalError(
         "Owner password must be at least 6 characters."
       );
       return;
@@ -209,6 +205,7 @@ export default function SuperAdminDashboard() {
 
     try {
       setActionLoading("create");
+      setModalError("");
 
       const payload = {
         hotelName,
@@ -219,19 +216,9 @@ export default function SuperAdminDashboard() {
         ownerPassword,
       };
 
-      console.log(
-        "CREATING HOTEL:",
-        payload
-      );
-
       const res = await api.post(
         "/admin/create-hotel",
         payload
-      );
-
-      console.log(
-        "CREATE HOTEL RESPONSE:",
-        res.data
       );
 
       if (!res.data?.success) {
@@ -253,16 +240,17 @@ export default function SuperAdminDashboard() {
 
       resetForm();
 
-      alert(
-        "Hotel and owner created successfully."
-      );
+      setNotice({
+        type: "success",
+        text: "Hotel and owner created successfully.",
+      });
     } catch (err) {
       console.error(
         "CREATE HOTEL ERROR:",
         err
       );
 
-      alert(
+      setModalError(
         err?.response?.data?.message ||
         err?.message ||
         "Failed to create hotel."
@@ -286,11 +274,6 @@ export default function SuperAdminDashboard() {
         `/admin/hotels/${id}/activate`
       );
 
-      console.log(
-        "ACTIVATE RESPONSE:",
-        res.data
-      );
-
       if (res.data?.hotel) {
         setHotels((prev) =>
           prev.map((hotel) =>
@@ -308,10 +291,12 @@ export default function SuperAdminDashboard() {
         err
       );
 
-      alert(
-        err?.response?.data?.message ||
-        "Failed to activate hotel."
-      );
+      setNotice({
+        type: "error",
+        text:
+          err?.response?.data?.message ||
+          "Failed to activate hotel.",
+      });
     } finally {
       setActionLoading(null);
     }
@@ -340,11 +325,6 @@ export default function SuperAdminDashboard() {
         `/admin/hotels/${id}/deactivate`
       );
 
-      console.log(
-        "DEACTIVATE RESPONSE:",
-        res.data
-      );
-
       if (res.data?.hotel) {
         setHotels((prev) =>
           prev.map((hotel) =>
@@ -362,10 +342,12 @@ export default function SuperAdminDashboard() {
         err
       );
 
-      alert(
-        err?.response?.data?.message ||
-        "Failed to deactivate hotel."
-      );
+      setNotice({
+        type: "error",
+        text:
+          err?.response?.data?.message ||
+          "Failed to deactivate hotel.",
+      });
     } finally {
       setActionLoading(null);
     }
@@ -390,13 +372,8 @@ export default function SuperAdminDashboard() {
     try {
       setActionLoading(id);
 
-      const res = await api.delete(
+      await api.delete(
         `/admin/hotels/${id}`
-      );
-
-      console.log(
-        "DELETE RESPONSE:",
-        res.data
       );
 
       setHotels((prev) =>
@@ -406,19 +383,22 @@ export default function SuperAdminDashboard() {
         )
       );
 
-      alert(
-        "Hotel and owner deleted successfully."
-      );
+      setNotice({
+        type: "success",
+        text: "Hotel and owner deleted successfully.",
+      });
     } catch (err) {
       console.error(
         "DELETE HOTEL ERROR:",
         err
       );
 
-      alert(
-        err?.response?.data?.message ||
-        "Failed to delete hotel."
-      );
+      setNotice({
+        type: "error",
+        text:
+          err?.response?.data?.message ||
+          "Failed to delete hotel.",
+      });
     } finally {
       setActionLoading(null);
     }
@@ -469,25 +449,26 @@ export default function SuperAdminDashboard() {
   // =====================================================
 
   return (
-    <div className="min-h-screen bg-[#0F172A] text-white p-4 md:p-6">
+    <div className="min-h-screen bg-canvas text-ink">
+      <div className="mx-auto w-full max-w-6xl p-4 md:p-6">
 
       {/* =================================================
           HEADER
       ================================================= */}
 
-      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-5 mb-8">
+      <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
 
         <div>
-          <h1 className="text-3xl md:text-4xl font-bold">
-            Super Admin Dashboard
+          <h1 className="text-2xl font-extrabold tracking-tight md:text-3xl">
+            Super Admin
           </h1>
 
-          <p className="text-gray-400 mt-2">
-            Manage hotels and owners
+          <p className="mt-1 text-sm text-ink-secondary">
+            Manage hotels and owner accounts
           </p>
         </div>
 
-        <div className="flex gap-3 flex-wrap">
+        <div className="flex flex-wrap gap-2.5">
 
           {/* REFRESH */}
 
@@ -495,7 +476,7 @@ export default function SuperAdminDashboard() {
             type="button"
             onClick={fetchHotels}
             disabled={loading}
-            className="px-4 py-3 rounded-xl bg-white/10 hover:bg-white/20 border border-white/10 font-semibold flex items-center gap-2 disabled:opacity-50"
+            className="flex min-h-11 items-center gap-2 rounded-card border border-hairline bg-white px-4 text-sm font-bold text-ink transition hover:bg-subtle disabled:opacity-50"
           >
             <FaSyncAlt
               className={
@@ -503,6 +484,7 @@ export default function SuperAdminDashboard() {
                   ? "animate-spin"
                   : ""
               }
+              aria-hidden="true"
             />
 
             Refresh
@@ -515,9 +497,9 @@ export default function SuperAdminDashboard() {
             onClick={() =>
               setShowModal(true)
             }
-            className="bg-orange-500 hover:bg-orange-600 transition px-5 py-3 rounded-xl font-semibold flex items-center gap-2"
+            className="flex min-h-11 items-center gap-2 rounded-card bg-brand px-4 text-sm font-bold text-white transition hover:bg-brand-strong"
           >
-            <FaPlus />
+            <FaPlus aria-hidden="true" />
 
             Create Hotel
           </button>
@@ -527,8 +509,10 @@ export default function SuperAdminDashboard() {
           <button
             type="button"
             onClick={handleLogout}
-            className="bg-red-600 hover:bg-red-700 transition px-5 py-3 rounded-xl font-semibold"
+            className="flex min-h-11 items-center gap-2 rounded-card border border-status-delayed-line/40 bg-white px-4 text-sm font-bold text-status-delayed-ink transition hover:bg-status-delayed-surface"
           >
+            <FaSignOutAlt aria-hidden="true" />
+
             Logout
           </button>
 
@@ -536,20 +520,46 @@ export default function SuperAdminDashboard() {
       </div>
 
       {/* =================================================
+          NOTICE
+      ================================================= */}
+
+      {notice && (
+        <div
+          role="status"
+          className={`mb-5 flex items-start justify-between gap-3 rounded-card border px-4 py-3 text-sm font-semibold ${
+            notice.type === "success"
+              ? "border-status-ready-line/40 bg-status-ready-surface text-status-ready-ink"
+              : "border-status-delayed-line/40 bg-status-delayed-surface text-status-delayed-ink"
+          }`}
+        >
+          {notice.text}
+
+          <button
+            type="button"
+            onClick={() => setNotice(null)}
+            aria-label="Dismiss message"
+            className="rounded-sm p-0.5 opacity-70 transition hover:opacity-100"
+          >
+            <FaTimes aria-hidden="true" />
+          </button>
+        </div>
+      )}
+
+      {/* =================================================
           ERROR
       ================================================= */}
 
       {error && (
-        <div className="mb-6 bg-red-500/10 border border-red-500/30 rounded-2xl p-4">
+        <div className="mb-5 rounded-card border border-status-delayed-line/40 bg-status-delayed-surface p-4">
 
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
 
-            <div>
-              <p className="font-semibold text-red-400">
+            <div role="alert">
+              <p className="text-sm font-bold text-status-delayed-ink">
                 Unable to load hotels
               </p>
 
-              <p className="text-sm text-red-300/80 mt-1">
+              <p className="mt-0.5 text-sm text-status-delayed-ink/80">
                 {error}
               </p>
             </div>
@@ -557,7 +567,7 @@ export default function SuperAdminDashboard() {
             <button
               type="button"
               onClick={fetchHotels}
-              className="px-4 py-2 rounded-xl bg-red-500/20 hover:bg-red-500/30 text-red-300 font-semibold"
+              className="min-h-10 shrink-0 rounded-card border border-status-delayed-line/40 bg-white px-4 text-sm font-bold text-status-delayed-ink transition hover:bg-status-delayed-surface"
             >
               Try Again
             </button>
@@ -570,76 +580,76 @@ export default function SuperAdminDashboard() {
           STATS
       ================================================= */}
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
+      <dl className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
 
         {/* TOTAL */}
 
-        <div className="bg-white/5 border border-white/10 rounded-2xl p-5">
+        <div className="rounded-card border border-hairline bg-white p-4 shadow-card">
 
-          <p className="text-gray-400">
+          <dt className="text-xs font-bold uppercase tracking-wider text-ink-disabled">
             Total Hotels
-          </p>
+          </dt>
 
-          <h2 className="text-4xl font-bold mt-2">
+          <dd className="mt-1.5 text-3xl font-extrabold text-ink">
             {totalHotels}
-          </h2>
+          </dd>
 
         </div>
 
         {/* ACTIVE */}
 
-        <div className="bg-green-500/10 border border-green-500/20 rounded-2xl p-5">
+        <div className="rounded-card border-l-4 border-y border-r border-hairline border-l-status-ready-line bg-white p-4 shadow-card">
 
-          <p className="text-green-400">
-            Active Hotels
-          </p>
+          <dt className="text-xs font-bold uppercase tracking-wider text-status-ready-ink">
+            Active
+          </dt>
 
-          <h2 className="text-4xl font-bold mt-2 text-green-400">
+          <dd className="mt-1.5 text-3xl font-extrabold text-status-ready-ink">
             {activeHotels}
-          </h2>
+          </dd>
 
         </div>
 
         {/* INACTIVE */}
 
-        <div className="bg-red-500/10 border border-red-500/20 rounded-2xl p-5">
+        <div className="rounded-card border-l-4 border-y border-r border-hairline border-l-status-delayed-line bg-white p-4 shadow-card">
 
-          <p className="text-red-400">
-            Inactive Hotels
-          </p>
+          <dt className="text-xs font-bold uppercase tracking-wider text-status-delayed-ink">
+            Inactive
+          </dt>
 
-          <h2 className="text-4xl font-bold mt-2 text-red-400">
+          <dd className="mt-1.5 text-3xl font-extrabold text-status-delayed-ink">
             {inactiveHotels}
-          </h2>
+          </dd>
 
         </div>
 
-      </div>
+      </dl>
 
       {/* =================================================
           HOTEL LIST
       ================================================= */}
 
-      <div className="bg-white/5 border border-white/10 rounded-2xl p-4 md:p-6">
+      <section className="rounded-panel border border-hairline bg-white p-4 shadow-card md:p-6" aria-label="Hotels">
 
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
+        <div className="mb-5 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
 
           <div>
-            <h2 className="text-2xl md:text-3xl font-bold">
+            <h2 className="text-xl font-extrabold">
               Hotels
             </h2>
 
-            <p className="text-gray-400 mt-1">
+            <p className="mt-0.5 text-sm text-ink-secondary">
               Manage hotel accounts and access
             </p>
           </div>
 
-          <div className="text-sm text-gray-400">
+          <p className="text-sm font-semibold text-ink-secondary">
             {totalHotels}{" "}
             {totalHotels === 1
               ? "hotel"
               : "hotels"}
-          </div>
+          </p>
 
         </div>
 
@@ -649,12 +659,12 @@ export default function SuperAdminDashboard() {
 
         {loading ? (
 
-          <div className="text-center py-20">
+          <div className="py-16 text-center">
 
-            <FaSyncAlt className="mx-auto text-4xl text-orange-400 animate-spin mb-4" />
+            <FaSyncAlt className="mx-auto mb-3 animate-spin text-3xl text-brand" aria-hidden="true" />
 
-            <p className="text-gray-400">
-              Loading hotels...
+            <p className="text-sm font-semibold text-ink-secondary">
+              Loading hotels…
             </p>
 
           </div>
@@ -665,15 +675,15 @@ export default function SuperAdminDashboard() {
              EMPTY
           ================================================= */
 
-          <div className="text-center py-20 text-gray-400">
+          <div className="py-16 text-center">
 
-            <FaHotel className="mx-auto text-5xl mb-4 opacity-40" />
+            <FaHotel className="mx-auto mb-4 text-4xl text-ink-disabled" aria-hidden="true" />
 
-            <h3 className="text-xl font-semibold text-gray-300">
-              No hotels found
+            <h3 className="text-lg font-extrabold text-ink">
+              No hotels yet
             </h3>
 
-            <p className="mt-2 text-sm">
+            <p className="mt-1.5 text-sm text-ink-secondary">
               Create a hotel to get started.
             </p>
 
@@ -682,9 +692,9 @@ export default function SuperAdminDashboard() {
               onClick={() =>
                 setShowModal(true)
               }
-              className="mt-5 bg-orange-500 hover:bg-orange-600 px-5 py-3 rounded-xl font-semibold inline-flex items-center gap-2"
+              className="mt-5 inline-flex min-h-11 items-center gap-2 rounded-card bg-brand px-5 text-sm font-bold text-white transition hover:bg-brand-strong"
             >
-              <FaPlus />
+              <FaPlus aria-hidden="true" />
 
               Create Hotel
             </button>
@@ -697,7 +707,7 @@ export default function SuperAdminDashboard() {
              HOTELS
           ================================================= */
 
-          <div className="space-y-4">
+          <div className="space-y-3.5">
 
             {hotels.map((hotel) => {
 
@@ -713,12 +723,12 @@ export default function SuperAdminDashboard() {
 
               return (
 
-                <div
+                <article
                   key={hotel._id}
-                  className={`border rounded-2xl p-5 transition ${
+                  className={`rounded-card border p-4 md:p-5 ${
                     isActive
-                      ? "bg-white/5 border-white/10"
-                      : "bg-red-500/5 border-red-500/20"
+                      ? "border-hairline bg-white"
+                      : "border-status-delayed-line/40 bg-status-delayed-surface/40"
                   }`}
                 >
 
@@ -726,7 +736,7 @@ export default function SuperAdminDashboard() {
                       HOTEL TOP
                   ================================================= */}
 
-                  <div className="flex flex-col xl:flex-row xl:items-start xl:justify-between gap-5">
+                  <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
 
                     {/* HOTEL INFO */}
 
@@ -734,20 +744,20 @@ export default function SuperAdminDashboard() {
 
                       <div className="flex items-start gap-3">
 
-                        <div className="bg-orange-500/10 p-3 rounded-xl shrink-0">
+                        <span className="grid h-11 w-11 shrink-0 place-items-center rounded-card bg-brand-light text-brand">
 
-                          <FaHotel className="text-orange-400 text-xl" />
+                          <FaHotel aria-hidden="true" />
 
-                        </div>
+                        </span>
 
                         <div className="min-w-0">
 
-                          <h3 className="text-xl md:text-2xl font-bold break-words">
+                          <h3 className="break-words text-lg font-extrabold text-ink md:text-xl">
                             {hotel.name ||
                               "Unnamed Hotel"}
                           </h3>
 
-                          <p className="text-xs text-gray-500 mt-1 break-all">
+                          <p className="mt-0.5 break-all text-xs text-ink-disabled">
                             ID:{" "}
                             {hotel._id}
                           </p>
@@ -760,29 +770,29 @@ export default function SuperAdminDashboard() {
                           HOTEL DETAILS
                       ================================================= */}
 
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-5">
+                      <div className="mt-4 grid grid-cols-1 gap-2.5 md:grid-cols-2">
 
-                        <div className="flex items-start gap-2 text-gray-300">
+                        <p className="flex items-start gap-2 text-sm text-ink-secondary">
 
-                          <FaMapMarkerAlt className="text-gray-500 mt-1 shrink-0" />
+                          <FaMapMarkerAlt className="mt-0.5 shrink-0 text-ink-disabled" aria-hidden="true" />
 
                           <span>
                             {hotel.address ||
                               "No address"}
                           </span>
 
-                        </div>
+                        </p>
 
-                        <div className="flex items-center gap-2 text-gray-300">
+                        <p className="flex items-center gap-2 text-sm text-ink-secondary">
 
-                          <FaPhone className="text-gray-500 shrink-0" />
+                          <FaPhone className="shrink-0 text-ink-disabled" aria-hidden="true" />
 
                           <span>
                             {hotel.phone ||
                               "No phone"}
                           </span>
 
-                        </div>
+                        </p>
 
                       </div>
 
@@ -792,35 +802,35 @@ export default function SuperAdminDashboard() {
 
                       {owner ? (
 
-                        <div className="mt-5 bg-black/20 border border-white/5 rounded-xl p-4">
+                        <div className="mt-4 rounded-card border border-hairline bg-canvas p-3.5">
 
-                          <p className="text-xs uppercase tracking-wider text-gray-500 mb-3">
-                            Owner Details
+                          <p className="mb-2.5 text-xs font-bold uppercase tracking-wider text-ink-disabled">
+                            Owner
                           </p>
 
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2">
 
-                            <div className="flex items-center gap-2 min-w-0">
+                            <p className="flex min-w-0 items-center gap-2 text-sm font-semibold text-ink">
 
-                              <FaUser className="text-orange-400 shrink-0" />
+                              <FaUser className="shrink-0 text-brand" aria-hidden="true" />
 
                               <span className="truncate">
                                 {owner.name ||
                                   "No name"}
                               </span>
 
-                            </div>
+                            </p>
 
-                            <div className="flex items-center gap-2 min-w-0">
+                            <p className="flex min-w-0 items-center gap-2 text-sm font-semibold text-ink">
 
-                              <FaEnvelope className="text-orange-400 shrink-0" />
+                              <FaEnvelope className="shrink-0 text-brand" aria-hidden="true" />
 
                               <span className="break-all">
                                 {owner.email ||
                                   "No email"}
                               </span>
 
-                            </div>
+                            </p>
 
                           </div>
 
@@ -828,9 +838,9 @@ export default function SuperAdminDashboard() {
 
                       ) : (
 
-                        <div className="mt-5 bg-yellow-500/5 border border-yellow-500/10 rounded-xl p-4">
+                        <div className="mt-4 rounded-card border border-status-new-line/40 bg-status-new-surface p-3.5">
 
-                          <p className="text-sm text-yellow-400">
+                          <p className="text-sm font-semibold text-status-new-ink">
                             No owner is linked to this hotel.
                           </p>
 
@@ -844,33 +854,33 @@ export default function SuperAdminDashboard() {
                         STATUS
                     ================================================= */}
 
-                    <div className="flex flex-col items-start xl:items-end gap-3">
+                    <div className="flex flex-col items-start gap-2 xl:items-end">
 
                       <span
-                        className={`px-4 py-2 rounded-full text-sm font-semibold ${
+                        className={`rounded-full px-3.5 py-1.5 text-xs font-extrabold ${
                           isActive
-                            ? "bg-green-500/20 text-green-400"
-                            : "bg-red-500/20 text-red-400"
+                            ? "bg-status-ready-surface text-status-ready-ink"
+                            : "bg-status-delayed-surface text-status-delayed-ink"
                         }`}
                       >
                         {isActive
-                          ? "● Active"
-                          : "● Inactive"}
+                          ? "Active"
+                          : "Inactive"}
                       </span>
 
                       {hotel.setupCompleted !==
                         undefined && (
 
                         <span
-                          className={`px-3 py-1.5 rounded-lg text-xs font-semibold ${
+                          className={`rounded-full px-3 py-1 text-xs font-bold ${
                             hotel.setupCompleted
-                              ? "bg-blue-500/10 text-blue-400"
-                              : "bg-yellow-500/10 text-yellow-400"
+                              ? "bg-status-preparing-surface text-status-preparing-ink"
+                              : "bg-status-new-surface text-status-new-ink"
                           }`}
                         >
                           {hotel.setupCompleted
-                            ? "Setup Complete"
-                            : "Setup Pending"}
+                            ? "Setup complete"
+                            : "Setup pending"}
                         </span>
 
                       )}
@@ -883,7 +893,7 @@ export default function SuperAdminDashboard() {
                       ACTIONS
                   ================================================= */}
 
-                  <div className="flex flex-wrap gap-3 mt-5 pt-5 border-t border-white/10">
+                  <div className="mt-4 flex flex-wrap gap-2.5 border-t border-hairline pt-4">
 
                     {isActive ? (
 
@@ -895,13 +905,13 @@ export default function SuperAdminDashboard() {
                             hotel._id
                           )
                         }
-                        className="bg-yellow-500/10 hover:bg-yellow-500/20 text-yellow-400 border border-yellow-500/20 px-4 py-2.5 rounded-xl font-semibold flex items-center gap-2 disabled:opacity-50"
+                        className="flex min-h-10 items-center gap-2 rounded-card border border-status-new-line/40 bg-status-new-surface px-4 text-sm font-bold text-status-new-ink transition hover:brightness-95 disabled:opacity-50"
                       >
 
-                        <FaPowerOff />
+                        <FaPowerOff aria-hidden="true" />
 
                         {isLoading
-                          ? "Please wait..."
+                          ? "Please wait…"
                           : "Deactivate"}
 
                       </button>
@@ -916,13 +926,13 @@ export default function SuperAdminDashboard() {
                             hotel._id
                           )
                         }
-                        className="bg-green-500/10 hover:bg-green-500/20 text-green-400 border border-green-500/20 px-4 py-2.5 rounded-xl font-semibold flex items-center gap-2 disabled:opacity-50"
+                        className="flex min-h-10 items-center gap-2 rounded-card border border-status-ready-line/40 bg-status-ready-surface px-4 text-sm font-bold text-status-ready-ink transition hover:brightness-95 disabled:opacity-50"
                       >
 
-                        <FaPowerOff />
+                        <FaPowerOff aria-hidden="true" />
 
                         {isLoading
-                          ? "Please wait..."
+                          ? "Please wait…"
                           : "Activate"}
 
                       </button>
@@ -939,20 +949,20 @@ export default function SuperAdminDashboard() {
                           hotel._id
                         )
                       }
-                      className="bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 px-4 py-2.5 rounded-xl font-semibold flex items-center gap-2 disabled:opacity-50"
+                      className="flex min-h-10 items-center gap-2 rounded-card border border-status-delayed-line/40 bg-white px-4 text-sm font-bold text-status-delayed-ink transition hover:bg-status-delayed-surface disabled:opacity-50"
                     >
 
-                      <FaTrash />
+                      <FaTrash aria-hidden="true" />
 
                       {isLoading
-                        ? "Please wait..."
+                        ? "Please wait…"
                         : "Delete"}
 
                     </button>
 
                   </div>
 
-                </div>
+                </article>
 
               );
             })}
@@ -961,7 +971,7 @@ export default function SuperAdminDashboard() {
 
         )}
 
-      </div>
+      </section>
 
       {/* =================================================
           CREATE HOTEL MODAL
@@ -969,21 +979,26 @@ export default function SuperAdminDashboard() {
 
       {showModal && (
 
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex justify-center items-center p-4 overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-ink/50 p-4">
 
-          <div className="bg-[#111827] border border-white/10 rounded-3xl w-full max-w-xl p-6 my-8 shadow-2xl">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="create-hotel-title"
+            className="my-8 w-full max-w-xl rounded-panel border border-hairline bg-white p-6 shadow-pop"
+          >
 
             {/* MODAL HEADER */}
 
-            <div className="flex items-center justify-between mb-6">
+            <div className="mb-5 flex items-start justify-between gap-4">
 
               <div>
-                <h2 className="text-2xl md:text-3xl font-bold">
+                <h2 id="create-hotel-title" className="text-xl font-extrabold md:text-2xl">
                   Create Hotel
                 </h2>
 
-                <p className="text-gray-400 text-sm mt-1">
-                  Create a hotel and its owner account.
+                <p className="mt-1 text-sm text-ink-secondary">
+                  Creates a hotel and its owner login.
                 </p>
               </div>
 
@@ -994,20 +1009,31 @@ export default function SuperAdminDashboard() {
                   actionLoading ===
                   "create"
                 }
-                className="p-2 rounded-xl bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white disabled:opacity-50"
+                aria-label="Close dialog"
+                className="grid h-10 w-10 shrink-0 place-items-center rounded-card text-ink-secondary transition hover:bg-subtle hover:text-ink disabled:opacity-50"
               >
-                <FaTimes />
+                <FaTimes aria-hidden="true" />
               </button>
 
             </div>
 
+            {modalError && (
+              <p
+                role="alert"
+                className="mb-4 rounded-card border border-status-delayed-line/40 bg-status-delayed-surface px-3.5 py-2.5 text-sm font-semibold text-status-delayed-ink"
+              >
+                {modalError}
+              </p>
+            )}
+
             {/* HOTEL NAME */}
 
-            <label className="block text-sm text-gray-300 mb-2">
+            <label htmlFor="hotelName" className={labelClass}>
               Hotel Name *
             </label>
 
             <input
+              id="hotelName"
               type="text"
               name="hotelName"
               placeholder="Hotel Name"
@@ -1021,16 +1047,17 @@ export default function SuperAdminDashboard() {
                 actionLoading ===
                 "create"
               }
-              className="w-full mb-4 bg-white/10 border border-white/10 rounded-xl px-4 py-3 outline-none focus:border-orange-500 disabled:opacity-50"
+              className={`${inputClass} mb-4`}
             />
 
             {/* ADDRESS */}
 
-            <label className="block text-sm text-gray-300 mb-2">
+            <label htmlFor="hotelAddress" className={labelClass}>
               Hotel Address
             </label>
 
             <input
+              id="hotelAddress"
               type="text"
               name="address"
               placeholder="Hotel address"
@@ -1044,16 +1071,17 @@ export default function SuperAdminDashboard() {
                 actionLoading ===
                 "create"
               }
-              className="w-full mb-4 bg-white/10 border border-white/10 rounded-xl px-4 py-3 outline-none focus:border-orange-500 disabled:opacity-50"
+              className={`${inputClass} mb-4`}
             />
 
             {/* PHONE */}
 
-            <label className="block text-sm text-gray-300 mb-2">
+            <label htmlFor="hotelPhone" className={labelClass}>
               Hotel Phone
             </label>
 
             <input
+              id="hotelPhone"
               type="text"
               name="phone"
               placeholder="Hotel phone"
@@ -1067,16 +1095,17 @@ export default function SuperAdminDashboard() {
                 actionLoading ===
                 "create"
               }
-              className="w-full mb-4 bg-white/10 border border-white/10 rounded-xl px-4 py-3 outline-none focus:border-orange-500 disabled:opacity-50"
+              className={`${inputClass} mb-4`}
             />
 
             {/* OWNER NAME */}
 
-            <label className="block text-sm text-gray-300 mb-2">
+            <label htmlFor="ownerName" className={labelClass}>
               Owner Name *
             </label>
 
             <input
+              id="ownerName"
               type="text"
               name="ownerName"
               placeholder="Owner name"
@@ -1090,16 +1119,17 @@ export default function SuperAdminDashboard() {
                 actionLoading ===
                 "create"
               }
-              className="w-full mb-4 bg-white/10 border border-white/10 rounded-xl px-4 py-3 outline-none focus:border-orange-500 disabled:opacity-50"
+              className={`${inputClass} mb-4`}
             />
 
             {/* OWNER EMAIL */}
 
-            <label className="block text-sm text-gray-300 mb-2">
+            <label htmlFor="ownerEmail" className={labelClass}>
               Owner Email *
             </label>
 
             <input
+              id="ownerEmail"
               type="email"
               name="ownerEmail"
               placeholder="owner@example.com"
@@ -1113,16 +1143,17 @@ export default function SuperAdminDashboard() {
                 actionLoading ===
                 "create"
               }
-              className="w-full mb-4 bg-white/10 border border-white/10 rounded-xl px-4 py-3 outline-none focus:border-orange-500 disabled:opacity-50"
+              className={`${inputClass} mb-4`}
             />
 
             {/* PASSWORD */}
 
-            <label className="block text-sm text-gray-300 mb-2">
+            <label htmlFor="ownerPassword" className={labelClass}>
               Owner Password *
             </label>
 
             <input
+              id="ownerPassword"
               type="password"
               name="ownerPassword"
               placeholder="Minimum 6 characters"
@@ -1136,7 +1167,7 @@ export default function SuperAdminDashboard() {
                 actionLoading ===
                 "create"
               }
-              className="w-full mb-6 bg-white/10 border border-white/10 rounded-xl px-4 py-3 outline-none focus:border-orange-500 disabled:opacity-50"
+              className={`${inputClass} mb-5`}
             />
 
             {/* BUTTONS */}
@@ -1150,7 +1181,7 @@ export default function SuperAdminDashboard() {
                   actionLoading ===
                   "create"
                 }
-                className="flex-1 bg-white/10 hover:bg-white/20 py-3 rounded-xl disabled:opacity-50"
+                className="min-h-11 flex-1 rounded-card border border-hairline bg-white text-sm font-bold text-ink transition hover:bg-subtle disabled:opacity-50"
               >
                 Cancel
               </button>
@@ -1162,22 +1193,22 @@ export default function SuperAdminDashboard() {
                   actionLoading ===
                   "create"
                 }
-                className="flex-1 bg-orange-500 hover:bg-orange-600 py-3 rounded-xl font-semibold disabled:opacity-50 flex items-center justify-center gap-2"
+                className="flex min-h-11 flex-1 items-center justify-center gap-2 rounded-card bg-brand text-sm font-bold text-white transition hover:bg-brand-strong disabled:opacity-50"
               >
 
                 {actionLoading ===
                 "create" ? (
 
                   <>
-                    <FaSyncAlt className="animate-spin" />
+                    <FaSyncAlt className="animate-spin" aria-hidden="true" />
 
-                    Creating...
+                    Creating…
                   </>
 
                 ) : (
 
                   <>
-                    <FaPlus />
+                    <FaPlus aria-hidden="true" />
 
                     Create Hotel
                   </>
@@ -1194,6 +1225,7 @@ export default function SuperAdminDashboard() {
 
       )}
 
+      </div>
     </div>
   );
 }

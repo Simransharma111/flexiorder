@@ -26,6 +26,8 @@ export default function AuthPage({ mode = "login" }) {
 
   const [loading, setLoading] = useState(false);
 
+  const [formError, setFormError] = useState("");
+
   const [formData, setFormData] = useState({
     name: "",
     email: "",
@@ -50,6 +52,8 @@ export default function AuthPage({ mode = "login" }) {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
+
+    if (formError) setFormError("");
 
     setFormData((prev) => ({
       ...prev,
@@ -209,12 +213,12 @@ export default function AuthPage({ mode = "login" }) {
     // ===================================================
 
     if (!email) {
-      alert("Please enter your email address.");
+      setFormError("Please enter your email address.");
       return;
     }
 
     if (!password) {
-      alert("Please enter your password.");
+      setFormError("Please enter your password.");
       return;
     }
 
@@ -230,7 +234,7 @@ export default function AuthPage({ mode = "login" }) {
         formData.phone.trim();
 
       if (!name) {
-        alert("Please enter your name.");
+        setFormError("Please enter your name.");
         return;
       }
 
@@ -239,16 +243,12 @@ export default function AuthPage({ mode = "login" }) {
           phone
         )
       ) {
-        alert(
-          "Please enter a valid phone number."
-        );
+        setFormError("Please enter a valid phone number.");
         return;
       }
 
       if (password.length < 6) {
-        alert(
-          "Password must be at least 6 characters."
-        );
+        setFormError("Password must be at least 6 characters.");
         return;
       }
 
@@ -256,9 +256,7 @@ export default function AuthPage({ mode = "login" }) {
         password !==
         formData.confirmPassword
       ) {
-        alert(
-          "Passwords do not match."
-        );
+        setFormError("Passwords do not match.");
         return;
       }
     }
@@ -490,7 +488,7 @@ export default function AuthPage({ mode = "login" }) {
           err.message;
       }
 
-      alert(message);
+      setFormError(message);
     } finally {
       setLoading(false);
     }
@@ -501,296 +499,270 @@ export default function AuthPage({ mode = "login" }) {
   // =====================================================
 
   const inputClass =
-    "w-full rounded-2xl bg-slate-900/70 border border-white/10 px-5 py-4 text-slate-100 placeholder:text-slate-500 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 disabled:opacity-60";
+    "w-full rounded-card border border-hairline bg-white px-4 py-3.5 text-[15px] text-ink placeholder:text-ink-disabled focus:border-brand focus:ring-2 focus:ring-brand/20 disabled:opacity-60";
 
   // =====================================================
   // JSX
   // =====================================================
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center px-4 sm:px-6 py-8 sm:py-10 relative overflow-hidden">
+    <div className="min-h-screen bg-canvas px-4 pb-10 pt-6 text-ink sm:px-6">
+      <div className="mx-auto flex min-h-[calc(100vh-4rem)] w-full max-w-6xl flex-col">
 
-      {/* BACKGROUND */}
+        {/* TOP BAR */}
 
-      <div className="absolute top-0 left-0 h-[350px] w-[350px] sm:h-[500px] sm:w-[500px] rounded-full bg-blue-600/20 blur-[120px] sm:blur-[150px]" />
-
-      <div className="absolute bottom-0 right-0 h-[350px] w-[350px] sm:h-[500px] sm:w-[500px] rounded-full bg-cyan-500/20 blur-[120px] sm:blur-[150px]" />
-
-      <div className="relative grid max-w-6xl w-full gap-8 lg:gap-10 lg:grid-cols-2 items-center">
-
-        {/* =================================================
-            BRAND
-        ================================================= */}
-
-        <div className="hidden lg:block">
-
-          <div className="inline-flex items-center gap-2 rounded-full border border-blue-500/30 bg-blue-500/10 px-4 py-2 text-blue-300">
-            <FiCheckCircle />
-            Trusted by modern restaurants
-          </div>
-
-          <h1 className="mt-8 text-5xl xl:text-6xl font-black leading-tight">
-            Run Your
-
-            <span className="block bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent">
-              Restaurant Smarter
+        <header className="flex items-center justify-between">
+          <Link to="/" className="flex items-center gap-2.5" aria-label="FlexiOrder home">
+            <span className="grid h-9 w-9 place-items-center rounded-card bg-brand text-lg font-extrabold text-white">
+              F
             </span>
-          </h1>
+            <span className="text-lg font-extrabold tracking-tight text-ink">
+              FlexiOrder
+            </span>
+          </Link>
 
-          <p className="mt-6 text-lg text-slate-400 max-w-xl">
-            FlexiOrder connects QR
-            ordering, waiter ordering,
-            kitchen display, staff
-            management and analytics into
-            one powerful platform.
-          </p>
-
-          <div className="mt-10 grid grid-cols-3 gap-4">
-
-            <div className="rounded-2xl bg-white/5 border border-white/10 p-5">
-              <FiSmartphone className="text-blue-400 text-2xl" />
-
-              <p className="mt-3 font-semibold">
-                QR Orders
-              </p>
-            </div>
-
-            <div className="rounded-2xl bg-white/5 border border-white/10 p-5">
-              <FiUsers className="text-cyan-400 text-2xl" />
-
-              <p className="mt-3 font-semibold">
-                Staff
-              </p>
-            </div>
-
-            <div className="rounded-2xl bg-white/5 border border-white/10 p-5">
-              <FiGrid className="text-indigo-400 text-2xl" />
-
-              <p className="mt-3 font-semibold">
-                Kitchen
-              </p>
-            </div>
-
-          </div>
-        </div>
-
-        {/* =================================================
-            AUTH CARD
-        ================================================= */}
-
-        <div className="w-full max-w-xl mx-auto rounded-[28px] sm:rounded-[32px] border border-white/10 bg-white/5 backdrop-blur-xl p-5 sm:p-8 shadow-2xl">
-
-          {/* LOGO */}
-
-          <div className="flex justify-center">
-
-            <div className="h-16 w-16 sm:h-20 sm:w-20 rounded-3xl overflow-hidden bg-white shadow-xl">
-
-              <img
-                src="/logo.jpg"
-                alt="FlexiOrder Logo"
-                className="h-full w-full object-contain"
-              />
-
-            </div>
-
-          </div>
-
-          {/* TITLE */}
-
-          <h2 className="mt-5 sm:mt-6 text-center text-2xl sm:text-3xl font-bold">
-            FlexiOrder
-          </h2>
-
-          <p className="text-center mt-2 text-sm sm:text-base text-slate-400">
-            {isRegister
-              ? "Create your owner account"
-              : "Welcome back to your dashboard"}
-          </p>
-
-          {/* TABS */}
-
-          <div className="mt-6 sm:mt-8 flex rounded-2xl bg-black/20 p-1">
-
-            <Link
-              to="/login"
-              className={`flex-1 rounded-xl py-3 text-center font-semibold transition ${
-                !isRegister
-                  ? "bg-blue-600 text-white"
-                  : "text-slate-400 hover:text-white"
-              }`}
-            >
-              Login
-            </Link>
-
-            <Link
-              to="/register"
-              className={`flex-1 rounded-xl py-3 text-center font-semibold transition ${
-                isRegister
-                  ? "bg-blue-600 text-white"
-                  : "text-slate-400 hover:text-white"
-              }`}
-            >
-              Register
-            </Link>
-
-          </div>
-
-          {/* FORM */}
-
-          <form
-            onSubmit={handleSubmit}
-            className="mt-6 sm:mt-8 space-y-5"
+          <Link
+            to={isRegister ? "/login" : "/register"}
+            className="text-sm font-bold text-brand hover:text-brand-strong"
           >
+            {isRegister ? "Login instead" : "Create an account"}
+          </Link>
+        </header>
 
-            {/* OWNER DETAILS */}
+        <div className="grid flex-1 items-center gap-10 py-8 lg:grid-cols-2 lg:gap-14">
 
-            {isRegister && (
-              <div className="space-y-5">
+          {/* =================================================
+              PRODUCT SUMMARY
+          ================================================= */}
 
-                <div>
-                  <p className="text-sm font-semibold text-blue-400">
-                    Create Owner Account
-                  </p>
+          <div className="hidden lg:block">
+            <h1 className="text-4xl font-extrabold leading-[1.12] tracking-tight xl:text-5xl">
+              One workspace for your whole restaurant.
+            </h1>
 
-                  <p className="mt-1 text-xs text-slate-500">
-                    First create your account.
-                    You'll add your hotel details
-                    on the next page.
-                  </p>
+            <p className="mt-5 max-w-md text-base leading-7 text-ink-secondary">
+              QR ordering, waiter ordering, kitchen display, menu control
+              and reports — one login for every role.
+            </p>
+
+            <div className="mt-10 grid grid-cols-3 gap-3">
+              {[
+                { icon: <FiSmartphone aria-hidden="true" />, label: "QR orders" },
+                { icon: <FiUsers aria-hidden="true" />, label: "Staff roles" },
+                { icon: <FiGrid aria-hidden="true" />, label: "Kitchen board" },
+              ].map((item) => (
+                <div
+                  key={item.label}
+                  className="rounded-sheet border border-hairline bg-white p-4 shadow-card"
+                >
+                  <span className="grid h-10 w-10 place-items-center rounded-card bg-brand-light text-brand">
+                    {item.icon}
+                  </span>
+                  <p className="mt-3 text-sm font-bold text-ink">{item.label}</p>
                 </div>
+              ))}
+            </div>
 
-                <input
-                  name="name"
-                  type="text"
-                  placeholder="Owner Name"
-                  value={formData.name}
-                  onChange={handleChange}
-                  autoComplete="name"
-                  disabled={loading}
-                  className={inputClass}
+            <p className="mt-8 flex items-center gap-2 text-sm font-semibold text-ink-secondary">
+              <FiCheckCircle className="text-brand" aria-hidden="true" />
+              Works offline. Syncs when the connection returns.
+            </p>
+          </div>
+
+          {/* =================================================
+              AUTH CARD
+          ================================================= */}
+
+          <div className="mx-auto w-full max-w-md rounded-panel border border-hairline bg-white p-6 shadow-card sm:p-8">
+
+            <div className="mb-6 flex justify-center lg:hidden">
+              <span className="grid h-14 w-14 place-items-center overflow-hidden rounded-sheet bg-white">
+                <img
+                  src="/logo.jpg"
+                  alt="FlexiOrder Logo"
+                  className="h-full w-full object-contain"
                 />
+              </span>
+            </div>
 
-                <input
-                  name="phone"
-                  type="tel"
-                  placeholder="Phone Number"
-                  value={formData.phone}
-                  onChange={handleChange}
-                  autoComplete="tel"
-                  inputMode="tel"
-                  disabled={loading}
-                  className={inputClass}
-                />
+            <h2 className="text-center text-2xl font-extrabold tracking-tight">
+              {isRegister ? "Create your owner account" : "Welcome back"}
+            </h2>
 
-              </div>
-            )}
+            <p className="mt-1.5 text-center text-sm text-ink-secondary">
+              {isRegister
+                ? "Account first. Hotel details come next."
+                : "Login to your restaurant workspace."}
+            </p>
 
-            {/* EMAIL */}
+            {/* TABS */}
 
-            <input
-              name="email"
-              type="email"
-              placeholder="Email Address"
-              value={formData.email}
-              onChange={handleChange}
-              autoComplete="email"
-              inputMode="email"
-              disabled={loading}
-              className={inputClass}
-            />
+            <div className="mt-6 flex rounded-card bg-subtle p-1" role="tablist">
+              <Link
+                to="/login"
+                role="tab"
+                aria-selected={!isRegister}
+                className={`flex-1 rounded-md py-2.5 text-center text-sm font-bold transition ${
+                  !isRegister
+                    ? "bg-white text-ink shadow-card"
+                    : "text-ink-secondary hover:text-ink"
+                }`}
+              >
+                Login
+              </Link>
 
-            {/* PASSWORD */}
+              <Link
+                to="/register"
+                role="tab"
+                aria-selected={isRegister}
+                className={`flex-1 rounded-md py-2.5 text-center text-sm font-bold transition ${
+                  isRegister
+                    ? "bg-white text-ink shadow-card"
+                    : "text-ink-secondary hover:text-ink"
+                }`}
+              >
+                Register
+              </Link>
+            </div>
 
-            <input
-              name="password"
-              type="password"
-              placeholder="Password"
-              value={formData.password}
-              onChange={handleChange}
-              autoComplete={
-                isRegister
-                  ? "new-password"
-                  : "current-password"
-              }
-              disabled={loading}
-              className={inputClass}
-            />
+            {/* FORM */}
 
-            {/* CONFIRM PASSWORD */}
+            <form onSubmit={handleSubmit} className="mt-6 space-y-4" noValidate>
 
-            {isRegister && (
+              {formError && (
+                <p
+                  role="alert"
+                  className="rounded-card border border-status-delayed-line/40 bg-status-delayed-surface px-3.5 py-2.5 text-sm font-semibold text-status-delayed-ink"
+                >
+                  {formError}
+                </p>
+              )}
+
+              {/* OWNER DETAILS */}
+
+              {isRegister && (
+                <>
+                  <input
+                    name="name"
+                    type="text"
+                    placeholder="Owner Name"
+                    value={formData.name}
+                    onChange={handleChange}
+                    autoComplete="name"
+                    disabled={loading}
+                    className={inputClass}
+                  />
+
+                  <input
+                    name="phone"
+                    type="tel"
+                    placeholder="Phone Number"
+                    value={formData.phone}
+                    onChange={handleChange}
+                    autoComplete="tel"
+                    inputMode="tel"
+                    disabled={loading}
+                    className={inputClass}
+                  />
+                </>
+              )}
+
+              {/* EMAIL */}
+
               <input
-                name="confirmPassword"
-                type="password"
-                placeholder="Confirm Password"
-                value={
-                  formData.confirmPassword
-                }
+                name="email"
+                type="email"
+                placeholder="Email Address"
+                value={formData.email}
                 onChange={handleChange}
-                autoComplete="new-password"
+                autoComplete="email"
+                inputMode="email"
                 disabled={loading}
                 className={inputClass}
               />
-            )}
+
+              {/* PASSWORD */}
+
+              <input
+                name="password"
+                type="password"
+                placeholder="Password"
+                value={formData.password}
+                onChange={handleChange}
+                autoComplete={
+                  isRegister
+                    ? "new-password"
+                    : "current-password"
+                }
+                disabled={loading}
+                className={inputClass}
+              />
+
+              {/* CONFIRM PASSWORD */}
+
+              {isRegister && (
+                <input
+                  name="confirmPassword"
+                  type="password"
+                  placeholder="Confirm Password"
+                  value={
+                    formData.confirmPassword
+                  }
+                  onChange={handleChange}
+                  autoComplete="new-password"
+                  disabled={loading}
+                  className={inputClass}
+                />
+              )}
+
+              {/* FORGOT PASSWORD */}
+
+              {!isRegister && (
+                <div className="text-right">
+                  <Link
+                    to="/forgot-password"
+                    className="text-sm font-bold text-brand hover:text-brand-strong"
+                  >
+                    Forgot password?
+                  </Link>
+                </div>
+              )}
+
+              {/* SUBMIT */}
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="flex min-h-12 w-full items-center justify-center gap-2 rounded-card bg-brand px-4 text-sm font-bold text-white transition hover:bg-brand-strong disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {loading ? (
+                  <>
+                    <span className="h-5 w-5 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                    Please wait...
+                  </>
+                ) : isRegister ? (
+                  <>
+                    Create Account
+                    <FiArrowRight aria-hidden="true" />
+                  </>
+                ) : (
+                  "Login"
+                )}
+              </button>
+
+            </form>
 
             {/* REGISTER INFO */}
 
             {isRegister && (
-              <div className="rounded-2xl border border-blue-500/20 bg-blue-500/5 p-4">
-
-                <div className="flex gap-3">
-
-                  <FiCheckCircle className="mt-0.5 text-blue-400 shrink-0" />
-
-                  <div>
-
-                    <p className="text-sm font-semibold text-blue-300">
-                      Next: Set Up Your Hotel
-                    </p>
-
-                    <p className="mt-1 text-xs leading-5 text-slate-400">
-                      After creating your owner
-                      account, you'll enter your
-                      hotel name, address, contact
-                      details, logo, branding and
-                      theme before accessing your
-                      dashboard.
-                    </p>
-
-                  </div>
-
-                </div>
-
-              </div>
+              <p className="mt-5 flex items-start gap-2.5 rounded-card bg-brand-light px-3.5 py-3 text-xs font-semibold leading-5 text-brand-strong">
+                <FiCheckCircle className="mt-0.5 shrink-0" aria-hidden="true" />
+                Your account is reviewed before it goes live. You can finish
+                hotel details right after registering.
+              </p>
             )}
 
-            {/* SUBMIT */}
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full rounded-2xl bg-blue-600 py-4 font-bold text-base sm:text-lg hover:bg-blue-700 active:bg-blue-800 transition flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
-            >
-
-              {loading ? (
-                <>
-                  <span className="h-5 w-5 rounded-full border-2 border-white/30 border-t-white animate-spin" />
-                  Please wait...
-                </>
-              ) : isRegister ? (
-                <>
-                  Create Account
-                  <FiArrowRight />
-                </>
-              ) : (
-                "Login"
-              )}
-
-            </button>
-
-          </form>
-
+          </div>
         </div>
       </div>
     </div>

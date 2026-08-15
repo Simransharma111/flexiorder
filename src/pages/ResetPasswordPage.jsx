@@ -13,6 +13,9 @@ import {
 
 import api from "../api/axios";
 
+const inputClass =
+  "w-full rounded-card border border-hairline bg-white px-4 py-3.5 text-[15px] text-ink placeholder:text-ink-disabled focus:border-brand focus:ring-2 focus:ring-brand/20 disabled:opacity-60";
+
 export default function ResetPasswordPage() {
   const { token } = useParams();
   const navigate = useNavigate();
@@ -81,105 +84,98 @@ export default function ResetPasswordPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center px-6 py-10 relative overflow-hidden">
-
-      <div className="absolute top-0 left-0 h-[500px] w-[500px] rounded-full bg-blue-600/20 blur-[150px]" />
-
-      <div className="absolute bottom-0 right-0 h-[500px] w-[500px] rounded-full bg-cyan-500/20 blur-[150px]" />
-
-      <div className="relative w-full max-w-md">
+    <div className="flex min-h-screen items-center justify-center bg-canvas px-4 py-10 text-ink">
+      <div className="w-full max-w-md">
 
         <Link
           to="/login"
-          className="inline-flex items-center gap-2 text-slate-400 hover:text-white mb-8 transition"
+          className="mb-6 inline-flex items-center gap-2 text-sm font-bold text-ink-secondary transition hover:text-ink"
         >
-          <FiArrowLeft />
-          Back to Login
+          <FiArrowLeft aria-hidden="true" />
+          Back to login
         </Link>
 
-        <div className="w-full rounded-[32px] border border-white/10 bg-white/5 backdrop-blur-xl p-8 shadow-2xl">
-
-          <div className="text-center">
-
-            <div className="mx-auto w-16 h-16 rounded-2xl bg-blue-500/10 flex items-center justify-center text-blue-400 text-2xl">
-              <FiLock />
-            </div>
-
-            <h1 className="text-3xl font-bold mt-6">
-              Create New Password
-            </h1>
-
-            <p className="mt-3 text-slate-400">
-              Enter your new FlexiOrder password.
-            </p>
-
-          </div>
+        <div className="rounded-panel border border-hairline bg-white p-6 shadow-card sm:p-8">
 
           {success ? (
+            <div className="py-4 text-center">
+              <span className="mx-auto grid h-14 w-14 place-items-center rounded-full bg-status-ready-surface text-status-ready-line">
+                <FiCheckCircle size={26} aria-hidden="true" />
+              </span>
 
-            <div className="mt-8 text-center">
+              <h1 className="mt-5 text-2xl font-extrabold tracking-tight">
+                Password updated
+              </h1>
 
-              <FiCheckCircle className="mx-auto text-green-400 text-5xl" />
+              <p className="mt-2 text-sm text-ink-secondary">
+                Taking you to login…
+              </p>
+            </div>
+          ) : (
+            <>
+              <span className="grid h-12 w-12 place-items-center rounded-card bg-brand-light text-brand">
+                <FiLock size={22} aria-hidden="true" />
+              </span>
 
-              <h2 className="mt-4 text-xl font-bold">
-                Password Reset Successfully
-              </h2>
+              <h1 className="mt-5 text-2xl font-extrabold tracking-tight">
+                Create new password
+              </h1>
 
-              <p className="mt-2 text-slate-400">
-                Redirecting you to login...
+              <p className="mt-2 text-sm leading-6 text-ink-secondary">
+                Choose a new password for your FlexiOrder account.
               </p>
 
-            </div>
-
-          ) : (
-
-            <form
-              onSubmit={handleSubmit}
-              className="mt-8 space-y-5"
-            >
-
-              <input
-                type="password"
-                placeholder="New Password"
-                value={password}
-                onChange={(e) =>
-                  setPassword(e.target.value)
-                }
-                autoComplete="new-password"
-                className="w-full rounded-2xl bg-slate-900/70 border border-white/10 px-5 py-4 outline-none focus:border-blue-500 transition"
-              />
-
-              <input
-                type="password"
-                placeholder="Confirm New Password"
-                value={confirmPassword}
-                onChange={(e) =>
-                  setConfirmPassword(
-                    e.target.value
-                  )
-                }
-                autoComplete="new-password"
-                className="w-full rounded-2xl bg-slate-900/70 border border-white/10 px-5 py-4 outline-none focus:border-blue-500 transition"
-              />
-
-              {error && (
-                <div className="rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 p-4 text-sm">
-                  {error}
-                </div>
-              )}
-
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full rounded-2xl bg-blue-600 py-4 font-bold text-lg hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+              <form
+                onSubmit={handleSubmit}
+                className="mt-6 space-y-4"
+                noValidate
               >
-                {loading
-                  ? "Resetting..."
-                  : "Reset Password"}
-              </button>
+                {error && (
+                  <p
+                    role="alert"
+                    className="rounded-card border border-status-delayed-line/40 bg-status-delayed-surface px-3.5 py-2.5 text-sm font-semibold text-status-delayed-ink"
+                  >
+                    {error}
+                  </p>
+                )}
 
-            </form>
+                <input
+                  type="password"
+                  placeholder="New Password"
+                  value={password}
+                  onChange={(e) =>
+                    setPassword(e.target.value)
+                  }
+                  autoComplete="new-password"
+                  disabled={loading}
+                  className={inputClass}
+                />
 
+                <input
+                  type="password"
+                  placeholder="Confirm New Password"
+                  value={confirmPassword}
+                  onChange={(e) =>
+                    setConfirmPassword(
+                      e.target.value
+                    )
+                  }
+                  autoComplete="new-password"
+                  disabled={loading}
+                  className={inputClass}
+                />
+
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="min-h-12 w-full rounded-card bg-brand px-4 text-sm font-bold text-white transition hover:bg-brand-strong disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {loading
+                    ? "Resetting..."
+                    : "Reset Password"}
+                </button>
+              </form>
+            </>
           )}
 
         </div>
