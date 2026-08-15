@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildCategoryList, categoryKey, categoryName, dishCategoryName, normalizeCategory } from "./menuCategories";
+import { buildCategoryList, categoryKey, categoryName, dishCategoryName, normalizeCategory, resolveDishCategoryNames } from "./menuCategories";
 
 describe("menu categories", () => {
   it("normalizes object categories and case-insensitive keys", () => {
@@ -33,3 +33,56 @@ describe("menu categories", () => {
     })).toBe("Starters");
   });
 });
+
+describe("resolveDishCategoryNames", () => {
+  const catalog = [
+    { _id: "64a1f0000000000000000001", name: "Breakfast" },
+    { _id: "64a1f0000000000000000002", name: "Starters" },
+  ];
+
+  it("attaches categoryName for unpopulated ObjectId categoryId", () => {
+    const dishes = [
+      { name: "Dosa", categoryId: "64a1f0000000000000000001" },
+    ];
+    const resolved = resolveDishCategoryNames(dishes, catalog);
+    expect(resolved[0].categoryName).toBe("Breakfast");
+    expect(dishCategoryName(resolved[0])).toBe("Breakfast");
+    // original object untouched
+    expect(dishes[0].categoryName).toBeUndefined();
+  });
+
+  it("also resolves ids stored in `category`", () => {
+    const dishes = [
+      { name: "Tikka", category: "64a1f0000000000000000002" },
+    ];
+    expect(
+      dishCategoryName(resolveDishCategoryNames(dishes, catalog)[0]),
+    ).toBe("Starters");
+  });
+
+  it("leaves dishes with an existing name untouched", () => {
+    const dishes = [
+      { name: "Dosa", categoryId: { name: "Breakfast" }, categoryName: "Keep" },
+    ];
+    const resolved = resolveDishCategoryNames(dishes, catalog);
+    expect(resolved[0]).toBe(dishes[0]);
+  });
+
+  it("passes through when catalog missing or id unknown", () => {
+    const dishes = [{ name: "X", categoryId: "64a1f0000000000000000009" }];
+    expect(resolveDishCategoryNames(dishes, catalog)[0]).toBe(dishes[0]);
+    expect(resolveDishCategoryNames(dishes, [])[0]).toBe(dishes[0]);
+    expect(
+      resolveDishCategoryNames(dishes, { categories: catalog })[0],
+    ).toBe(dishes[0]);
+  });
+
+  it("accepts the wrapped `{ categories: [...] }` response shape", () => {
+    const dish = { name: "Dosa", categoryId: "64a1f0000000000000000001" };
+    expect(
+      resolveDishCategoryNames([dish], { categories: catalog })[0]
+        .categoryName,
+    ).toBe("Breakfast");
+  });
+});
+

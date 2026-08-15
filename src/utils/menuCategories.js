@@ -136,3 +136,47 @@ export const resolveCategoryReference = (
 
   return match || category;
 };
+
+/*
+ * Older backends return the public QR menu with a raw ObjectId in
+ * `categoryId` and no populated category name. The categories catalog is
+ * public, so resolve those ids to names here and attach them as
+ * `categoryName` (picked up last by `dishCategoryName`), keeping the
+ * original dish data untouched.
+ */
+export const resolveDishCategoryNames = (dishes = [], categories = []) => {
+  const catalog = (
+    Array.isArray(categories)
+      ? categories
+      : categories?.categories || []
+  )
+    .map((category) => ({
+      _id: categoryId(category),
+      name: categoryName(category),
+    }))
+    .filter(
+      (category) =>
+        isCategoryObjectId(category._id) && category.name
+    );
+
+  if (!catalog.length) return dishes;
+
+  const nameById = new Map(
+    catalog.map((category) => [
+      category._id.toLowerCase(),
+      category.name,
+    ])
+  );
+
+  return dishes.map((dish) => {
+    if (dishCategoryName(dish)) return dish;
+
+    const ref =
+      categoryId(dish?.categoryId) ||
+      categoryId(dish?.category);
+    const name = ref && nameById.get(ref.toLowerCase());
+
+    return name ? { ...dish, categoryName: name } : dish;
+  });
+};
+

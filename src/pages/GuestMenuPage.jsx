@@ -24,7 +24,7 @@ import ActiveOrder from "../components/guestmenu/ActiveOrder";
 import ScheduleModal from "../components/guestmenu/ScheduleModal";
 import { sortDishesForDisplay } from "../utils/menuOrdering";
 import { getHotelThemeStyle } from "../utils/hotelTheme";
-import { buildCategoryList, categoryKey, dishCategoryName } from "../utils/menuCategories";
+import { buildCategoryList, categoryKey, dishCategoryName, resolveDishCategoryNames } from "../utils/menuCategories";
 import { normalizeMenuResponse } from "../utils/menuData";
 import { useConnectivity } from "../context/ConnectivityContext";
 import { useCart } from "../context/CartContext";
@@ -183,7 +183,31 @@ const res=await api.get(
 
 if (requestRevision === menuRequestRevision.current) {
 const freshHotel = res.data?.hotel || null;
-const freshDishes = normalizeMenuResponse(res.data?.dishes || []) || [];
+let rawDishes = res.data?.dishes || [];
+
+// Older backends send `categoryId` as a raw ObjectId without the
+// category name. The categories catalog is public — resolve names on
+// the RAW dishes (before normalization) so category filtering works on
+// every deployed backend version.
+if (Array.isArray(rawDishes) && rawDishes.some((dish) => !dishCategoryName(dish))) {
+const catalogId = freshHotel?._id || freshHotel?.id;
+if (catalogId) {
+try {
+const catalogRes = await api.get(
+`/menu/categories/${catalogId}`,
+{skipAuth:true}
+);
+rawDishes = resolveDishCategoryNames(
+rawDishes,
+catalogRes.data
+);
+} catch (catalogError) {
+console.log("CATEGORY CATALOG ERROR", catalogError);
+}
+}
+}
+
+const freshDishes = normalizeMenuResponse(rawDishes) || [];
 setHotel(freshHotel);
 setOrderingConfirmed(Boolean(
   freshHotel &&
