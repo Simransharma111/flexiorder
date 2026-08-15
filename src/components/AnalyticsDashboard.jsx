@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useState, useMemo } from "react";
 import { FiDownload, FiRefreshCw, FiTrendingUp, FiShoppingBag, FiCreditCard, FiClock, FiCheckCircle, FiSearch } from "react-icons/fi";
 import api from "../api/axios";
+import { Share } from "@capacitor/share";
+import { downloadFile, isNativeApp, writeTempShareFile } from "../utils/fileDownload";
+import { buildAnalyticsReportBlob, reportFilename } from "../utils/excelReport";
 import {
   analyticsComparison,
   buildAnalyticsChartData,
@@ -32,7 +35,7 @@ const dateInputValue = (date) => [
 
 const monthInputValue = (date) => dateInputValue(date).slice(0, 7);
 
-export default function AnalyticsDashboard({ orders = [], advancedEnabled = false }) {
+export default function AnalyticsDashboard({ hotel = {}, orders = [], advancedEnabled = false }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -65,20 +68,48 @@ export default function AnalyticsDashboard({ orders = [], advancedEnabled = fals
     fetchAnalytics();
   }, [fetchAnalytics]);
 
-  const downloadCSV = async () => {
+  const [exporting, setExporting] = useState(false);
+  const [exportStatus, setExportStatus] = useState("");
+
+  // Build a branded Excel workbook for exactly the period the owner selected
+  // (today / month / quarter / custom). On the device it saves into
+  // Downloads/FlexiOrder and immediately opens the native share sheet.
+  const exportExcel = async () => {
+    if (exporting) return;
+    setExporting(true);
+    setExportStatus("");
     try {
-      const response = await api.get("/analytics/today-csv", { responseType: "blob" });
-      const url = window.URL.createObjectURL(response.data);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = "today-orders.csv";
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.URL.revokeObjectURL(url);
+      const blob = await buildAnalyticsReportBlob({
+        hotel,
+        orders: filteredOrdersForTimeframe,
+        stats,
+        previousStats,
+        chartData,
+        popularDishes: calculatePopularDishes(filteredOrdersForTimeframe, 8),
+        range,
+        rangeLabel: range?.label || "",
+      });
+      const filename = reportFilename(hotel, range);
+      if (isNativeApp()) {
+        const saved = await downloadFile(blob, filename);
+        let shareNote = "";
+        try {
+          const uri = await writeTempShareFile(blob, filename);
+          await Share.share({ title: `${hotel?.name || "Restaurant"} report`, url: uri, dialogTitle: "Share the report" });
+          shareNote = " · sharing sheet opened";
+        } catch {
+          shareNote = "";
+        }
+        setExportStatus(`Saved to ${saved.label || "Downloads/FlexiOrder"}${shareNote}.`);
+      } else {
+        await downloadFile(blob, filename);
+        setExportStatus("Report downloaded.");
+      }
     } catch (requestError) {
       console.error(requestError);
-      window.alert("Today's report could not be downloaded. Try again when the connection is stable.");
+      setExportStatus("Report could not be created. Try again when the connection is stable.");
+    } finally {
+      setExporting(false);
     }
   };
 
@@ -329,7 +360,14 @@ export default function AnalyticsDashboard({ orders = [], advancedEnabled = fals
               {range.error ? "Choose a valid reporting period" : `${range.label} · ${chartUsesWeeklyBuckets ? "Weekly" : "Daily"} breakdown`}
             </p>
           </div>
-          {advancedEnabled && <button type="button" onClick={downloadCSV} className="gap-1.5"><FiDownload /> Export today&apos;s CSV</button>}
+          {advancedEnabled && (
+            <div className="flex flex-col items-end gap-1">
+              <button type="button" onClick={exportExcel} className="gap-1.5" disabled={exporting}>
+                <FiDownload /> {exporting ? "Building Excel…" : `Export report (${range?.label || "period"})`}
+              </button>
+              {exportStatus && <small className="text-ink-secondary" role="status">{exportStatus}</small>}
+            </div>
+          )}
         </div>
 
         {chartData.some(d => d.revenue > 0 || d.orders > 0) ? (
