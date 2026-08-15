@@ -130,7 +130,9 @@ export default function KitchenBoard({
                 surface={surface}
                 compact={godModeEnabled
                   ? surface === "kitchen" && lane.key === "ready"
-                  : lane.key !== "new" && !(surface === "waiter" && lane.key === "ready")}
+                  : surface === "kitchen"
+                    ? false
+                    : lane.key !== "new" && !(surface === "waiter" && lane.key === "ready")}
                 godModeEnabled={godModeEnabled}
               onPrimary={
                 // Kitchen: suppress primary tap on ready (no further kitchen action).
