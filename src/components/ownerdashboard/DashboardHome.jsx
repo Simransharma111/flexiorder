@@ -63,13 +63,13 @@ export default function DashboardHome({
               </div>
             )}
           </div>
-        </div>
-        <div className="owner-hero-status">
-          {hotel?.orderingEnabled !== false ? (
-            <span className="status-pill is-active">Ordering Enabled</span>
-          ) : (
-            <span className="status-pill is-paused">Ordering Paused</span>
-          )}
+          <div className="owner-hero-status">
+            {hotel?.orderingEnabled !== false ? (
+              <span className="status-pill is-active">Ordering Enabled</span>
+            ) : (
+              <span className="status-pill is-paused">Ordering Paused</span>
+            )}
+          </div>
         </div>
       </div>
 

@@ -3,7 +3,6 @@ import { useNavigate } from "react-router-dom";
 import api from "../api/axios";
 import socket from "../socket";
 import {
-  FaPen,
   FaSave,
   FaImage,
 } from "react-icons/fa";
@@ -83,14 +82,14 @@ const settingsRevision=useRef(0);
 const confirmedHotelRef=useRef(null);
 
 
-const [logo,setLogo]=useState(null);
-
-const [cover,setCover]=useState(null);
 
 
-const [logoPreview,setLogoPreview]=useState("");
 
-const [coverPreview,setCoverPreview]=useState("");
+
+
+
+
+
 
 
 
@@ -118,16 +117,6 @@ if (requestRevision !== settingsRevision.current) return;
 
 confirmedHotelRef.current=data;
 setHotel(data);
-
-
-setLogoPreview(
-data.logo
-);
-
-
-setCoverPreview(
-data.coverImage
-);
 
 
 }catch(err){
@@ -435,25 +424,7 @@ const form=new FormData();
 
 
 
-if(logo){
 
-form.append(
-"logo",
-logo
-);
-
-}
-
-
-
-if(cover){
-
-form.append(
-"coverImage",
-cover
-);
-
-}
 
 
 
@@ -580,226 +551,6 @@ max-w-6xl
 mx-auto
 space-y-8
 ">
-
-
-
-
-
-{/* =====================================================
- COVER
-===================================================== */}
-
-
-
-<div className="
-relative
-">
-
-
-<img
-
-src={
-coverPreview ||
-"/default-cover.jpg"
-}
-
-className="
-w-full
-h-32 md:h-40
-object-cover
-rounded-3xl
-border border-white/20
-"
-
-/>
-
-
-
-
-<label
-
-className="
-absolute
-top-5
-right-5
-bg-white
-text-black
-p-4
-rounded-full
-cursor-pointer
-shadow-lg
-"
-
-
->
-
-
-<FaPen/>
-
-
-<input
-
-type="file"
-
-hidden
-
-accept="image/*"
-
-
-onChange={(e)=>{
-
-
-const file=e.target.files[0];
-
-
-setCover(file);
-
-
-setCoverPreview(
-URL.createObjectURL(file)
-);
-
-
-}}
-
-/>
-
-
-</label>
-
-
-
-</div>
-
-
-
-
-
-
-
-
-
-{/* =====================================================
- PROFILE HEADER
-===================================================== */}
-
-
-
-<div className="
-relative
--mt-16
-ml-8
-">
-
-
-<div className="
-relative
-w-fit
-">
-
-
-<img
-
-src={
-logoPreview ||
-"/logo.png"
-}
-
-
-className="
-w-20
-h-20
-rounded-full
-border-4
-border-white
-object-cover
-shadow-xl
-"
-
-/>
-
-
-
-<label
-
-className="
-absolute
-bottom-2
-right-2
-bg-white
-text-black
-p-3
-rounded-full
-cursor-pointer
-"
-
-
->
-
-
-<FaPen/>
-
-
-<input
-
-hidden
-
-type="file"
-
-accept="image/*"
-
-
-onChange={(e)=>{
-
-
-const file=e.target.files[0];
-
-
-setLogo(file);
-
-
-setLogoPreview(
-URL.createObjectURL(file)
-);
-
-
-}}
-
-/>
-
-
-</label>
-
-
-
-</div>
-
-
-
-
-<h1 className="
-text-xl
-font-bold
-mt-5
-">
-
-{hotel.name}
-
-</h1>
-
-
-<p className="opacity-70">
-
-{hotel.tagline}
-
-</p>
-
-
-
-</div>
-
-
-
 
 
 
