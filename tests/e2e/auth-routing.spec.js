@@ -44,11 +44,13 @@ test("does not allow staff to open owner-only settings", async ({ page }) => {
   }, { storedUser: user, storedToken: makeToken(user._id) });
   await page.route("**/hotel/me", (route) => fulfillJson(route, hotel));
   await page.route("**/kitchen/orders", (route) => fulfillJson(route, { orders: [kitchenOrder()] }));
+  await page.route("**/menu/hotel-1", (route) => fulfillJson(route, []));
+  await page.route("**/table", (route) => fulfillJson(route, { tables: [] }));
 
   await page.goto("/owner/hotel/settings");
 
-  await expect(page).toHaveURL(/\/kitchen$/);
-  await expect(page.getByRole("button", { name: /^Accept Table 8 order/ })).toBeVisible();
+  await expect(page).toHaveURL(/\/owner\/order$/);
+  await expect(page.getByRole("tab", { name: "Take Order" })).toBeVisible();
 });
 
 test("owner login ignores a stale kitchen redirect and opens owner Today", async ({ page }) => {
@@ -103,8 +105,10 @@ test("a restored waiter session opens its operational workspace from login", asy
   }, { storedUser: user, storedToken: makeToken(user._id) });
   await page.route("**/hotel/me", (route) => fulfillJson(route, hotel));
   await page.route("**/kitchen/orders", (route) => fulfillJson(route, { orders: [kitchenOrder()] }));
+  await page.route("**/menu/hotel-1", (route) => fulfillJson(route, []));
+  await page.route("**/table", (route) => fulfillJson(route, { tables: [] }));
 
   await page.goto("/login");
-  await expect(page).toHaveURL(/\/kitchen$/);
-  await expect(page.getByRole("button", { name: "Refresh kitchen" })).toBeVisible();
+  await expect(page).toHaveURL(/\/owner\/order$/);
+  await expect(page.getByRole("tab", { name: "Take Order" })).toBeVisible();
 });

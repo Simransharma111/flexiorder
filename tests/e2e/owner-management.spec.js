@@ -308,7 +308,7 @@ test("Simple app level hides optional owner controls immediately", async ({ page
   await expect(page.getByRole("button", { name: "QR Tables", exact: true })).toBeVisible();
 });
 
-test("God Mode defaults on and owner-saved values survive reload", async ({ page }) => {
+test("God Mode defaults off and owner-saved values survive reload", async ({ page }) => {
   let savedHotel = { ...hotel };
   delete savedHotel.featureSettings;
   await page.unroute("**/hotel/me");
@@ -324,8 +324,8 @@ test("God Mode defaults on and owner-saved values survive reload", async ({ page
   await page.goto("/owner/dashboard");
   await openOwnerTab(page, "Settings");
   const toggle = page.getByRole("checkbox", { name: "God Mode" });
-  await expect(toggle).toBeChecked();
-  await toggle.uncheck();
+  await expect(toggle).not.toBeChecked();
+  await toggle.check();
   const savedDialog = page.waitForEvent("dialog");
   await page.getByRole("button", { name: "Save app settings" }).click();
   await (await savedDialog).accept();
@@ -333,15 +333,15 @@ test("God Mode defaults on and owner-saved values survive reload", async ({ page
   await page.reload();
   await openOwnerTab(page, "Settings");
   const restoredToggle = page.getByRole("checkbox", { name: "God Mode" });
-  await expect(restoredToggle).not.toBeChecked();
-  await restoredToggle.check();
-  const enabledDialog = page.waitForEvent("dialog");
+  await expect(restoredToggle).toBeChecked();
+  await restoredToggle.uncheck();
+  const disabledDialog = page.waitForEvent("dialog");
   await page.getByRole("button", { name: "Save app settings" }).click();
-  await (await enabledDialog).accept();
+  await (await disabledDialog).accept();
 
   await page.reload();
   await openOwnerTab(page, "Settings");
-  await expect(page.getByRole("checkbox", { name: "God Mode" })).toBeChecked();
+  await expect(page.getByRole("checkbox", { name: "God Mode" })).not.toBeChecked();
 });
 
 test("owner dashboard order board follows God Mode", async ({ page }) => {

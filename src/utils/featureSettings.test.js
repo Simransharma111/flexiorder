@@ -25,17 +25,17 @@ describe("feature settings", () => {
   it("uses a safe basic default and merges capability switches", () => {
     expect(normalizeFeatureSettings({ staffCapabilities: { editMenu: false } })).toMatchObject({
       appLevel: "basic",
-      godModeEnabled: true,
-      staffCapabilities: { editMenu: false, changeOrdering: true },
+      godModeEnabled: false,
+      staffCapabilities: { editMenu: false, changeOrdering: false },
     });
   });
 
-  it("defaults God Mode on but preserves an explicit restaurant-scoped off value", () => {
+  it("defaults God Mode off but preserves an explicit restaurant-scoped on value", () => {
     const first = { _id: "hotel-1" };
     const second = { _id: "hotel-2" };
-    persistFeatureSettings(first, { godModeEnabled: false });
-    expect(getFeatureSettings(first).godModeEnabled).toBe(false);
-    expect(getFeatureSettings(second).godModeEnabled).toBe(true);
+    persistFeatureSettings(first, { godModeEnabled: true });
+    expect(getFeatureSettings(first).godModeEnabled).toBe(true);
+    expect(getFeatureSettings(second).godModeEnabled).toBe(false);
   });
 
   it("lets an explicit server value override stale local God Mode state", () => {

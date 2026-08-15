@@ -7,7 +7,7 @@ describe("role routing", () => {
     expect(getHomePathForRole("manager")).toBe("/owner/order");
     expect(getHomePathForRole("cashier")).toBe("/owner/order");
     expect(getHomePathForRole("kitchen")).toBe("/kitchen");
-    expect(getHomePathForRole("staff")).toBe("/kitchen");
+    expect(getHomePathForRole("staff")).toBe("/owner/order");
   });
 
   it("keeps owner-only and restaurant-wide roles explicit", () => {

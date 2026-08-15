@@ -163,7 +163,17 @@ export default function StaffWorkspace() {
       if (typeof confirmedHotel?.orderingEnabled !== "boolean") {
         throw new Error("The restaurant did not confirm the ordering setting.");
       }
-      const nextHotel = hydrateHotelFeatures(confirmedHotel);
+      // Preserve locally known settings (feature flags, theme, etc.) that
+      // minimal PATCH responses may omit, instead of resetting to defaults.
+      const nextHotel = hydrateHotelFeatures({
+        ...previousHotel,
+        ...confirmedHotel,
+        // PATCH responses can omit featureSettings; never silently drop them.
+        featureSettings: {
+          ...(previousHotel?.featureSettings || {}),
+          ...(confirmedHotel?.featureSettings || {}),
+        },
+      });
       settingsRevision.current += 1;
       setHotel(nextHotel);
       localStorage.setItem(getScopedStorageKey(HOTEL_CACHE_KEY), JSON.stringify(nextHotel));

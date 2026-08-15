@@ -404,7 +404,10 @@ test("attention from a terminal status rejection offers restore confirmed recove
 
 test("staff menu connection status uses the compact header indicator", async ({ page, context }) => {
   await installSession(page, "staff");
-  await page.route("**/hotel/me", (route) => fulfillJson(route, { hotel }));
+  await page.route("**/hotel/me", (route) => fulfillJson(route, {
+    ...hotel,
+    featureSettings: { staffCapabilities: { editMenu: true } },
+  }));
   await page.route("**/menu/hotel-1", (route) => fulfillJson(route, []));
 
   await page.goto("/staff/menu");
@@ -840,6 +843,11 @@ test("customer ordering pause does not block permitted staff ordering", async ({
 test("waiter ordering toggle rolls back a failed save and uses confirmed server state", async ({ page }) => {
   await installSession(page, "staff");
   await mockStaffWorkspace(page);
+  await page.unroute("**/hotel/me");
+  await page.route("**/hotel/me", (route) => fulfillJson(route, {
+    ...hotel,
+    featureSettings: { staffCapabilities: { changeOrdering: true } },
+  }));
   let attempts = 0;
   const payloads = [];
   await page.route("**/hotel/profile", async (route) => {
@@ -850,7 +858,11 @@ test("waiter ordering toggle rolls back a failed save and uses confirmed server 
       return fulfillJson(route, { message: "Setting could not be saved" }, 500);
     }
     return fulfillJson(route, {
-      hotel: { ...hotel, orderingEnabled: payload.orderingEnabled },
+      hotel: {
+        ...hotel,
+        orderingEnabled: payload.orderingEnabled,
+        featureSettings: { staffCapabilities: { changeOrdering: true } },
+      },
     });
   });
   page.on("dialog", (dialog) => dialog.accept());

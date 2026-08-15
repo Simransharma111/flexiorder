@@ -20,6 +20,7 @@ export const getHomePathForRole = (role) => {
     case "cashier":
       return "/owner/order";
     case "staff":
+      return "/owner/order";
     case "kitchen":
       return "/kitchen";
     default:

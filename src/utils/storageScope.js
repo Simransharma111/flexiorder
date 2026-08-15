@@ -31,7 +31,7 @@ export const getRestaurantId = (source) => {
   if (nestedRestaurant !== undefined && nestedRestaurant !== null) {
     return normalizeEntityId(nestedRestaurant);
   }
-  const looksLikeUser = Boolean(value.role || value.email || value.permissions);
+  const looksLikeUser = Boolean(value.role || value.permissions);
   if (!looksLikeUser) return normalizeEntityId(value);
   if (!usesStoredUser) return "";
   try {

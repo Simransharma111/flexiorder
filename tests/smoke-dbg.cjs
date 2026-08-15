@@ -1,0 +1,22 @@
+const { chromium } = require("playwright");
+(async () => {
+  const browser = await chromium.launch();
+  const g = await browser.newPage({ viewport: { width: 420, height: 900 } });
+  g.on("console", m => { if (m.type() === "warning" || m.type() === "error") console.log("PAGE:", m.text().slice(0, 220)); });
+  g.on("response", async r2 => { if (/\/api\/.*(table|menu)/.test(r2.url())) console.log("NET:", r2.status(), r2.url().replace(/^.*\/api/, "/api")); });
+  const reqs = [];
+  await g.goto("http://127.0.0.1:4173/login", { waitUntil: "networkidle", timeout: 60000 });
+  await g.locator('input[type="email"]').fill("probe.waiter@example.com");
+  await g.locator('input[type="password"]').fill("TempPass123");
+  await g.locator('button[type="submit"]').first().click();
+  await g.waitForTimeout(7000);
+  console.log("post-login url:", g.url());
+  await g.getByRole("tab", { name: "Take Order" }).first().click();
+  await g.waitForTimeout(4000);
+  console.log("tiles:", await g.locator(".staff-location-tile").count());
+  console.log("location-step html:", (await g.locator(".staff-location-step").count()) ? (await g.locator(".staff-location-step").innerHTML()).slice(0, 500) : "NONE");
+  const body = (await g.evaluate(() => document.body.innerText)).replace(/\\s+/g, " ");
+  console.log("errors in body:", /Tables could not be loaded|could not be loaded/.test(body));
+  console.log("body[400]:", body.slice(0, 400));
+  await browser.close();
+})();

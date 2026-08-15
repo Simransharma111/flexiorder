@@ -29,12 +29,12 @@ export const FEATURE_REGISTRY = [
 export const DEFAULT_FEATURE_SETTINGS = {
   appLevel: "basic",
   publicDisplayEnabled: false,
-  godModeEnabled: true,
+  godModeEnabled: false,
   staffCapabilities: {
-    editMenu: true,
-    changeOrdering: true,
+    editMenu: false,
+    changeOrdering: false,
     switchWorkspaces: true,
-    usePublicDisplay: true,
+    usePublicDisplay: false,
   },
 };
 

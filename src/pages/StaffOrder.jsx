@@ -27,7 +27,7 @@ const tableLabel = (table) => table?.type === "room"
   : `Table ${table.tableNumber || table.locationNumber}`;
 
 export default function StaffOrder({ hotel, onOrderCreated }) {
-  const restaurantId = getRestaurantId(hotel);
+  const restaurantId = getRestaurantId(hotel) || getRestaurantId();
   const { isOnline } = useConnectivity();
   const { syncNow } = useSync();
   const [menu, setMenu] = useState([]);
@@ -45,6 +45,7 @@ export default function StaffOrder({ hotel, onOrderCreated }) {
   const [placing, setPlacing] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [tableError, setTableError] = useState("");
   const [attentionCount, setAttentionCount] = useState(getStaffOrdersNeedingAttention().length);
   const placingInFlight = useRef(false);
 
@@ -52,46 +53,62 @@ export default function StaffOrder({ hotel, onOrderCreated }) {
     setAttentionCount(getStaffOrdersNeedingAttention().length);
   }, []);
 
-  useEffect(() => {
+  const fetchTables = useCallback(async () => {
     if (!restaurantId) return;
-    const fetchData = async () => {
-      const tableKey = `staff_tables_${restaurantId}`;
-      setMenu(readMenuCache(restaurantId));
-      const [menuResult, tableResult] = await Promise.allSettled([
-          api.get(`/menu/${restaurantId}`),
-          api.get("/table"),
-      ]);
-
-      if (menuResult.status === "fulfilled") {
-        try {
-          setMenu(reconcileMenuFromServer(restaurantId, menuResult.value.data));
-        } catch (menuError) {
-          console.warn("Staff menu response was invalid", menuError);
-          setMenu(readMenuCache(restaurantId));
-        }
-      } else {
-        console.warn("Staff menu fetch failed", menuResult.reason);
-        setMenu(readMenuCache(restaurantId));
-      }
-
-      if (tableResult.status === "fulfilled") {
-        const nextTables = tableResult.value.data?.tables || tableResult.value.data || [];
-        if (Array.isArray(nextTables)) {
-          setTables(nextTables);
-          localStorage.setItem(tableKey, JSON.stringify(nextTables));
-        }
-      } else {
-        console.warn("Staff table fetch failed", tableResult.reason);
+    const tableKey = `staff_tables_${restaurantId}`;
+    setTableError("");
+    const applyTables = (payload) => {
+      const nextTables = payload?.tables || payload || [];
+      if (!Array.isArray(nextTables)) return false;
+      setTables(nextTables);
+      localStorage.setItem(tableKey, JSON.stringify(nextTables));
+      return true;
+    };
+    try {
+      // Primary: authenticated owner/staff table list (newer backend)
+      const response = await api.get("/table");
+      applyTables(response.data);
+    } catch (primaryError) {
+      console.warn("Staff table fetch failed, trying public fallback", primaryError);
+      try {
+        // Fallback: older deployed backends deny /table to staff; the public
+        // guest-facing table list for this hotel is safe to reuse.
+        const fallback = await api.get(`/public/tables/${restaurantId}`);
+        if (applyTables(fallback.data)) return;
+        throw new Error("Unexpected tables response", { cause: primaryError });
+      } catch (fallbackError) {
+        console.warn("Staff table fallback failed", fallbackError);
         try {
           const cachedTables = JSON.parse(localStorage.getItem(tableKey) || "[]");
           setTables(Array.isArray(cachedTables) ? cachedTables : []);
         } catch (cacheError) {
           console.warn("Staff table cache failed", cacheError);
         }
+        setTableError("Tables could not be loaded. Check the connection and try again.");
+      }
+    }
+  }, [restaurantId]);
+
+  useEffect(() => {
+    if (!restaurantId) return;
+    const fetchData = async () => {
+      setMenu(readMenuCache(restaurantId));
+      const menuResult = await Promise.allSettled([api.get(`/menu/${restaurantId}`)]);
+      if (menuResult[0].status === "fulfilled") {
+        try {
+          setMenu(reconcileMenuFromServer(restaurantId, menuResult[0].value.data));
+        } catch (menuError) {
+          console.warn("Staff menu response was invalid", menuError);
+          setMenu(readMenuCache(restaurantId));
+        }
+      } else {
+        console.warn("Staff menu fetch failed", menuResult[0].reason);
+        setMenu(readMenuCache(restaurantId));
       }
     };
     fetchData();
-  }, [restaurantId]);
+    fetchTables();
+  }, [restaurantId, fetchTables]);
 
   useEffect(() => {
     const handleMenuChanged = (event) => {
@@ -310,6 +327,12 @@ export default function StaffOrder({ hotel, onOrderCreated }) {
               </button>
             ))}
           </div>
+          {tables.length === 0 && tableError && (
+            <div className="ops-inline-error staff-location-error" role="alert">
+              <span>{tableError}</span>
+              <button type="button" onClick={fetchTables}>Retry</button>
+            </div>
+          )}
           {hotel?.takeawayEnabled !== false && (
             <button type="button" className="staff-takeaway-link" onClick={() => setOrderType("takeaway")}>Takeaway order</button>
           )}

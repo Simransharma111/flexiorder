@@ -26,6 +26,7 @@ describe("storage scope", () => {
     expect(getRestaurantId({ hotel: { id: "hotel-4" } })).toBe("hotel-4");
     expect(getRestaurantId({ _id: "user-1", role: "owner", email: "owner@test" })).toBe("");
     expect(getRestaurantId({ _id: "hotel-5", name: "Restaurant" })).toBe("hotel-5");
+    expect(getRestaurantId({ _id: "hotel-6", name: "Hotel", email: "hotel@test" })).toBe("hotel-6");
   });
 
   it("never serializes a populated restaurant as object text", () => {

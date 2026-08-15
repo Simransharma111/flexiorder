@@ -638,7 +638,9 @@ space-y-8
     />
   </label>
 
-  <button type="button" disabled={loading || orderingLoading} onClick={saveAppSettings} className="mt-5 rounded-xl bg-white px-5 py-3 font-bold text-black">
+  <button type="button" disabled={loading || orderingLoading} onClick={saveAppSettings}
+    className="mt-5 w-full rounded-2xl py-4 font-bold text-lg flex justify-center items-center gap-3 shadow-lg"
+    style={{ background: resolvedPrimary, color: resolvedTheme.onAccent }}>
     <FaSave /> Save app settings
   </button>
 </section>
@@ -921,16 +923,15 @@ p-6
     className="
     px-8
     py-3
-    rounded-xl
+    rounded-2xl
     font-bold
     text-lg
-    bg-white
-    text-black
     flex
     gap-2
     items-center
     shadow-lg
     "
+    style={{ background: resolvedPrimary, color: resolvedTheme.onAccent }}
   >
     <FaSave />
     {loading ? "Saving…" : "Save Settings"}
