@@ -1,19 +1,11 @@
-export const SCHEDULE_MIN_NOTICE_MS = 60 * 60 * 1000;
 export const SCHEDULE_MAX_ADVANCE_MS = 48 * 60 * 60 * 1000;
+const SCHEDULE_MIN_STEP_MS = 60 * 1000;
 
 const formatLocalDateTime = (date) => [
   date.getFullYear(),
   String(date.getMonth() + 1).padStart(2, "0"),
   String(date.getDate()).padStart(2, "0"),
 ].join("-") + `T${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
-
-const roundUpToMinute = (date) => {
-  const rounded = new Date(date);
-  const hasPartialMinute = rounded.getSeconds() !== 0 || rounded.getMilliseconds() !== 0;
-  rounded.setSeconds(0, 0);
-  if (hasPartialMinute) rounded.setMinutes(rounded.getMinutes() + 1);
-  return rounded;
-};
 
 const roundDownToMinute = (date) => {
   const rounded = new Date(date);
@@ -51,7 +43,9 @@ export const getSchedulePickerBounds = (now = new Date()) => {
     throw new TypeError("A valid current time is required.");
   }
 
-  const minimum = roundUpToMinute(new Date(currentTime.getTime() + SCHEDULE_MIN_NOTICE_MS));
+  // The current minute itself is not a valid target — the earliest valid
+  // selection is the next whole minute after "now".
+  const minimum = new Date(roundDownToMinute(currentTime).getTime() + SCHEDULE_MIN_STEP_MS);
   const maximum = roundDownToMinute(new Date(currentTime.getTime() + SCHEDULE_MAX_ADVANCE_MS));
 
   return {
@@ -71,11 +65,12 @@ export const validateScheduledOrderTime = (value, now = new Date()) => {
     return { valid: false, error: "Please select a valid date and time." };
   }
 
-  const minimumTime = currentTime.getTime() + SCHEDULE_MIN_NOTICE_MS;
-  const maximumTime = currentTime.getTime() + SCHEDULE_MAX_ADVANCE_MS;
-  if (selected.getTime() < minimumTime) {
-    return { valid: false, error: "Scheduled orders must be at least 1 hour in advance." };
+  // Only times strictly AFTER the current date & time are valid.
+  // The current time (or anything in the past) must be rejected.
+  if (selected.getTime() <= currentTime.getTime()) {
+    return { valid: false, error: "Please choose a future time for your scheduled order." };
   }
+  const maximumTime = currentTime.getTime() + SCHEDULE_MAX_ADVANCE_MS;
   if (selected.getTime() > maximumTime) {
     return { valid: false, error: "Scheduled orders can be placed up to 2 days in advance." };
   }
