@@ -27,6 +27,7 @@ export default function AuthPage({ mode = "login" }) {
   const [loading, setLoading] = useState(false);
 
   const [formError, setFormError] = useState("");
+  const [suggestLogin, setSuggestLogin] = useState(false);
 
   const [formData, setFormData] = useState({
     name: "",
@@ -54,6 +55,7 @@ export default function AuthPage({ mode = "login" }) {
     const { name, value } = e.target;
 
     if (formError) setFormError("");
+    if (suggestLogin) setSuggestLogin(false);
 
     setFormData((prev) => ({
       ...prev,
@@ -489,6 +491,11 @@ export default function AuthPage({ mode = "login" }) {
       }
 
       setFormError(message);
+      setSuggestLogin(
+        isRegister &&
+          (err.response?.status === 409 ||
+            /already exists/i.test(String(message))),
+      );
     } finally {
       setLoading(false);
     }
@@ -635,6 +642,14 @@ export default function AuthPage({ mode = "login" }) {
                   className="rounded-card border border-status-delayed-line/40 bg-status-delayed-surface px-3.5 py-2.5 text-sm font-semibold text-status-delayed-ink"
                 >
                   {formError}
+                  {suggestLogin && (
+                    <>
+                      {" "}
+                      <Link to="/login" className="underline underline-offset-2">
+                        Log in instead
+                      </Link>
+                    </>
+                  )}
                 </p>
               )}
 
@@ -757,8 +772,8 @@ export default function AuthPage({ mode = "login" }) {
             {isRegister && (
               <p className="mt-5 flex items-start gap-2.5 rounded-card bg-brand-light px-3.5 py-3 text-xs font-semibold leading-5 text-brand-strong">
                 <FiCheckCircle className="mt-0.5 shrink-0" aria-hidden="true" />
-                Your account is reviewed before it goes live. You can finish
-                hotel details right after registering.
+                Create your account for free. You can finish hotel details
+                right after registering.
               </p>
             )}
 
