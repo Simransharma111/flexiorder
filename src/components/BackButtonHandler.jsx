@@ -11,44 +11,34 @@ export default function BackButtonHandler() {
 
   const pathnameRef = useRef(location.pathname);
 
-  // Always keep the latest pathname available to the native listener
+  // Keep the latest route available to the Capacitor listener
   useEffect(() => {
     pathnameRef.current = location.pathname;
   }, [location.pathname]);
 
   useEffect(() => {
     let listener = null;
-    let mounted = true;
 
     const setupListener = async () => {
-      listener = await CapacitorApp.addListener(
+      const result = await CapacitorApp.addListener(
         "backButton",
         () => {
-          if (!mounted) return;
-
           const pathname = pathnameRef.current;
           const { user } = readStoredSession();
 
-          /*
-           * =====================================================
-           * AUTHENTICATED USER
-           * =====================================================
-           */
+          // ==========================================
+          // AUTHENTICATED USER
+          // ==========================================
+
           if (user) {
             const home = getHomePathForRole(user.role);
 
-            /*
-             * If already on the user's home page,
-             * Android back should exit the application.
-             */
+            // Already on role home -> exit app
             if (pathname === home) {
               CapacitorApp.exitApp();
               return;
             }
 
-            /*
-             * All authenticated application pages.
-             */
             const isAuthenticatedPage =
               pathname === "/change-password" ||
               pathname === "/kitchen" ||
@@ -56,26 +46,18 @@ export default function BackButtonHandler() {
               pathname === "/superadmin" ||
               pathname.startsWith("/owner/");
 
-            /*
-             * From any authenticated page, return to
-             * the correct role-based home page.
-             */
+            // Any authenticated page -> role home
             if (isAuthenticatedPage) {
               navigate(home, { replace: true });
               return;
             }
           }
 
-          /*
-           * =====================================================
-           * PUBLIC PAGES
-           * =====================================================
-           */
+          // ==========================================
+          // PUBLIC PAGES
+          // ==========================================
 
-          /*
-           * Public home pages:
-           * Android back exits the application.
-           */
+          // Public home -> exit app
           if (
             pathname === "/" ||
             pathname === "/homepage"
@@ -84,24 +66,19 @@ export default function BackButtonHandler() {
             return;
           }
 
-          /*
-           * Other public pages:
-           * use normal browser history.
-           */
+          // Other public pages -> browser history
           navigate(-1);
         }
       );
+
+      listener = result;
     };
 
     setupListener();
 
     return () => {
-      mounted = false;
-
-      if (listener) {
-        listener.then((handle) => {
-          handle.remove();
-        });
+      if (listener?.remove) {
+        listener.remove();
       }
     };
   }, [navigate]);
