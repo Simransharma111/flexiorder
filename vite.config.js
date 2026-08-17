@@ -6,4 +6,19 @@ export default defineConfig({
   test: {
     include: ['src/**/*.test.{js,jsx}'],
   },
+  build: {
+    rollupOptions: {
+      external: [
+        '@capacitor/filesystem',
+        '@capacitor/app',
+        '@capacitor/device',
+        '@capacitor/local-notifications',
+        '@capacitor/push-notifications',
+        '@capacitor/share',
+        'exceljs',
+        'jspdf',
+        'html2canvas',
+      ],
+    },
+  },
 })
