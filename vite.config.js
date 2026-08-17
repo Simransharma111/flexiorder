@@ -1,24 +1,34 @@
-import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
 
 export default defineConfig({
   plugins: [react()],
+
   test: {
-    include: ['src/**/*.test.{js,jsx}'],
+    include: ["src/**/*.test.{js,jsx}"],
   },
-  build: {
-    rollupOptions: {
-      external: [
-        '@capacitor/filesystem',
-        '@capacitor/app',
-        '@capacitor/device',
-        '@capacitor/local-notifications',
-        '@capacitor/push-notifications',
-        '@capacitor/share',
-        'exceljs',
-        'jspdf',
-        'html2canvas',
-      ],
-    },
-  },
-})
+});
+// import { defineConfig } from 'vite'
+// import react from '@vitejs/plugin-react'
+
+// export default defineConfig({
+//   plugins: [react()],
+//   test: {
+//     include: ['src/**/*.test.{js,jsx}'],
+//   },
+//   build: {
+//     rollupOptions: {
+//       external: [
+//         '@capacitor/filesystem',
+//         '@capacitor/app',
+//         '@capacitor/device',
+//         '@capacitor/local-notifications',
+//         '@capacitor/push-notifications',
+//         '@capacitor/share',
+//         'exceljs',
+//         'jspdf',
+//         'html2canvas',
+//       ],
+//     },
+//   },
+// })
