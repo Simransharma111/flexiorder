@@ -1,98 +1,110 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
+import { App as CapacitorApp } from "@capacitor/app";
 
-import {
-  useLocation,
-  useNavigate,
-} from "react-router-dom";
-
-import {
-  App as CapacitorApp,
-} from "@capacitor/app";
 import { getHomePathForRole } from "../constants/roles";
 import { readStoredSession } from "../utils/session";
 
 export default function BackButtonHandler() {
+  const location = useLocation();
+  const navigate = useNavigate();
 
-  const location =
-    useLocation();
+  const pathnameRef = useRef(location.pathname);
 
-  const navigate =
-    useNavigate();
+  // Always keep the latest pathname available to the native listener
+  useEffect(() => {
+    pathnameRef.current = location.pathname;
+  }, [location.pathname]);
 
   useEffect(() => {
+    let listener = null;
+    let mounted = true;
 
-    let listener;
+    const setupListener = async () => {
+      listener = await CapacitorApp.addListener(
+        "backButton",
+        () => {
+          if (!mounted) return;
 
-    const setupListener =
-      async () => {
+          const pathname = pathnameRef.current;
+          const { user } = readStoredSession();
 
-        listener =
-          await CapacitorApp.addListener(
-            "backButton",
-            () => {
+          /*
+           * =====================================================
+           * AUTHENTICATED USER
+           * =====================================================
+           */
+          if (user) {
+            const home = getHomePathForRole(user.role);
 
-              const { user } = readStoredSession();
-              if (user) {
-                const home = getHomePathForRole(user.role);
-                const authenticatedRoots = [
-                  "/owner/dashboard",
-                  "/owner/order",
-                  "/kitchen",
-                  "/display",
-                  "/superadmin",
-                ];
-
-                if (location.pathname === home) {
-                  CapacitorApp.exitApp();
-                  return;
-                }
-
-                if (
-                  authenticatedRoots.includes(location.pathname) ||
-                  location.pathname.startsWith("/owner/") ||
-                  location.pathname === "/change-password"
-                ) {
-                  navigate(home, { replace: true });
-                  return;
-                }
-              }
-
-              // EXIT ONLY ON HOME
-
-              if (
-                location.pathname === "/" ||
-                location.pathname === "/homepage"
-              ) {
-
-                CapacitorApp.exitApp();
-
-              } else {
-
-                navigate(-1);
-
-              }
-
+            /*
+             * If already on the user's home page,
+             * Android back should exit the application.
+             */
+            if (pathname === home) {
+              CapacitorApp.exitApp();
+              return;
             }
-          );
 
-      };
+            /*
+             * All authenticated application pages.
+             */
+            const isAuthenticatedPage =
+              pathname === "/change-password" ||
+              pathname === "/kitchen" ||
+              pathname === "/display" ||
+              pathname === "/superadmin" ||
+              pathname.startsWith("/owner/");
+
+            /*
+             * From any authenticated page, return to
+             * the correct role-based home page.
+             */
+            if (isAuthenticatedPage) {
+              navigate(home, { replace: true });
+              return;
+            }
+          }
+
+          /*
+           * =====================================================
+           * PUBLIC PAGES
+           * =====================================================
+           */
+
+          /*
+           * Public home pages:
+           * Android back exits the application.
+           */
+          if (
+            pathname === "/" ||
+            pathname === "/homepage"
+          ) {
+            CapacitorApp.exitApp();
+            return;
+          }
+
+          /*
+           * Other public pages:
+           * use normal browser history.
+           */
+          navigate(-1);
+        }
+      );
+    };
 
     setupListener();
 
     return () => {
+      mounted = false;
 
-      if (
-        listener &&
-        listener.remove
-      ) {
-
-        listener.remove();
-
+      if (listener) {
+        listener.then((handle) => {
+          handle.remove();
+        });
       }
-
     };
-
-  }, [location.pathname, navigate]);
+  }, [navigate]);
 
   return null;
 }
