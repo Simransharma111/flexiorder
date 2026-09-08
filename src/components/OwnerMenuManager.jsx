@@ -339,15 +339,25 @@ export default function OwnerMenuManager({
       setLoadError("");
       setFeedback("");
 
-      const resolvedCategory = await resolveCategoryForSave(
-        formData.category
-      );
-      const resolvedFields = {
-        ...fields,
-        category: resolvedCategory,
-        categoryId: categoryId(resolvedCategory),
-        categoryName: categoryName(resolvedCategory),
-      };
+    const resolvedCategory = await resolveCategoryForSave(
+  formData.category
+);
+
+const resolvedCategoryId = categoryId(resolvedCategory);
+const resolvedCategoryName = categoryName(resolvedCategory);
+
+if (!resolvedCategoryId) {
+  throw new Error(
+    `Category "${resolvedCategoryName || formData.category}" does not have a valid category ID. Please select the category again.`
+  );
+}
+
+const resolvedFields = {
+  ...fields,
+  category: resolvedCategory,
+  categoryId: resolvedCategoryId,
+  categoryName: resolvedCategoryName,
+};
 
       if (editingId) {
         enqueueMenuUpdate(
