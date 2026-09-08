@@ -1,28 +1,51 @@
 import { useEffect, useMemo, useState } from "react";
+
 import {
   FiX,
   FiImage,
   FiStar,
 } from "react-icons/fi";
+
 import {
   dishFieldsFromForm,
   readImageForStorage,
 } from "../../utils/menuData.js";
+
 import {
   categoryKey,
   categoryName,
   dishCategoryName,
 } from "../../utils/menuCategories";
 
+
+/* =====================================================
+   EMPTY FORM
+===================================================== */
+
 const EMPTY_FORM = {
   name: "",
   description: "",
   category: "Main Course",
+
   foodType: "veg",
   containsEgg: false,
+
   price: "",
+
+  /*
+    GST RULE:
+
+    null = use hotel default GST
+    0    = explicitly 0%
+    5    = 5%
+    12   = 12%
+    18   = 18%
+  */
+  gst: null,
+
   discountType: "percentage",
   discountValue: "",
+
   prepTime: "",
 
   isAvailable: true,
@@ -40,6 +63,11 @@ const EMPTY_FORM = {
   displayOrder: 0,
 };
 
+
+/* =====================================================
+   AVAILABLE TAGS
+===================================================== */
+
 const AVAILABLE_TAGS = [
   "Spicy",
   "Chef's Choice",
@@ -47,6 +75,11 @@ const AVAILABLE_TAGS = [
   "Healthy",
   "Jain Friendly",
 ];
+
+
+/* =====================================================
+   COMPONENT
+===================================================== */
 
 export default function DishForm({
   hotelId,
@@ -58,12 +91,25 @@ export default function DishForm({
   onSubmit,
   onCancel,
 }) {
-  const [formData, setFormData] = useState(EMPTY_FORM);
-  const [imageFile, setImageFile] = useState(null);
-  const [imagePreview, setImagePreview] = useState("");
-  const [error, setError] = useState("");
+  const [formData, setFormData] =
+    useState(EMPTY_FORM);
 
-  const isEditing = Boolean(editingId);
+  const [imageFile, setImageFile] =
+    useState(null);
+
+  const [imagePreview, setImagePreview] =
+    useState("");
+
+  const [error, setError] =
+    useState("");
+
+  const isEditing =
+    Boolean(editingId);
+
+
+  /* =====================================================
+     CATEGORY OPTIONS
+  ===================================================== */
 
   const categoryOptions = useMemo(() => {
     return categories
@@ -77,30 +123,80 @@ export default function DishForm({
       .filter(Boolean);
   }, [categories]);
 
+
+  /* =====================================================
+     LOAD / RESET FORM
+  ===================================================== */
+
   useEffect(() => {
+    /*
+      NEW DISH
+    */
+
     if (!dish) {
       setFormData({
         ...EMPTY_FORM,
+
         category:
-          categoryOptions.includes("Main Course")
+          categoryOptions.includes(
+            "Main Course"
+          )
             ? "Main Course"
-            : categoryOptions[0] || "Main Course",
+            : categoryOptions[0] ||
+              "Main Course",
+
+        /*
+          Always start new dishes
+          without dish-specific GST.
+        */
+        gst: null,
       });
 
       setImageFile(null);
       setImagePreview("");
       setError("");
+
       return;
     }
+
+
+    /*
+      EDIT DISH
+    */
 
     const existingCategory =
       dishCategoryName(dish) ||
       "Main Course";
 
+
+    /*
+      IMPORTANT GST LOGIC
+
+      Existing dish:
+        null       -> null
+        undefined  -> null
+        ""         -> null
+        "5"        -> 5
+        5          -> 5
+    */
+
+    const existingGst =
+      dish.gst === null ||
+      dish.gst === undefined ||
+      dish.gst === ""
+        ? null
+        : Number(dish.gst);
+
+
     setFormData({
-      name: dish.name || "",
-      description: dish.description || "",
-      category: existingCategory,
+      name:
+        dish.name || "",
+
+      description:
+        dish.description || "",
+
+      category:
+        existingCategory,
 
       foodType:
         dish.foodType === "nonveg"
@@ -113,8 +209,17 @@ export default function DishForm({
       price:
         dish.price ?? "",
 
+      /*
+        Individual dish GST
+      */
+      gst:
+        Number.isFinite(existingGst)
+          ? existingGst
+          : null,
+
       discountType:
-        dish.discountType || "percentage",
+        dish.discountType ||
+        "percentage",
 
       discountValue:
         dish.discountValue ?? "",
@@ -158,10 +263,23 @@ export default function DishForm({
         dish.displayOrder ?? 0,
     });
 
+
     setImageFile(null);
-    setImagePreview(dish.image || "");
+
+    setImagePreview(
+      dish.image || ""
+    );
+
     setError("");
-  }, [dish, categoryOptions]);
+  }, [
+    dish,
+    categoryOptions,
+  ]);
+
+
+  /* =====================================================
+     CLEANUP IMAGE PREVIEW
+  ===================================================== */
 
   useEffect(() => {
     return () => {
@@ -169,10 +287,17 @@ export default function DishForm({
         imagePreview &&
         imagePreview.startsWith("blob:")
       ) {
-        URL.revokeObjectURL(imagePreview);
+        URL.revokeObjectURL(
+          imagePreview
+        );
       }
     };
   }, [imagePreview]);
+
+
+  /* =====================================================
+     HANDLE INPUT CHANGE
+  ===================================================== */
 
   const handleChange = (event) => {
     const {
@@ -182,8 +307,10 @@ export default function DishForm({
       checked,
     } = event.target;
 
+
     setFormData((previous) => ({
       ...previous,
+
       [name]:
         type === "checkbox"
           ? checked
@@ -193,19 +320,37 @@ export default function DishForm({
     setError("");
   };
 
-  const handleCheckbox = (name, value) => {
+
+  /* =====================================================
+     HANDLE CHECKBOX
+  ===================================================== */
+
+  const handleCheckbox = (
+    name,
+    value
+  ) => {
     setFormData((previous) => ({
       ...previous,
+
       [name]: value,
     }));
 
     setError("");
   };
 
-  const handleFoodType = (foodType) => {
+
+  /* =====================================================
+     FOOD TYPE
+  ===================================================== */
+
+  const handleFoodType = (
+    foodType
+  ) => {
     setFormData((previous) => ({
       ...previous,
+
       foodType,
+
       containsEgg:
         foodType === "nonveg"
           ? false
@@ -215,6 +360,11 @@ export default function DishForm({
     setError("");
   };
 
+
+  /* =====================================================
+     TAGS
+  ===================================================== */
+
   const toggleTag = (tag) => {
     setFormData((previous) => {
       const exists =
@@ -222,91 +372,165 @@ export default function DishForm({
 
       return {
         ...previous,
+
         tags: exists
           ? previous.tags.filter(
               (item) => item !== tag
             )
-          : [...previous.tags, tag],
+          : [
+              ...previous.tags,
+              tag,
+            ],
       };
     });
   };
 
-  const handleImageChange = (event) => {
+
+  /* =====================================================
+     IMAGE
+  ===================================================== */
+
+  const handleImageChange = (
+    event
+  ) => {
     const file =
-      event.target.files?.[0] || null;
+      event.target.files?.[0] ||
+      null;
+
 
     if (!file) {
       setImageFile(null);
       return;
     }
 
-    if (!file.type.startsWith("image/")) {
+
+    if (
+      !file.type.startsWith("image/")
+    ) {
       setError(
         "Please select a valid image file."
       );
+
       event.target.value = "";
+
       return;
     }
 
+
     const maxSize =
       5 * 1024 * 1024;
+
 
     if (file.size > maxSize) {
       setError(
         "Image must be smaller than 5 MB."
       );
+
       event.target.value = "";
+
       return;
     }
+
 
     if (
       imagePreview &&
       imagePreview.startsWith("blob:")
     ) {
-      URL.revokeObjectURL(imagePreview);
+      URL.revokeObjectURL(
+        imagePreview
+      );
     }
+
 
     const preview =
       URL.createObjectURL(file);
 
+
     setImageFile(file);
+
     setImagePreview(preview);
+
     setError("");
   };
 
+
+  /* =====================================================
+     VALIDATION
+  ===================================================== */
+
   const validate = () => {
     const name =
-      formData.name.trim();
+      String(
+        formData.name || ""
+      ).trim();
+
 
     const category =
       String(
         formData.category || ""
       ).trim();
 
+
     const price =
       Number(formData.price);
 
+
+    /*
+      GST IS OPTIONAL
+
+      Empty/null = no dish-specific GST
+    */
+
+    const gst =
+      formData.gst === null ||
+      formData.gst === undefined ||
+      formData.gst === ""
+        ? null
+        : Number(formData.gst);
+
+
     const prepTime =
       Number(formData.prepTime);
+
+
+    /* ---------------------------------------------------
+       HOTEL
+    --------------------------------------------------- */
 
     if (!hotelId) {
       return "Hotel information is missing. Please refresh the page.";
     }
 
+
+    /* ---------------------------------------------------
+       NAME
+    --------------------------------------------------- */
+
     if (!name) {
       return "Dish name is required.";
     }
+
+
+    /* ---------------------------------------------------
+       CATEGORY
+    --------------------------------------------------- */
 
     if (!category) {
       return "Please choose or enter a category.";
     }
 
+
     if (
       category.toLowerCase() ===
       "all"
     ) {
-      return '“All” is reserved for viewing the complete menu. Please choose another category.';
+      return "“All” is reserved for viewing the complete menu. Please choose another category.";
     }
+
+
+    /* ---------------------------------------------------
+       PRICE
+    --------------------------------------------------- */
 
     if (
       formData.price === "" ||
@@ -316,6 +540,34 @@ export default function DishForm({
       return "Please enter a valid price.";
     }
 
+
+    /* ---------------------------------------------------
+       GST
+    --------------------------------------------------- */
+
+    /*
+      GST can be empty.
+
+      Only validate it if
+      the user actually entered one.
+    */
+
+    if (
+      gst !== null &&
+      (
+        !Number.isFinite(gst) ||
+        gst < 0 ||
+        gst > 100
+      )
+    ) {
+      return "Please enter a valid GST percentage between 0 and 100.";
+    }
+
+
+    /* ---------------------------------------------------
+       PREPARATION TIME
+    --------------------------------------------------- */
+
     if (
       formData.prepTime === "" ||
       !Number.isFinite(prepTime) ||
@@ -324,16 +576,29 @@ export default function DishForm({
       return "Please enter a valid preparation time.";
     }
 
+
+    /* ---------------------------------------------------
+       DISCOUNT
+    --------------------------------------------------- */
+
     const discountValue =
-      Number(formData.discountValue || 0);
+      Number(
+        formData.discountValue || 0
+      );
+
 
     if (
       formData.discountValue !== "" &&
-      (!Number.isFinite(discountValue) ||
-        discountValue < 0)
+      (
+        !Number.isFinite(
+          discountValue
+        ) ||
+        discountValue < 0
+      )
     ) {
       return "Please enter a valid discount.";
     }
+
 
     if (
       formData.discountType ===
@@ -343,66 +608,134 @@ export default function DishForm({
       return "Percentage discount cannot be greater than 100%.";
     }
 
+
     return "";
   };
 
-  const handleSubmit = async (event) => {
+
+  /* =====================================================
+     SUBMIT
+  ===================================================== */
+
+  const handleSubmit = async (
+    event
+  ) => {
     event.preventDefault();
 
+
     if (loading) return;
+
 
     const validationError =
       validate();
 
+
     if (validationError) {
-      setError(validationError);
+      setError(
+        validationError
+      );
+
       return;
     }
+
 
     try {
       setError("");
 
+
+      /* -------------------------------------------------
+         CLEAN FORM DATA
+      ------------------------------------------------- */
+
       const cleanFormData = {
         ...formData,
-        name: formData.name.trim(),
+
+
+        name:
+          String(
+            formData.name || ""
+          ).trim(),
+
+
         description:
-          formData.description.trim(),
+          String(
+            formData.description || ""
+          ).trim(),
+
+
         category:
-          String(formData.category).trim(),
-        price: Number(formData.price),
-        prepTime: Number(formData.prepTime),
+          String(
+            formData.category || ""
+          ).trim(),
+
+
+        price:
+          Number(formData.price),
+
+
+        /*
+          IMPORTANT GST FIX
+
+          EMPTY -> null
+
+          NOT 0.
+
+          This allows the backend to understand:
+          "use hotel's default GST".
+        */
+
+        gst:
+          formData.gst === "" ||
+          formData.gst === null ||
+          formData.gst === undefined
+            ? null
+            : Number(formData.gst),
+
+
+        prepTime:
+          Number(formData.prepTime),
+
+
         discountValue:
           formData.discountValue === ""
             ? 0
             : Number(
                 formData.discountValue
               ),
+
+
         displayOrder:
-          Number(formData.displayOrder) ||
-          0,
-        tags: Array.isArray(
-          formData.tags
-        )
-          ? formData.tags
-          : [],
+          Number(
+            formData.displayOrder
+          ) || 0,
+
+
+        tags:
+          Array.isArray(
+            formData.tags
+          )
+            ? formData.tags
+            : [],
       };
 
-      // The editor owns the human-readable label. OwnerMenuManager resolves
-      // that label to a restaurant-scoped category before queueing the dish.
+
+      /* -------------------------------------------------
+         BUILD DISH FIELDS
+      ------------------------------------------------- */
+
       const fields =
         dishFieldsFromForm(
           cleanFormData,
           cleanFormData.category
         );
 
-      /*
-       * readImageForStorage is used here
-       * rather than inside OwnerMenuManager.
-       *
-       * This keeps all form/image handling
-       * inside DishForm.
-       */
+
+      /* -------------------------------------------------
+         IMAGE
+      ------------------------------------------------- */
+
       let image = null;
+
 
       if (imageFile) {
         image =
@@ -411,30 +744,50 @@ export default function DishForm({
           );
       }
 
+
+      /* -------------------------------------------------
+         SUBMIT
+      ------------------------------------------------- */
+
       await onSubmit({
         formData: cleanFormData,
+
         imageFile: image,
+
         fields,
       });
+
+
     } catch (err) {
       console.error(
         "DISH FORM SUBMIT ERROR:",
         err
       );
 
+
       setError(
-        err?.response?.data?.message ||
-          err?.message ||
-          "The dish could not be saved."
+        err?.response?.data
+          ?.message ||
+        err?.message ||
+        "The dish could not be saved."
       );
     }
   };
 
+
+  /* =====================================================
+     UI
+  ===================================================== */
+
   return (
     <div className="ops-menu-dish-editor bg-white border border-gray-200 rounded-2xl shadow-sm mb-8">
 
-      {/* HEADER */}
+      {/* =================================================
+          HEADER
+      ================================================= */}
+
       <div className="flex items-center justify-between p-5 border-b border-gray-200">
+
         <div>
           <h2 className="text-lg font-bold">
             {isEditing
@@ -447,6 +800,7 @@ export default function DishForm({
           </p>
         </div>
 
+
         <button
           type="button"
           onClick={onCancel}
@@ -456,24 +810,39 @@ export default function DishForm({
         >
           <FiX />
         </button>
+
       </div>
 
-      {/* ERROR */}
+
+      {/* =================================================
+          ERROR
+      ================================================= */}
+
       {error && (
         <div className="mx-5 mt-5 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {error}
         </div>
       )}
 
+
+      {/* =================================================
+          FORM
+      ================================================= */}
+
       <form
         onSubmit={handleSubmit}
         className="ops-menu-dish-form p-5"
       >
 
-        {/* BASIC DETAILS */}
+        {/* =================================================
+            BASIC DETAILS
+        ================================================= */}
+
         <div className="grid md:grid-cols-2 gap-4">
 
+
           {/* NAME */}
+
           <div>
             <label
               htmlFor="dish-name"
@@ -495,7 +864,9 @@ export default function DishForm({
             />
           </div>
 
+
           {/* PRICE */}
+
           <div>
             <label
               htmlFor="dish-price"
@@ -505,6 +876,7 @@ export default function DishForm({
             </label>
 
             <div className="relative">
+
               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">
                 ₹
               </span>
@@ -522,11 +894,82 @@ export default function DishForm({
                 disabled={loading}
                 required
               />
+
             </div>
           </div>
 
-          {/* DISCOUNT */}
+
+          {/* =================================================
+              GST
+          ================================================= */}
+
           <div>
+
+            <label
+              htmlFor="dish-gst"
+              className="block text-sm font-semibold mb-1"
+            >
+              GST (%)
+            </label>
+
+
+            <input
+              id="dish-gst"
+              name="gst"
+              type="number"
+              min="0"
+              max="100"
+              step="0.01"
+              placeholder="Optional — e.g. 5 or 18"
+              value={
+                formData.gst === null ||
+                formData.gst === undefined
+                  ? ""
+                  : formData.gst
+              }
+              onChange={(event) => {
+                const value =
+                  event.target.value;
+
+
+                setFormData(
+                  (previous) => ({
+                    ...previous,
+
+                    /*
+                      Empty field = null
+                    */
+
+                    gst:
+                      value === ""
+                        ? null
+                        : value,
+                  })
+                );
+
+
+                setError("");
+              }}
+              disabled={loading}
+              className="w-full border border-gray-200 rounded-lg px-3 py-3 outline-none focus:ring-2 focus:ring-orange-400"
+            />
+
+
+            <p className="mt-1 text-xs text-gray-500">
+              Leave empty to use the hotel's default GST.
+            </p>
+
+            <p className="mt-1 text-xs text-gray-400">
+              Example: hotel GST 0%, but this dish can have 5% or 18%.
+            </p>
+
+          </div>
+
+
+          {/* DISCOUNT */}
+
+          <div>
+
             <label className="block text-sm font-semibold mb-1">
               Discount
               <span className="text-gray-400 font-normal">
@@ -535,14 +978,19 @@ export default function DishForm({
               </span>
             </label>
 
+
             <div className="flex gap-2">
+
               <select
                 name="discountType"
-                value={formData.discountType}
+                value={
+                  formData.discountType
+                }
                 onChange={handleChange}
                 disabled={loading}
                 className="w-28 rounded-lg border border-gray-200 px-3 py-3 outline-none focus:ring-2 focus:ring-orange-400"
               >
+
                 <option value="percentage">
                   %
                 </option>
@@ -550,7 +998,9 @@ export default function DishForm({
                 <option value="fixed">
                   ₹
                 </option>
+
               </select>
+
 
               <input
                 type="number"
@@ -565,11 +1015,15 @@ export default function DishForm({
                 disabled={loading}
                 className="min-w-0 flex-1 rounded-lg border border-gray-200 px-3 py-3 outline-none focus:ring-2 focus:ring-orange-400"
               />
+
             </div>
           </div>
 
+
           {/* CATEGORY */}
+
           <div>
+
             <label
               htmlFor="dish-category"
               className="block text-sm font-semibold mb-1"
@@ -577,34 +1031,77 @@ export default function DishForm({
               Category
             </label>
 
+
             <select
               id="dish-category"
               name="category"
-              value={categoryOptions.includes(formData.category) ? formData.category : "__new__"}
+              value={
+                categoryOptions.includes(
+                  formData.category
+                )
+                  ? formData.category
+                  : "__new__"
+              }
               onChange={(event) => {
-                if (event.target.value === "__new__") {
-                  setFormData((current) => ({ ...current, category: "" }));
+
+                if (
+                  event.target.value ===
+                  "__new__"
+                ) {
+                  setFormData(
+                    (current) => ({
+                      ...current,
+
+                      category: "",
+                    })
+                  );
                 } else {
                   handleChange(event);
                 }
+
               }}
               disabled={loading}
               className="w-full border border-gray-200 rounded-lg bg-white px-3 py-3 outline-none focus:ring-2 focus:ring-orange-400"
               required
             >
-              <option value="" disabled>Choose a category</option>
-              {categoryOptions.map((category) => (
-                <option value={category} key={category}>{category}</option>
-              ))}
-              <option value="__new__">+ Create new category…</option>
+
+              <option
+                value=""
+                disabled
+              >
+                Choose a category
+              </option>
+
+
+              {categoryOptions.map(
+                (category) => (
+                  <option
+                    value={category}
+                    key={category}
+                  >
+                    {category}
+                  </option>
+                )
+              )}
+
+
+              <option value="__new__">
+                + Create new category…
+              </option>
+
             </select>
 
-            {!categoryOptions.includes(formData.category) && (
+
+            {!categoryOptions.includes(
+              formData.category
+            ) && (
               <input
                 aria-label="New category name"
                 type="text"
                 name="category"
-                value={formData.category}
+                value={
+                  formData.category
+                }
                 onChange={handleChange}
                 placeholder="New category name"
                 disabled={loading}
@@ -613,13 +1110,18 @@ export default function DishForm({
               />
             )}
 
+
             <p className="mt-1 text-xs text-gray-500">
               Choose a restaurant category, or create one once if it is not listed.
             </p>
+
           </div>
 
+
           {/* PREP TIME */}
+
           <div>
+
             <label
               htmlFor="dish-prep-time"
               className="block text-sm font-semibold mb-1"
@@ -627,32 +1129,45 @@ export default function DishForm({
               Preparation Time
             </label>
 
+
             <div className="relative">
+
               <input
                 id="dish-prep-time"
                 type="number"
                 min="0"
                 name="prepTime"
                 placeholder="20"
-                value={formData.prepTime}
+                value={
+                  formData.prepTime
+                }
                 onChange={handleChange}
                 disabled={loading}
                 className="w-full border border-gray-200 rounded-lg px-3 py-3 pr-20 outline-none focus:ring-2 focus:ring-orange-400"
                 required
               />
 
+
               <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-400">
                 minutes
               </span>
+
             </div>
           </div>
+
         </div>
 
-        {/* FOOD TYPE */}
+
+        {/* =================================================
+            FOOD TYPE
+        ================================================= */}
+
         <div className="mt-5">
+
           <label className="block text-sm font-semibold mb-2">
             Food Type
           </label>
+
 
           <div className="flex flex-wrap gap-3">
 
@@ -672,6 +1187,7 @@ export default function DishForm({
               🟢 Veg
             </button>
 
+
             <button
               type="button"
               onClick={() =>
@@ -687,13 +1203,20 @@ export default function DishForm({
             >
               🔴 Non-Veg
             </button>
+
           </div>
         </div>
 
-        {/* EGG */}
+
+        {/* =================================================
+            EGG
+        ================================================= */}
+
         {formData.foodType ===
           "veg" && (
+
           <label className="mt-5 flex items-center gap-3 text-sm font-semibold cursor-pointer">
+
             <input
               type="checkbox"
               name="containsEgg"
@@ -706,11 +1229,17 @@ export default function DishForm({
             />
 
             Contains egg
+
           </label>
         )}
 
-        {/* DESCRIPTION */}
+
+        {/* =================================================
+            DESCRIPTION
+        ================================================= */}
+
         <div className="mt-5">
+
           <label
             htmlFor="dish-description"
             className="block text-sm font-semibold mb-1"
@@ -718,41 +1247,60 @@ export default function DishForm({
             Description
           </label>
 
+
           <textarea
             id="dish-description"
             name="description"
             placeholder="Describe the dish..."
-            value={formData.description}
+            value={
+              formData.description
+            }
             onChange={handleChange}
             disabled={loading}
             rows={3}
             className="w-full border border-gray-200 rounded-lg px-3 py-3 outline-none resize-none focus:ring-2 focus:ring-orange-400"
           />
+
         </div>
 
-        {/* IMAGE */}
+
+        {/* =================================================
+            IMAGE
+        ================================================= */}
+
         <div className="mt-5">
+
           <label className="block text-sm font-semibold mb-2">
             Dish Image
           </label>
+
 
           <label
             htmlFor="dish-image"
             className="border-2 border-dashed border-gray-300 rounded-xl p-5 flex items-center gap-4 cursor-pointer hover:bg-gray-50 transition"
           >
+
             {imagePreview ? (
+
               <img
                 src={imagePreview}
                 alt="Dish preview"
                 className="w-16 h-16 rounded-xl object-cover"
               />
+
             ) : (
+
               <div className="w-11 h-11 bg-gray-100 rounded-lg flex items-center justify-center">
+
                 <FiImage className="text-gray-500" />
+
               </div>
+
             )}
 
+
             <div>
+
               <p className="text-sm font-semibold">
                 {imagePreview
                   ? "Change image"
@@ -762,17 +1310,23 @@ export default function DishForm({
               <p className="text-xs text-gray-500 mt-1">
                 JPG, PNG or WEBP · Max 5 MB
               </p>
+
             </div>
+
           </label>
+
 
           <input
             id="dish-image"
             type="file"
             accept="image/jpeg,image/png,image/webp,image/*"
-            onChange={handleImageChange}
+            onChange={
+              handleImageChange
+            }
             disabled={loading}
             className="hidden"
           />
+
 
           {imageFile && (
             <p className="text-xs text-green-600 mt-2">
@@ -781,21 +1335,31 @@ export default function DishForm({
             </p>
           )}
 
+
           {isEditing &&
             !imageFile &&
             dish?.image && (
+
               <p className="text-xs text-gray-500 mt-2">
                 Existing image will remain
                 unchanged.
               </p>
+
             )}
+
         </div>
 
-        {/* AVAILABILITY */}
+
+        {/* =================================================
+            AVAILABILITY
+        ================================================= */}
+
         <div className="mt-6">
+
           <h3 className="font-bold text-sm mb-3">
             Availability
           </h3>
+
 
           <CheckOption
             label="Available"
@@ -811,14 +1375,22 @@ export default function DishForm({
             }
             disabled={loading}
           />
+
         </div>
 
-        {/* ADVANCED DISPLAY SECTIONS */}
+
+        {/* =================================================
+            ADVANCED DISPLAY SECTIONS
+        ================================================= */}
+
         {advancedEnabled && (
+
           <div className="mt-6">
+
             <h3 className="font-bold text-sm mb-3">
               Display Sections
             </h3>
+
 
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
 
@@ -836,6 +1408,7 @@ export default function DishForm({
                 disabled={loading}
               />
 
+
               <CheckOption
                 label="Today's Special"
                 checked={
@@ -849,6 +1422,7 @@ export default function DishForm({
                 }
                 disabled={loading}
               />
+
 
               <CheckOption
                 label="Recommended"
@@ -864,6 +1438,7 @@ export default function DishForm({
                 disabled={loading}
               />
 
+
               <CheckOption
                 label="Best Seller"
                 checked={
@@ -877,6 +1452,7 @@ export default function DishForm({
                 }
                 disabled={loading}
               />
+
 
               <CheckOption
                 label="Popular"
@@ -892,6 +1468,7 @@ export default function DishForm({
                 disabled={loading}
               />
 
+
               <CheckOption
                 label="New Arrival"
                 checked={
@@ -906,6 +1483,7 @@ export default function DishForm({
                 disabled={loading}
               />
 
+
               <CheckOption
                 label="Chef's Choice"
                 checked={
@@ -919,26 +1497,38 @@ export default function DishForm({
                 }
                 disabled={loading}
               />
+
             </div>
           </div>
         )}
 
-        {/* TAGS */}
+
+        {/* =================================================
+            TAGS
+        ================================================= */}
+
         {advancedEnabled && (
+
           <div className="mt-6">
+
             <h3 className="font-bold text-sm mb-3">
               Dish Tags
             </h3>
 
+
             <div className="flex flex-wrap gap-2">
+
               {AVAILABLE_TAGS.map(
                 (tag) => {
+
                   const selected =
                     formData.tags.includes(
                       tag
                     );
 
+
                   return (
+
                     <button
                       type="button"
                       key={tag}
@@ -952,6 +1542,7 @@ export default function DishForm({
                           : "bg-white border-gray-200 text-gray-600 hover:bg-gray-50"
                       }`}
                     >
+
                       {selected && (
                         <FiStar
                           className="inline mr-1"
@@ -960,15 +1551,21 @@ export default function DishForm({
                       )}
 
                       {tag}
+
                     </button>
                   );
                 }
               )}
+
             </div>
           </div>
         )}
 
-        {/* SPICE / ORDER */}
+
+        {/* =================================================
+            SPICE / ORDER
+        ================================================= */}
+
         <div
           className={`grid gap-4 mt-6 ${
             advancedEnabled
@@ -976,14 +1573,18 @@ export default function DishForm({
               : ""
           }`}
         >
+
           {/* SPICE */}
+
           <div>
+
             <label
               htmlFor="dish-spice"
               className="block text-sm font-semibold mb-1"
             >
               Spice Level
             </label>
+
 
             <select
               id="dish-spice"
@@ -995,6 +1596,7 @@ export default function DishForm({
               disabled={loading}
               className="w-full border border-gray-200 rounded-lg px-3 py-3 outline-none focus:ring-2 focus:ring-orange-400"
             >
+
               <option value="">
                 Select spice level
               </option>
@@ -1010,22 +1612,30 @@ export default function DishForm({
               <option value="hot">
                 Hot
               </option>
+
             </select>
+
           </div>
 
+
           {/* DISPLAY ORDER */}
+
           {advancedEnabled && (
+
             <div>
+
               <label
                 htmlFor="dish-display-order"
                 className="block text-sm font-semibold mb-1"
               >
                 Menu Priority
+   
                 <span className="text-gray-400 font-normal">
                   {" "}
                   (optional)
                 </span>
               </label>
+
 
               <input
                 id="dish-display-order"
@@ -1040,17 +1650,25 @@ export default function DishForm({
                 className="w-full border border-gray-200 rounded-lg px-3 py-3 outline-none focus:ring-2 focus:ring-orange-400"
               />
 
+
               <p className="mt-1 text-xs text-gray-500">
                 Positive numbers appear first.
                 1 is highest priority. Use 0
                 for normal order.
               </p>
+
             </div>
           )}
+
         </div>
 
-        {/* BUTTONS */}
+
+        {/* =================================================
+            BUTTONS
+        ================================================= */}
+
         <div className="flex flex-col sm:flex-row gap-3 mt-7">
+
           <button
             type="submit"
             disabled={loading}
@@ -1063,6 +1681,7 @@ export default function DishForm({
               : "Add Dish"}
           </button>
 
+
           <button
             type="button"
             onClick={onCancel}
@@ -1071,11 +1690,19 @@ export default function DishForm({
           >
             Cancel
           </button>
+
         </div>
+
       </form>
+
     </div>
   );
 }
+
+
+/* =====================================================
+   CHECK OPTION
+===================================================== */
 
 function CheckOption({
   label,
@@ -1092,6 +1719,7 @@ function CheckOption({
           : "cursor-pointer hover:bg-gray-50"
       }`}
     >
+
       <input
         type="checkbox"
         checked={Boolean(checked)}
@@ -1104,17 +1732,22 @@ function CheckOption({
         className="w-4 h-4 accent-orange-500"
       />
 
+
       <div>
+
         <p className="text-sm font-semibold">
           {label}
         </p>
+
 
         {description && (
           <p className="text-xs text-gray-500">
             {description}
           </p>
         )}
+
       </div>
+
     </label>
   );
 }

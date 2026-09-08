@@ -209,39 +209,82 @@ export const normalizeDishResponse = (
 export function dishFieldsFromForm(formData, category) {
   return {
     name: String(formData.name || "").trim(),
-    description: String(formData.description || "").trim(),
 
-    // IMPORTANT
-    category: String(category || "").trim(),
+    description: String(
+      formData.description || ""
+    ).trim(),
 
-    foodType: formData.foodType || "veg",
-    containsEgg: Boolean(formData.containsEgg),
+    category: String(
+      category || ""
+    ).trim(),
 
-    price: Number(formData.price || 0),
+    foodType:
+      formData.foodType || "veg",
 
-    discountType: formData.discountType || "percentage",
-    discountValue: Number(formData.discountValue || 0),
+    containsEgg:
+      Boolean(formData.containsEgg),
 
-    prepTime: Number(formData.prepTime || 0),
+    price:
+      Number(formData.price || 0),
 
-    isAvailable: formData.isAvailable !== false,
+    // =========================================
+    // GST - PER DISH
+    // =========================================
+    // null = use hotel's default GST
+    // 0    = explicitly 0% GST
+    // 5    = explicitly 5% GST
+    // 12   = explicitly 12% GST
+    // 18   = explicitly 18% GST
+    gst:
+      formData.gst === "" ||
+      formData.gst === null ||
+      formData.gst === undefined
+        ? null
+        : Number(formData.gst),
 
-    isRecommended: Boolean(formData.isRecommended),
-    isBestseller: Boolean(formData.isBestseller),
+    discountType:
+      formData.discountType || "percentage",
 
-    featured: Boolean(formData.featured),
-    todaySpecial: Boolean(formData.todaySpecial),
-    isPopular: Boolean(formData.isPopular),
-    isNewArrival: Boolean(formData.isNewArrival),
-    chefChoice: Boolean(formData.chefChoice),
+    discountValue:
+      Number(formData.discountValue || 0),
 
-    spiceLevel: formData.spiceLevel || "",
+    prepTime:
+      Number(formData.prepTime || 0),
 
-    tags: Array.isArray(formData.tags)
-      ? formData.tags
-      : [],
+    isAvailable:
+      formData.isAvailable !== false,
 
-    displayOrder: Number(formData.displayOrder || 0),
+    isRecommended:
+      Boolean(formData.isRecommended),
+
+    isBestseller:
+      Boolean(formData.isBestseller),
+
+    featured:
+      Boolean(formData.featured),
+
+    todaySpecial:
+      Boolean(formData.todaySpecial),
+
+    isPopular:
+      Boolean(formData.isPopular),
+
+    isNewArrival:
+      Boolean(formData.isNewArrival),
+
+    chefChoice:
+      Boolean(formData.chefChoice),
+
+    spiceLevel:
+      formData.spiceLevel || "",
+
+    tags:
+      Array.isArray(formData.tags)
+        ? formData.tags
+        : [],
+
+    displayOrder:
+      Number(formData.displayOrder || 0),
   };
 }
 
@@ -300,19 +343,17 @@ export const buildDishFormData = (
 ) => {
   const form = new FormData();
 
-  MENU_FIELD_NAMES.forEach(
-    (field) => {
-      if (
-        fields[field] !== undefined &&
-        fields[field] !== null
-      ) {
-        form.append(
-          field,
-          String(fields[field])
-        );
-      }
-    }
-  );
+MENU_FIELD_NAMES.forEach((field) => {
+  if (
+    fields[field] !== undefined &&
+    fields[field] !== null
+  ) {
+    form.append(
+      field,
+      String(fields[field])
+    );
+  }
+});
 
   /*
    * CATEGORY
