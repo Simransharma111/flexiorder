@@ -1416,19 +1416,50 @@ img {
 ========================================================= */
 
 .guest-brand-strip {
-  height: 62px;
+  position: relative;
+  height: 68px;
   background: var(--guest-brand, var(--primary));
   color: var(--theme-on-primary, #fff);
   box-shadow: inset 0 -1px 0 rgba(255,255,255,.12);
+  overflow: hidden;
 }
-.guest-brand-strip__inner { height: 62px; max-width: 1180px; margin: 0 auto; display: flex; align-items: center; gap: 10px; padding: 6px 10px; }
-.guest-brand-strip__logo { width: 50px; height: 50px; flex: 0 0 50px; display: grid; place-items: center; overflow: hidden; border-radius: 12px; background: rgba(255,255,255,.18); border: 1px solid rgba(255,255,255,.25); font-size: 22px; font-weight: 850; box-shadow: 0 8px 18px rgba(0,0,0,.08); }
+.guest-brand-strip--image {
+  background-color: var(--guest-brand, var(--primary));
+  background-blend-mode: multiply;
+}
+.guest-brand-strip__inner {
+  position: relative;
+  z-index: 1;
+  height: 68px;
+  max-width: 1180px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  background: rgba(7, 12, 10, 0.14);
+  backdrop-filter: blur(1.5px);
+}
+.guest-brand-strip__logo {
+  width: 52px;
+  height: 52px;
+  flex: 0 0 52px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 13px;
+  background: rgba(255,255,255,.18);
+  border: 1px solid rgba(255,255,255,.28);
+  font-size: 22px;
+  font-weight: 850;
+  box-shadow: 0 8px 20px rgba(0,0,0,.14);
+}
 .guest-brand-strip__logo img { width: 100%; height: 100%; object-fit: cover; }
 .guest-brand-strip__identity { min-width: 0; flex: 1; display: grid; gap: 2px; }
 .guest-brand-strip__identity h1 { overflow: hidden; margin: 0; color: inherit; font-size: 18px; font-weight: 800; line-height: 1.2; text-overflow: ellipsis; white-space: nowrap; letter-spacing: -.02em; }
-.guest-brand-strip__identity p { overflow: hidden; margin: 0; color: inherit; opacity: 0.92; font-size: 12.5px; line-height: 1.25; text-overflow: ellipsis; white-space: nowrap; }
-.guest-brand-strip__location { max-width: 92px; display: inline-flex; align-items: center; gap: 3px; overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
-.guest-brand-strip__inner > button { position: relative; width: 44px; height: 44px; flex: 0 0 44px; display: grid; place-items: center; border: 0; border-radius: 9px; background: color-mix(in srgb, currentColor 15%, transparent); color: inherit; }
+.guest-brand-strip__identity p { overflow: hidden; margin: 0; color: inherit; opacity: 0.96; font-size: 12.5px; line-height: 1.25; text-overflow: ellipsis; white-space: nowrap; }
+.guest-brand-strip__location { max-width: 92px; display: inline-flex; align-items: center; gap: 3px; overflow: hidden; font-size: 12px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+.guest-brand-strip__inner > button { position: relative; width: 44px; height: 44px; flex: 0 0 44px; display: grid; place-items: center; border: 0; border-radius: 9px; background: rgba(255,255,255,.14); color: inherit; box-shadow: inset 0 0 0 1px rgba(255,255,255,.16); }
 .guest-brand-strip__inner > button b { position: absolute; inset: 2px 2px auto auto; min-width: 17px; height: 17px; display: grid; place-items: center; border-radius: 999px; background: #fff; color: var(--guest-brand, var(--primary)); font-size: 9px; }
 
 .guest-menu-page { background: var(--ops-canvas); }

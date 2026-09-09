@@ -4,8 +4,19 @@ export default function GuestHeader({ hotel, table, cartCount, onCart, orderingE
   const location = table?.type === "room"
     ? `Room ${table?.locationNumber || table?.tableNumber || ""}`
     : `Table ${table?.locationNumber || table?.tableNumber || ""}`;
+
+  const bannerImage = hotel?.coverImage || hotel?.bannerImage;
+  const headerStyle = bannerImage
+    ? {
+        backgroundImage: `linear-gradient(90deg, rgba(8, 15, 12, 0.72), rgba(8, 15, 12, 0.38) 46%, rgba(8, 15, 12, 0.2)), url(${bannerImage})`,
+        backgroundSize: "cover",
+        backgroundPosition: "center",
+        backgroundRepeat: "no-repeat",
+      }
+    : undefined;
+
   return (
-    <header className="guest-brand-strip">
+    <header className={`guest-brand-strip ${bannerImage ? "guest-brand-strip--image" : ""}`} style={headerStyle}>
       <div className="guest-brand-strip__inner">
         <div className="guest-brand-strip__logo" aria-hidden={!hotel?.logo}>
           {hotel?.logo ? <img src={hotel.logo} alt="" /> : <span>{hotel?.name?.charAt(0) || "F"}</span>}
