@@ -235,7 +235,7 @@ export function dishFieldsFromForm(formData, category) {
     menuType: formData.menuType === "combo" ? "combo" : "simple",
 
     comboConfig: formData.menuType === "combo"
-      ? JSON.stringify(formData.comboConfig || { includedItems: [], selectionGroups: [] })
+      ? (formData.comboConfig || { includedItems: [], selectionGroups: [] })
       : undefined,
 
     description: String(
