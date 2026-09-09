@@ -874,9 +874,6 @@ table={table}
   if (!orderingEnabled && !websiteUrl && !instagramUrl) return null;
   return (
     <div className="guest-secondary-actions">
-      {orderingEnabled && (
-        <button type="button" onClick={openSchedule}><FiCalendar /> Schedule order</button>
-      )}
       {websiteUrl && (
         <a href={websiteUrl} target="_blank" rel="noreferrer" aria-label={`${hotel?.name || "Hotel"} website`}>
           <FiGlobe /> Website
@@ -959,17 +956,42 @@ outline-none
 
 {/* FOOD FILTER */}
 
-
-{!vegOnly && (
-  <section className="guest-food-filters" aria-label="Dietary filters">
-    <div>
+<section className="guest-food-filters" aria-label="Dietary filters">
+  {!vegOnly && (
+    <div className="guest-food-filters__group">
       {[{ id: "all", label: "All" }, { id: "veg", label: "Veg" }, { id: "nonveg", label: "Non-Veg" }].map((item) => (
-        <button type="button" key={item.id} onClick={() => { setFoodFilter(item.id); if (item.id !== "veg") setHideEggDishes(false); }} className={foodFilter === item.id ? "is-active" : ""}>{item.label}</button>
+        <button
+          type="button"
+          key={item.id}
+          onClick={() => {
+            setFoodFilter(item.id);
+            if (item.id !== "veg") setHideEggDishes(false);
+          }}
+          className={foodFilter === item.id ? "is-active" : ""}
+        >
+          {item.label}
+        </button>
       ))}
     </div>
-    {foodFilter === "veg" && <label><input type="checkbox" checked={hideEggDishes} onChange={(event) => setHideEggDishes(event.target.checked)} /> Hide egg dishes</label>}
-  </section>
-)}
+  )}
+
+  <div className="guest-food-filters__actions">
+    {foodFilter === "veg" && (
+      <label>
+        <input
+          type="checkbox"
+          checked={hideEggDishes}
+          onChange={(event) => setHideEggDishes(event.target.checked)}
+        />
+        Hide egg dishes
+      </label>
+    )}
+
+    <button type="button" onClick={openSchedule} className="guest-food-filters__schedule">
+      <FiCalendar /> Schedule order
+    </button>
+  </div>
+</section>
 
 
 
