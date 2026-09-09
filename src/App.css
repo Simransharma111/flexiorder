@@ -1476,7 +1476,7 @@ img {
 .guest-secondary-actions { max-width: 760px; margin: 8px auto 0; padding: 0 10px; display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 4px 14px; }
 .guest-secondary-actions button, .guest-secondary-actions a { min-height: 38px; display: inline-flex; align-items: center; border: 0; background: transparent; color: var(--primary-ink, var(--primary)); font-size: 13px; font-weight: 750; text-decoration: none; cursor: pointer; }
 .guest-secondary-actions svg { display: inline; margin-right: 4px; vertical-align: -2px; }
-.guest-food-filters { max-width: 760px; margin: 8px auto 0; padding: 0 10px; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.guest-food-filters { position: sticky; top: 0; z-index: 30; max-width: 760px; margin: 8px auto 0; padding: 8px 10px 10px; display: flex; align-items: center; justify-content: space-between; gap: 10px; background: color-mix(in srgb, var(--ops-canvas) 86%, transparent); backdrop-filter: blur(8px); border-bottom: 1px solid var(--ops-border); }
 .guest-food-filters__group { display: flex; gap: 6px; flex-wrap: wrap; }
 .guest-food-filters__actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
 .guest-food-filters button { min-height: 40px; border: 1px solid var(--ops-border); border-radius: 999px; background: var(--ops-card); padding: 0 14px; color: var(--ops-muted); font-size: 13px; font-weight: 700; }
