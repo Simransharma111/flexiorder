@@ -21,10 +21,22 @@ import { useConnectivity } from "../context/ConnectivityContext";
 import { useSync } from "../context/SyncContext";
 import { SYNC_STATE_EVENT } from "../utils/syncQueues";
 import SubcategoryChooser from "../components/menu/SubcategoryChooser";
+import ComboSelector from "../components/guestmenu/ComboSelector";
 
 const tableLabel = (table) => table?.type === "room"
   ? `Room ${table.tableNumber || table.locationNumber}`
   : `Table ${table.tableNumber || table.locationNumber}`;
+
+const comboSignature = (selections = []) => selections
+  .map((selection) => ({
+    groupName: String(selection.groupName || "").trim(),
+    items: [...(selection.items || [])].map((item) => String(item).trim()).sort(),
+  }))
+  .sort((left, right) => left.groupName.localeCompare(right.groupName));
+
+const cartLineKey = (menuId, selections = []) => (
+  selections.length ? `${menuId}::${JSON.stringify(comboSignature(selections))}` : String(menuId)
+);
 
 export default function StaffOrder({ hotel, onOrderCreated }) {
   const restaurantId = getRestaurantId(hotel) || getRestaurantId();
@@ -39,6 +51,7 @@ export default function StaffOrder({ hotel, onOrderCreated }) {
   const [category, setCategory] = useState("All");
   const [activeSubCategory, setActiveSubCategory] = useState("All");
   const [showGuest, setShowGuest] = useState(false);
+  const [comboDish, setComboDish] = useState(null);
   const [guestName, setGuestName] = useState("");
   const [guestContact, setGuestContact] = useState("");
   const [cart, setCart] = useState([]);
@@ -188,23 +201,46 @@ export default function StaffOrder({ hotel, onOrderCreated }) {
     return groups;
   }, [visibleMenu, activeSubCategory]);
 
-  const quantityFor = (dishId) => cart.find((item) => item.menuId === dishId)?.quantity || 0;
+  const quantityFor = (dishId) => cart
+    .filter((item) => item.menuId === dishId)
+    .reduce((total, item) => total + Number(item.quantity || 0), 0);
 
-  const changeQuantity = (dish, delta) => {
+  const changeQuantity = (dish, delta, comboSelections = []) => {
     const pricing = getDishPricing(dish);
+    const key = cartLineKey(dish._id, comboSelections);
     setCart((current) => {
-      const existing = current.find((item) => item.menuId === dish._id);
+      const existing = current.find((item) => (item.cartKey || item.menuId) === key);
       if (!existing && delta > 0) return [...current, {
         menuId: dish._id,
+        cartKey: key,
         name: dish.name,
         price: pricing.finalPrice,
         quantity: 1,
+        ...(dish.menuType === "combo" ? {
+          itemType: "combo",
+          comboSelections: comboSignature(comboSelections),
+          comboIncludedItems: dish.comboConfig?.includedItems || [],
+        } : {}),
       }];
       if (!existing) return current;
       const quantity = existing.quantity + delta;
-      if (quantity <= 0) return current.filter((item) => item.menuId !== dish._id);
-      return current.map((item) => item.menuId === dish._id ? { ...item, quantity } : item);
+      if (quantity <= 0) return current.filter((item) => (item.cartKey || item.menuId) !== key);
+      return current.map((item) => (item.cartKey || item.menuId) === key ? { ...item, quantity } : item);
     });
+  };
+
+  const addDish = (dish) => {
+    if (dish.menuType === "combo") {
+      setComboDish(dish);
+      return;
+    }
+    changeQuantity(dish, 1);
+  };
+
+  const confirmCombo = (selections) => {
+    if (!comboDish) return;
+    changeQuantity(comboDish, 1, selections);
+    setComboDish(null);
   };
 
   const cartCount = cart.reduce((total, item) => total + item.quantity, 0);
@@ -219,6 +255,7 @@ export default function StaffOrder({ hotel, onOrderCreated }) {
     setCategory("All");
     setSelectedTable(null);
     setOrderType("dinein");
+    setComboDish(null);
   };
 
   const placeOrder = async () => {
@@ -239,7 +276,14 @@ export default function StaffOrder({ hotel, onOrderCreated }) {
       orderType,
       guestName: guestName.trim() || "Guest",
       guestContact: guestContact.trim() || null,
-      items: cart.map((item) => ({ menuId: item.menuId, quantity: item.quantity })),
+      items: cart.map((item) => ({
+        menuId: item.menuId,
+        quantity: item.quantity,
+        ...(item.itemType === "combo" ? {
+          itemType: "combo",
+          comboSelections: item.comboSelections,
+        } : {}),
+      })),
     };
     const localShape = {
       status: "pending",
@@ -296,6 +340,14 @@ export default function StaffOrder({ hotel, onOrderCreated }) {
   return (
     <section className="staff-order-flow">
       <h1 className="sr-only">Staff Ordering</h1>
+
+      {comboDish && (
+        <ComboSelector
+          dish={comboDish}
+          onClose={() => setComboDish(null)}
+          onConfirm={confirmCombo}
+        />
+      )}
 
       {attentionCount > 0 && (
         <div className="ops-attention-panel" role="status">
@@ -392,15 +444,16 @@ export default function StaffOrder({ hotel, onOrderCreated }) {
                   {subCatDishes.map((dish) => {
                     const quantity = quantityFor(dish._id);
                     const { basePrice, finalPrice, hasDiscount } = getDishPricing(dish);
+                    const isCombo = dish.menuType === "combo";
                     return (
                       <div className="staff-dish-row" key={dish._id}>
-                        <button type="button" className="staff-dish-row__main" onClick={() => changeQuantity(dish, 1)} aria-label={`Add ${dish.name}`}>
+                        <button type="button" className="staff-dish-row__main" onClick={() => addDish(dish)} aria-label={`${isCombo ? "Choose options for" : "Add"} ${dish.name}`}>
                           <span className={`food-mark ${dish.foodType === "nonveg" ? "is-nonveg" : "is-veg"}`} aria-label={dish.foodType === "nonveg" ? "Non-vegetarian" : "Vegetarian"} />
                           <span><strong>{dish.name}</strong>{dish.containsEgg && dish.foodType !== "nonveg" && <small>Contains egg</small>}</span>
                           <span className="staff-dish-price">{hasDiscount && <del>₹{basePrice.toFixed(0)}</del>}<b>₹{finalPrice.toFixed(0)}</b></span>
-                          {!quantity && <span className="staff-add-label">Add</span>}
+                          {!quantity && <span className="staff-add-label">{isCombo ? "Choose Options" : "Add"}</span>}
                         </button>
-                        {quantity > 0 && (
+                        {quantity > 0 && !isCombo && (
                           <div className="staff-qty" aria-label={`${dish.name} quantity`}>
                             <button type="button" aria-label={`Remove one ${dish.name}`} onClick={() => changeQuantity(dish, -1)}><FiMinus /></button>
                             <b>{quantity}</b>
