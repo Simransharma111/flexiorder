@@ -21,6 +21,7 @@ import MenuSection from "../components/guestmenu/MenuSection";
 import SimpleMenuSection from "../components/guestmenu/SimpleMenuSection";
 import FeaturedSection from "../components/guestmenu/FeaturedSection";
 import ActiveOrder from "../components/guestmenu/ActiveOrder";
+import ComboSelector from "../components/guestmenu/ComboSelector";
 import ScheduleModal from "../components/guestmenu/ScheduleModal";
 import { sortDishesForDisplay } from "../utils/menuOrdering";
 import { getHotelThemeStyle } from "../utils/hotelTheme";
@@ -159,6 +160,8 @@ const [
  showScheduleInfo,
  setShowScheduleInfo
 ]=useState(false);
+
+const [comboDish, setComboDish] = useState(null);
 
 
 // =====================================================
@@ -559,12 +562,23 @@ const specialDishes = filteredDishes.filter((dish) =>
 // CART HELPERS
 // =====================================================
 
-const getCartQuantity = (dishId) =>
-  cart.find((item) => item._id === dishId)?.quantity || 0;
+const getCartQuantity = (dishId) => cart
+  .filter((item) => item._id === dishId)
+  .reduce((total, item) => total + Number(item.quantity || 0), 0);
 
 const addToCart = (dish) => {
   if (!orderingEnabled || dish.isAvailable === false) return;
+  if (dish.menuType === "combo") {
+    setComboDish(dish);
+    return;
+  }
   addDishToCart(dish);
+};
+
+const confirmCombo = (selections) => {
+  if (!comboDish) return;
+  addDishToCart(comboDish, selections);
+  setComboDish(null);
 };
 
 const decreaseQuantity = (dishId) => decreaseQty(dishId);
@@ -764,6 +778,14 @@ Try Again
 return (
 
 <div className="guest-menu-page min-h-screen pb-32" style={getHotelThemeStyle(hotel)}>
+
+{comboDish && (
+  <ComboSelector
+    dish={comboDish}
+    onClose={() => setComboDish(null)}
+    onConfirm={confirmCombo}
+  />
+)}
 
 
 

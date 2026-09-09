@@ -11,6 +11,17 @@ import { getDishPricing } from "../utils/pricing";
 
 const CartContext = createContext(null);
 
+const comboSignature = (selections = []) => selections
+  .map((selection) => ({
+    groupName: String(selection.groupName || "").trim(),
+    items: [...(selection.items || [])].map((item) => String(item).trim()).sort(),
+  }))
+  .sort((left, right) => left.groupName.localeCompare(right.groupName));
+
+const lineKey = (dish, selections) => dish.menuType === "combo"
+  ? `${dish._id}::${JSON.stringify(comboSignature(selections))}`
+  : dish._id;
+
 export const useCart = () => {
   const context = useContext(CartContext);
 
@@ -76,17 +87,18 @@ export default function CartProvider({ children }) {
   // ADD TO CART
   // ==========================================
 
-  const addToCart = (dish) => {
+  const addToCart = (dish, comboSelections = []) => {
     if (!dish?._id) return;
 
     setCartItems((prev) => {
+      const cartKey = lineKey(dish, comboSelections);
       const existing = prev.find(
-        (item) => item._id === dish._id
+        (item) => (item.cartKey || item._id) === cartKey
       );
 
       if (existing) {
         return prev.map((item) =>
-          item._id === dish._id
+          (item.cartKey || item._id) === cartKey
             ? {
                 ...item,
                 quantity: item.quantity + 1,
@@ -101,6 +113,8 @@ export default function CartProvider({ children }) {
         ...prev,
         {
           _id: dish._id,
+          cartKey,
+          itemType: dish.menuType === "combo" ? "combo" : "simple",
           name: dish.name,
           description: dish.description || "",
           price: finalPrice,
@@ -110,10 +124,16 @@ export default function CartProvider({ children }) {
           image: dish.image || "",
           foodType: dish.foodType || "veg",
           quantity: 1,
+          ...(dish.menuType === "combo" ? {
+            comboSelections: comboSignature(comboSelections),
+            comboIncludedItems: dish.comboConfig?.includedItems || [],
+          } : {}),
         },
       ];
     });
   };
+
+  const matchesKey = (item, key) => (item.cartKey || item._id) === key;
 
   // ==========================================
   // INCREASE
@@ -122,7 +142,7 @@ export default function CartProvider({ children }) {
   const increaseQty = (id) => {
     setCartItems((prev) =>
       prev.map((item) =>
-        item._id === id
+        matchesKey(item, id)
           ? {
               ...item,
               quantity: item.quantity + 1,
@@ -140,7 +160,7 @@ export default function CartProvider({ children }) {
     setCartItems((prev) =>
       prev
         .map((item) =>
-          item._id === id
+          matchesKey(item, id)
             ? {
                 ...item,
                 quantity: item.quantity - 1,
@@ -160,7 +180,7 @@ export default function CartProvider({ children }) {
   const removeFromCart = (id) => {
     setCartItems((prev) =>
       prev.filter(
-        (item) => item._id !== id
+        (item) => !matchesKey(item, id)
       )
     );
   };

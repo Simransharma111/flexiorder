@@ -16,6 +16,7 @@ import {
   categoryName,
   dishCategoryName,
 } from "../../utils/menuCategories";
+import ComboBuilder from "./ComboBuilder";
 
 
 /* =====================================================
@@ -24,6 +25,8 @@ import {
 
 const EMPTY_FORM = {
   name: "",
+  menuType: "simple",
+  comboConfig: { includedItems: [], selectionGroups: [] },
   description: "",
   category: "Main Course",
 
@@ -191,6 +194,14 @@ export default function DishForm({
     setFormData({
       name:
         dish.name || "",
+
+      menuType:
+        dish.menuType === "combo" ? "combo" : "simple",
+
+      comboConfig:
+        dish.menuType === "combo"
+          ? (dish.comboConfig || { includedItems: [], selectionGroups: [] })
+          : { includedItems: [], selectionGroups: [] },
 
       description:
         dish.description || "",
@@ -540,6 +551,30 @@ export default function DishForm({
       return "Please enter a valid price.";
     }
 
+    if (formData.menuType === "combo") {
+      const config = formData.comboConfig || { includedItems: [], selectionGroups: [] };
+      const groupNames = new Set();
+      for (const item of config.includedItems || []) {
+        if (!String(item || "").trim()) return "Included item names cannot be empty.";
+      }
+      for (const group of config.selectionGroups || []) {
+        const groupName = String(group.name || "").trim().toLowerCase();
+        if (!groupName) return "Selection group names cannot be empty.";
+        if (groupNames.has(groupName)) return "Selection group names must be unique.";
+        groupNames.add(groupName);
+        if (group.minSelections < 0 || group.minSelections > group.maxSelections || group.maxSelections > group.items.length) {
+          return `Check the selection limits for ${group.name}.`;
+        }
+        const optionNames = new Set();
+        for (const option of group.items || []) {
+          const name = String(option || "").trim().toLowerCase();
+          if (!name) return `Options in ${group.name} cannot be empty.`;
+          if (optionNames.has(name)) return `Options in ${group.name} must be unique.`;
+          optionNames.add(name);
+        }
+      }
+    }
+
 
     /* ---------------------------------------------------
        GST
@@ -655,6 +690,14 @@ export default function DishForm({
           String(
             formData.name || ""
           ).trim(),
+
+        menuType:
+          formData.menuType === "combo" ? "combo" : "simple",
+
+        comboConfig:
+          formData.menuType === "combo"
+            ? formData.comboConfig
+            : { includedItems: [], selectionGroups: [] },
 
 
         description:
@@ -839,6 +882,17 @@ export default function DishForm({
         ================================================= */}
 
         <div className="grid md:grid-cols-2 gap-4">
+
+          <div className="md:col-span-2">
+            <label className="block text-sm font-semibold mb-2">Dish Type</label>
+            <div className="grid grid-cols-2 gap-2 max-w-xl">
+              {[{ value: "simple", label: "Simple Dish" }, { value: "combo", label: "Combo / Thali" }].map((type) => (
+                <button key={type.value} type="button" disabled={loading} onClick={() => setFormData((previous) => ({ ...previous, menuType: type.value }))} className={`rounded-lg border px-3 py-3 text-sm font-semibold transition ${formData.menuType === type.value ? "border-orange-500 bg-orange-50 text-orange-700" : "border-gray-200 bg-white text-gray-600"}`}>
+                  {type.label}
+                </button>
+              ))}
+            </div>
+          </div>
 
 
           {/* NAME */}
@@ -1156,6 +1210,14 @@ export default function DishForm({
           </div>
 
         </div>
+
+        {formData.menuType === "combo" && (
+          <ComboBuilder
+            value={formData.comboConfig}
+            onChange={(comboConfig) => setFormData((previous) => ({ ...previous, comboConfig }))}
+            disabled={loading}
+          />
+        )}
 
 
         {/* =================================================

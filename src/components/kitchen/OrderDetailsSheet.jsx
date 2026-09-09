@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useRef } from "react";
 import { FiAlertTriangle, FiClock, FiX } from "react-icons/fi";
 import { orderLocation, statusLane, waitingMinutes } from "../../utils/orderModel";
 import { operationalOrderTotal } from "../orders/OperationalOrderCard";
@@ -33,7 +33,7 @@ const orderNotes = (order) => [...new Set(
     .filter(Boolean)
 )];
 
-export default function OrderDetailsSheet({ group, surface = "kitchen", onClose }) {
+export default function OrderDetailsSheet({ group, onClose }) {
   const sheetRef = useRef(null);
   const orders = group?.orders || [];
   const lead = orders[0];
@@ -86,7 +86,15 @@ export default function OrderDetailsSheet({ group, surface = "kitchen", onClose 
                   return (
                     <div className="ops-order-details__row" key={`${boundary}-${item.menuId || item._id || item.name}-${itemIndex}`}>
                       <span className="ops-order-details__qty">{qty(item)} ×</span>
-                      <span className="ops-order-details__name">{item.name || item.menu?.name || "Dish"}</span>
+                      <span className="ops-order-details__name">
+                        <span>{item.name || item.menu?.name || "Dish"}</span>
+                        {item.itemType === "combo" && (
+                          <span className="mt-1 block text-xs font-normal text-gray-500">
+                            {item.comboIncludedItems?.length > 0 && <span className="block">Included: {item.comboIncludedItems.join(", ")}</span>}
+                            {item.comboSelections?.map((selection) => <span className="block" key={selection.groupName}>{selection.groupName}: {selection.items.join(", ")}</span>)}
+                          </span>
+                        )}
+                      </span>
                       {line !== null && <span className="ops-order-details__price">{money(line)}</span>}
                     </div>
                   );

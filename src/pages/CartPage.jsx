@@ -364,6 +364,10 @@ export default function CartPage() {
       const items = cartItems.map((item) => ({
         menuId: item._id,
         quantity: Number(item.quantity),
+        ...(item.itemType === "combo" ? {
+          itemType: "combo",
+          comboSelections: item.comboSelections,
+        } : {}),
       }));
 
       const orderGstAmount = orderPricing.enabled
@@ -432,6 +436,11 @@ export default function CartPage() {
         menuId: item._id,
         name: item.name,
         quantity: Number(item.quantity),
+        ...(item.itemType === "combo" ? {
+          itemType: "combo",
+          comboSelections: item.comboSelections,
+          comboIncludedItems: item.comboIncludedItems,
+        } : {}),
       }));
       const receivedOrder = {
         status: "pending",
@@ -596,7 +605,7 @@ export default function CartPage() {
 
           {cartItems.map((item) => (
             <div
-              key={item._id}
+              key={item.cartKey || item._id}
               className="bg-white rounded-2xl border border-gray-200 p-4"
             >
 
@@ -630,7 +639,7 @@ export default function CartPage() {
 
                     <button
                       onClick={() =>
-                        removeFromCart(item._id)
+                        removeFromCart(item.cartKey || item._id)
                       }
                       disabled={placingOrder}
                       className="text-red-500 shrink-0"
@@ -651,6 +660,14 @@ export default function CartPage() {
                     </span>
                   </p>
 
+                  {item.itemType === "combo" && item.comboSelections?.length > 0 && (
+                    <div className="mt-2 space-y-1 text-xs text-gray-500">
+                      {item.comboSelections.map((selection) => (
+                        <p key={selection.groupName}><span className="font-semibold text-gray-700">{selection.groupName}:</span> {selection.items.join(", ")}</p>
+                      ))}
+                    </div>
+                  )}
+
                   <div className="flex items-center justify-between mt-3 gap-3">
 
                     <div className="flex items-center gap-3 bg-orange-50 rounded-lg p-1">
@@ -658,7 +675,7 @@ export default function CartPage() {
                       <button
                         onClick={() =>
                           decreaseQty(
-                            item._id
+                            item.cartKey || item._id
                           )
                         }
                         disabled={placingOrder}
@@ -674,7 +691,7 @@ export default function CartPage() {
                       <button
                         onClick={() =>
                           increaseQty(
-                            item._id
+                            item.cartKey || item._id
                           )
                         }
                         disabled={placingOrder}

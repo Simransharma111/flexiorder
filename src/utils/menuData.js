@@ -1,5 +1,7 @@
 export const MENU_FIELD_NAMES = [
   "name",
+  "menuType",
+  "comboConfig",
   "description",
   "foodType",
   "containsEgg",
@@ -123,6 +125,26 @@ export const normalizeDish = (dish) => {
   return {
     ...dish,
 
+    menuType: dish.menuType === "combo" ? "combo" : "simple",
+
+    comboConfig: dish.menuType === "combo" && dish.comboConfig
+      ? {
+          includedItems: Array.isArray(dish.comboConfig.includedItems)
+            ? dish.comboConfig.includedItems.map((item) => typeof item === "string" ? item : item?.name).filter(Boolean)
+            : [],
+          selectionGroups: Array.isArray(dish.comboConfig.selectionGroups)
+            ? dish.comboConfig.selectionGroups.map((group) => ({
+                name: String(group?.name || "").trim(),
+                minSelections: Number(group?.minSelections ?? 0),
+                maxSelections: Number(group?.maxSelections ?? 0),
+                items: Array.isArray(group?.items)
+                  ? group.items.map((item) => typeof item === "string" ? item : item?.name).filter(Boolean)
+                  : [],
+              }))
+            : [],
+        }
+      : undefined,
+
     ...(id
       ? {
           _id: String(id),
@@ -209,6 +231,12 @@ export const normalizeDishResponse = (
 export function dishFieldsFromForm(formData, category) {
   return {
     name: String(formData.name || "").trim(),
+
+    menuType: formData.menuType === "combo" ? "combo" : "simple",
+
+    comboConfig: formData.menuType === "combo"
+      ? JSON.stringify(formData.comboConfig || { includedItems: [], selectionGroups: [] })
+      : undefined,
 
     description: String(
       formData.description || ""
@@ -350,7 +378,9 @@ MENU_FIELD_NAMES.forEach((field) => {
   ) {
     form.append(
       field,
-      String(fields[field])
+      field === "comboConfig" && typeof fields[field] === "object"
+        ? JSON.stringify(fields[field])
+        : String(fields[field])
     );
   }
 });

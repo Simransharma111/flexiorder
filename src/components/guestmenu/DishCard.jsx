@@ -19,6 +19,10 @@ export default function DishCard({ dish, quantity, onAdd, onDecrease, orderingEn
           ? "🍛" : nonVeg ? "🍗" : "🍽️";
   const activate = () => {
     if (orderingEnabled) {
+      if (dish.menuType === "combo") {
+        onAdd(dish);
+        return;
+      }
       setRevealed(true);
       onAdd(dish);
     }
@@ -43,7 +47,7 @@ export default function DishCard({ dish, quantity, onAdd, onDecrease, orderingEn
       <div className="guest-dish-meta">{dish.containsEgg && !nonVeg && <span>Contains egg</span>}{dish.spiceLevel && <span>{dish.spiceLevel} spice</span>}{dish.prepTime && <span><FiClock /> {dish.prepTime} min</span>}</div>
       <div className="guest-visual-dish__foot">
         <span className="guest-menu-price">{hasDiscount && <del>₹{basePrice.toFixed(0)}</del>}<b>₹{finalPrice.toFixed(0)}</b></span>
-        {orderingEnabled && (revealed || quantity > 0) && <div className="guest-qty guest-qty--large" onClick={(event) => event.stopPropagation()}><button type="button" aria-label={`Remove one ${dish.name}`} onClick={() => { if (quantity <= 1) setRevealed(false); onDecrease(dish._id); }}><FiMinus /></button><b>{quantity}</b><button type="button" aria-label={`Add one ${dish.name}`} onClick={() => { setRevealed(true); onAdd(dish); }}><FiPlus /></button></div>}
+        {orderingEnabled && dish.menuType === "combo" ? <span className="rounded-lg bg-orange-500 px-3 py-2 text-xs font-bold text-white">Choose Options</span> : orderingEnabled && (revealed || quantity > 0) && <div className="guest-qty guest-qty--large" onClick={(event) => event.stopPropagation()}><button type="button" aria-label={`Remove one ${dish.name}`} onClick={() => { if (quantity <= 1) setRevealed(false); onDecrease(dish._id); }}><FiMinus /></button><b>{quantity}</b><button type="button" aria-label={`Add one ${dish.name}`} onClick={() => { setRevealed(true); onAdd(dish); }}><FiPlus /></button></div>}
       </div>
     </div>
   </article>;

@@ -163,6 +163,24 @@ export const normalizePortableDish = (dish, index = 0) => {
       defaultValue: 0,
       integer: true,
     }),
+    menuType: dish.menuType === "combo" ? "combo" : "simple",
+    ...(dish.menuType === "combo" ? {
+      comboConfig: {
+        includedItems: Array.isArray(dish.comboConfig?.includedItems)
+          ? dish.comboConfig.includedItems.map((item) => text(typeof item === "string" ? item : item?.name, `${row} included item`, { required: true, maxLength: 200 }))
+          : [],
+        selectionGroups: Array.isArray(dish.comboConfig?.selectionGroups)
+          ? dish.comboConfig.selectionGroups.map((group, groupIndex) => ({
+              name: text(group?.name, `${row} selection group ${groupIndex + 1}`, { required: true, maxLength: 200 }),
+              minSelections: number(group?.minSelections, `${row} selection group minimum`, { defaultValue: 0, integer: true }),
+              maxSelections: number(group?.maxSelections, `${row} selection group maximum`, { defaultValue: 0, integer: true }),
+              items: Array.isArray(group?.items)
+                ? group.items.map((item) => text(typeof item === "string" ? item : item?.name, `${row} selection option`, { required: true, maxLength: 200 }))
+                : [],
+            }))
+          : [],
+      },
+    } : {}),
   };
 
   BOOLEAN_FIELDS.forEach((field) => {
