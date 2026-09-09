@@ -22,6 +22,7 @@ import SimpleMenuSection from "../components/guestmenu/SimpleMenuSection";
 import FeaturedSection from "../components/guestmenu/FeaturedSection";
 import ActiveOrder from "../components/guestmenu/ActiveOrder";
 import ComboSelector from "../components/guestmenu/ComboSelector";
+import FloatingCategoryMenu from "../components/guestmenu/FloatingCategoryMenu";
 import ScheduleModal from "../components/guestmenu/ScheduleModal";
 import { sortDishesForDisplay } from "../utils/menuOrdering";
 import { getHotelThemeStyle } from "../utils/hotelTheme";
@@ -778,6 +779,12 @@ Try Again
 return (
 
 <div className="guest-menu-page min-h-screen pb-32" style={getHotelThemeStyle(hotel)}>
+
+<FloatingCategoryMenu
+  options={categories}
+  value={activeCategory}
+  onChange={setActiveCategory}
+/>
 
 {comboDish && (
   <ComboSelector
