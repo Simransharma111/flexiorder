@@ -9,7 +9,7 @@ import {
   shouldRequestNotificationPermission,
 } from "./orderAlerts";
 
-export const ORDER_NOTIFICATION_CHANNEL_ID = "order_alerts_v3";
+export const ORDER_NOTIFICATION_CHANNEL_ID = "order_alerts_v4";
 export const ORDER_NOTIFICATION_STATUS_EVENT = "flexiorder:order-notification-status";
 
 const PUSH_PERMISSION_REQUESTED_KEY = "flexiorder_push_permission_requested";
