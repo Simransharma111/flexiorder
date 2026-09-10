@@ -112,6 +112,7 @@ export const normalizeDish = (dish) => {
   const normalizedCategory =
     idValue || nameValue
       ? {
+          displayOrder: category?.displayOrder ?? 0,
           ...(idValue ? { _id: idValue } : {}),
           name:
             nameValue ||

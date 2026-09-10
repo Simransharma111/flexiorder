@@ -2313,3 +2313,12 @@ img {
   padding: 10px 16px; border-radius: 10px; font-size: 14px; font-weight: 800;
   background: var(--brand-base, #d97706); color: #fff; text-decoration: none;
 }
+.guest-category-heading {
+  margin: 28px 0 14px;
+  padding: 12px 0;
+  color: var(--text-primary, #172033);
+  border-bottom: 2px solid var(--primary, #f97316);
+  font-size: 1.3rem;
+  font-weight: 800;
+  line-height: 1.3;
+}

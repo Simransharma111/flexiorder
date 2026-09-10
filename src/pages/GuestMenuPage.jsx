@@ -70,6 +70,7 @@ const { isOnline } = useConnectivity();
 const [hotel,setHotel]=useState(null);
 const [orderingConfirmed,setOrderingConfirmed]=useState(false);
 const menuRequestRevision=useRef(0);
+const categoryCatalogRef=useRef(new Map());
 
 const hotelId = hotel?._id || hotel?.id;
 const hostOrderingEnabled = Boolean(
@@ -190,31 +191,36 @@ const res=await api.get(
 
 if (requestRevision === menuRequestRevision.current) {
 const freshHotel = res.data?.hotel || null;
-let rawDishes = res.data?.dishes || [];
+const rawDishes = res.data?.dishes || [];
 
-// Older backends send `categoryId` as a raw ObjectId without the
-// category name. The categories catalog is public — resolve names on
-// the RAW dishes (before normalization) so category filtering works on
-// every deployed backend version.
-if (Array.isArray(rawDishes) && rawDishes.some((dish) => !dishCategoryName(dish))) {
+// Render the available menu immediately, then enrich legacy category
+// references and positions in the background. A slow catalog must not
+// hold up the menu or overwrite a newer QR request.
+if (Array.isArray(rawDishes) && rawDishes.length) {
 const catalogId = freshHotel?._id || freshHotel?.id;
 if (catalogId) {
-try {
-const catalogRes = await api.get(
+void api.get(
 `/menu/categories/${catalogId}`,
 {skipAuth:true}
-);
-rawDishes = resolveDishCategoryNames(
+).then(catalogRes => {
+if (requestRevision !== menuRequestRevision.current) return;
+categoryCatalogRef.current.set(String(catalogId), catalogRes.data);
+const enriched = normalizeMenuResponse(resolveDishCategoryNames(
 rawDishes,
 catalogRes.data
-);
-} catch (catalogError) {
+));
+setDishes(enriched);
+localStorage.setItem(cacheKey, JSON.stringify({
+  hotel: freshHotel, table: res.data?.table || null, dishes: enriched,
+}));
+}).catch(catalogError => {
 console.log("CATEGORY CATALOG ERROR", catalogError);
-}
+});
 }
 }
 
-const freshDishes = normalizeMenuResponse(rawDishes) || [];
+const knownCatalog = categoryCatalogRef.current.get(String(freshHotel?._id || freshHotel?.id));
+const freshDishes = normalizeMenuResponse(resolveDishCategoryNames(rawDishes, knownCatalog || [])) || [];
 setHotel(freshHotel);
 setOrderingConfirmed(Boolean(
   freshHotel &&

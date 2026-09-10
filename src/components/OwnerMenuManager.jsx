@@ -46,6 +46,7 @@ import {
   FiStar,
 } from "react-icons/fi";
 import DishForm from "../components/menu/DishForm";
+import MenuCategoryManager from "./MenuCategoryManager";
 
 const DEFAULT_CATEGORIES = [
   "Starters",
@@ -80,6 +81,7 @@ export default function OwnerMenuManager({
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
   const [activeCategory, setActiveCategory] = useState("All");
+  const [showCategories, setShowCategories] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [importing, setImporting] = useState(false);
   const [importProgress, setImportProgress] = useState(null);
@@ -124,7 +126,7 @@ export default function OwnerMenuManager({
       dishes,
       [
         ...DEFAULT_CATEGORIES,
-        ...canonicalCategories.map(categoryName),
+        ...canonicalCategories,
       ]
     ),
     [canonicalCategories, dishes]
@@ -663,6 +665,11 @@ const resolvedFields = {
         </div>
 
         <div className="flex flex-wrap gap-2">
+          <button type="button" aria-expanded={showCategories}
+            onClick={() => setShowCategories(value => !value)}
+            className="rounded-xl border border-gray-200 bg-white px-4 py-3 font-semibold">
+            {showCategories ? "Close categories" : "Manage categories"}
+          </button>
           {advancedEnabled && (
             <>
               <label className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-700 transition hover:bg-gray-50">
@@ -715,6 +722,9 @@ const resolvedFields = {
       </div>
 
       {/* FEEDBACK */}
+      {showCategories && <section className="mb-6" aria-label="Manage menu categories">
+        <MenuCategoryManager key={hotelId} hotelId={hotelId} onCategoryUpdate={storeCategoryCatalog} />
+      </section>}
       {feedback && (
         <div
           className="ops-inline-success mb-4"

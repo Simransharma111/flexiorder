@@ -17,6 +17,7 @@ export default function MenuCategoryManager({
   const [categories, setCategories] = useState([]);
 
   const [name, setName] = useState("");
+  const [displayOrder, setDisplayOrder] = useState(0);
   const [subCategories, setSubCategories] = useState([]);
 
   const [subCategoryInput, setSubCategoryInput] = useState("");
@@ -26,6 +27,9 @@ export default function MenuCategoryManager({
   const [showForm, setShowForm] = useState(false);
 
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState("");
+  const [feedback, setFeedback] = useState("");
+  const savingRef = useRef(false);
 
   const [expanded, setExpanded] = useState({});
 
@@ -42,11 +46,12 @@ export default function MenuCategoryManager({
   // =============================
 
   const fetchCategories = useCallback(async ({ signal } = {}) => {
+    setLoadError("");
     let res;
 
     try {
       res = await api.get(
-        `/menu/category/${hotelId}`,
+        `/menu/categories/${hotelId}`,
         { signal }
       );
     } catch (err) {
@@ -55,13 +60,18 @@ export default function MenuCategoryManager({
         "Category fetch error:",
         err.response?.data || err
       );
+      setLoadError("Could not load categories. Check your connection and retry.");
       return;
     }
 
     if (signal?.aborted) return;
 
-    const data = res.data || [];
-    setCategories(data);
+    const data = Array.isArray(res.data) ? res.data : res.data?.categories;
+    if (!Array.isArray(data)) {
+      setLoadError("The restaurant did not return its categories. Please retry.");
+      return;
+    }
+    setCategories([...data].sort((a, b) => (Number(a.displayOrder) || Infinity) - (Number(b.displayOrder) || Infinity) || a.name.localeCompare(b.name)));
     onCategoryUpdateRef.current?.(data);
   }, [hotelId]);
 
@@ -121,17 +131,26 @@ export default function MenuCategoryManager({
 
   const saveCategory = async (e) => {
     e.preventDefault();
+    if (savingRef.current) return;
 
     if (!name.trim()) {
       alert("Category name is required");
       return;
     }
 
+    if (!Number.isSafeInteger(Number(displayOrder)) || Number(displayOrder) < 0) {
+      setFeedback("Enter a whole-number position: 0 or higher.");
+      return;
+    }
+    savingRef.current = true;
+    setFeedback("");
     try {
       setLoading(true);
 
       const data = {
         name: name.trim(),
+        displayOrder: Number(displayOrder),
+        description: categories.find(category => category._id === editingId)?.description || "",
         subCategories
       };
 
@@ -148,6 +167,7 @@ export default function MenuCategoryManager({
       }
 
       resetForm();
+      setFeedback("Category saved. Its position will apply when customers reload the menu.");
 
       await fetchCategories();
 
@@ -163,6 +183,7 @@ export default function MenuCategoryManager({
       );
 
     } finally {
+      savingRef.current = false;
       setLoading(false);
     }
   };
@@ -175,6 +196,7 @@ export default function MenuCategoryManager({
     setEditingId(category._id);
 
     setName(category.name);
+    setDisplayOrder(category.displayOrder || 0);
 
     setSubCategories(
       Array.isArray(category.subCategories)
@@ -242,6 +264,8 @@ export default function MenuCategoryManager({
         `/menu/category/${category._id}`,
         {
           name: category.name,
+          displayOrder: category.displayOrder || 0,
+          description: category.description || "",
           subCategories:
             updatedSubCategories
         }
@@ -321,6 +345,8 @@ export default function MenuCategoryManager({
         `/menu/category/${category._id}`,
         {
           name: category.name,
+          displayOrder: category.displayOrder || 0,
+          description: category.description || "",
           subCategories:
             updatedSubCategories
         }
@@ -349,6 +375,7 @@ export default function MenuCategoryManager({
   // =============================
 
   const resetForm = () => {
+    setDisplayOrder(0);
     setName("");
 
     setSubCategories([]);
@@ -373,6 +400,10 @@ export default function MenuCategoryManager({
 
   return (
     <div className="mt-8">
+      {loadError && <div role="alert" className="ops-inline-error mb-4">{loadError}
+        <button type="button" onClick={() => fetchCategories()}>Retry categories</button>
+      </div>}
+      {feedback && <p role="status" className="mb-4">{feedback}</p>}
 
       {/* HEADER */}
 
@@ -481,6 +512,13 @@ export default function MenuCategoryManager({
           />
 
           {/* SUBCATEGORY */}
+          <label className="block text-sm font-medium text-gray-700">
+            Category position
+            <input type="number" min="0" step="1" required value={displayOrder}
+              onChange={event => setDisplayOrder(event.target.value)}
+              className="block w-full border rounded-lg px-3 py-3 mt-1 mb-2" />
+          </label>
+          <p className="text-sm text-gray-600 mb-5">1 appears first, 2 second. Use 0 for alphabetical order after positioned categories.</p>
 
           <label className="block text-sm font-medium text-gray-700">
             Subcategories
@@ -716,6 +754,7 @@ export default function MenuCategoryManager({
                         <h3 className="font-semibold text-gray-900">
                           {category.name}
                         </h3>
+                        <small>{category.displayOrder > 0 ? `Position ${category.displayOrder}` : 'Alphabetical'}</small>
 
                         {category.subCategories?.length > 0 && (
                           <span
@@ -752,6 +791,7 @@ export default function MenuCategoryManager({
                       onClick={() =>
                         editCategory(category)
                       }
+                      aria-label={`Edit ${category.name} category`}
                       className="
                         w-9
                         h-9

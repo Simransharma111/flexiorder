@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { FiMinus, FiPlus } from "react-icons/fi";
 import { getDishPricing } from "../../utils/pricing";
+import { groupMenuSections } from "../../utils/menuOrdering";
 import SubcategoryChooser from "../menu/SubcategoryChooser";
 import { categoryKey, dishCategoryName } from "../../utils/menuCategories";
 
@@ -28,21 +29,10 @@ export default function SimpleMenuSection({
   // Keep subcategory headings for organization without adding a second,
   // easily-confused filter control to the customer menu.
   const groupedDishes = useMemo(() => {
-    const groups = {};
-    categoryFiltered.forEach((dish) => {
-      const sub = (dish.subCategory || dish.subcategory || "").trim();
-      const groupName = sub || "";
-      
-      if (!groups[groupName]) {
-        groups[groupName] = [];
-      }
-      groups[groupName].push(dish);
-    });
-    
-    return groups;
-  }, [categoryFiltered]);
+    return groupMenuSections(categoryFiltered, categories);
+  }, [categoryFiltered, categories]);
 
-  const hasAnyDishes = Object.values(groupedDishes).some(g => g.length > 0);
+  const hasAnyDishes = groupedDishes.length > 0;
 
   return (
     <section className="guest-menu-section guest-simple-menu">
@@ -56,10 +46,11 @@ export default function SimpleMenuSection({
 
         {/* List grouped by subcategory */}
         {hasAnyDishes ? (
-          Object.entries(groupedDishes).map(([subCatName, subCatDishes]) => {
+          groupedDishes.map(({ key, category, sub: subCatName, dishes: subCatDishes }) => {
             if (!subCatDishes.length) return null;
             return (
-              <div key={subCatName || "other"} className="guest-subcategory-group">
+              <div key={key} className="guest-subcategory-group">
+                {category && <h2 className="guest-category-heading">{category}</h2>}
                 {subCatName && <h3 className="guest-subcategory-header">{subCatName}</h3>}
                 <div className="guest-simple-list">
                   {subCatDishes.map((dish) => {
