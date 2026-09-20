@@ -1,6 +1,7 @@
 import {
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 
@@ -23,6 +24,7 @@ import { triggerLocalOrderNotification } from "../utils/fcmPush";
 
 import Header from "../components/ownerdashboard/Header";
 import Sidebar from "../components/ownerdashboard/Sidebar";
+import OwnerBottomNav from "../components/ownerdashboard/OwnerBottomNav";
 
 import DashboardHome from "../components/ownerdashboard/DashboardHome";
 import Orders from "../components/ownerdashboard/Orders";
@@ -74,7 +76,7 @@ feature:"settings"
 
 {
 key:"orders",
-label:"History",
+label:"Orders",
 icon:FiShoppingBag,
 feature:"orderHistory"
 },
@@ -136,6 +138,32 @@ try{const cached=JSON.parse(localStorage.getItem(getScopedStorageKey(ORDERS_CACH
 const [activeTab,setActiveTab]=useState("home");
 
 const [sidebarOpen,setSidebarOpen]=useState(false);
+const drawerRef = useRef(null);
+
+useEffect(() => {
+  if (!sidebarOpen) return undefined;
+  const drawer = drawerRef.current;
+  const opener = document.activeElement;
+  const previousOverflow = document.body.style.overflow;
+  drawer.showModal();
+  document.body.style.overflow = "hidden";
+  const closeDrawer = () => setSidebarOpen(false);
+  const handleBack = (event) => {
+    event.preventDefault();
+    closeDrawer();
+  };
+  const desktop = window.matchMedia("(min-width: 768px)");
+  const handleResize = () => { if (desktop.matches) closeDrawer(); };
+  window.addEventListener("flexiorder:owner-menu-back", handleBack);
+  desktop.addEventListener("change", handleResize);
+  return () => {
+    drawer.close();
+    if (opener?.isConnected) opener.focus();
+    document.body.style.overflow = previousOverflow;
+    window.removeEventListener("flexiorder:owner-menu-back", handleBack);
+    desktop.removeEventListener("change", handleResize);
+  };
+}, [sidebarOpen]);
 
 const [loadingOrders,setLoadingOrders]=useState(false);
 
@@ -244,6 +272,7 @@ fetchHotel();
 fetchOrders();
 
 },[]);
+useRefreshOnResume(() => Promise.all([fetchHotel(), fetchOrders()]), 15000);
 
 
 
@@ -290,6 +319,15 @@ prev=>prev+1
 triggerLocalOrderNotification(order);
 
 };
+const orderUpdateHandler = order => {
+  if (!orderBelongsToHotel(order, roomHotelId)) return;
+  setOrders(previous => {
+    const next = mergeOrders(previous, [order]);
+    localStorage.setItem(getScopedStorageKey(ORDERS_CACHE_KEY), JSON.stringify(next));
+    return next;
+  });
+};
+socket.on('kitchenOrderUpdated', orderUpdateHandler);
 
 
 
@@ -301,6 +339,7 @@ newOrderHandler
 
 
 return ()=>{
+socket.off('kitchenOrderUpdated', orderUpdateHandler);
 
 socket.emit("leaveHotel", roomHotelId);
 socket.off("connect", joinHotel);
@@ -527,9 +566,27 @@ return (
 {
 sidebarOpen &&
 
-<div
+<dialog
 
 className="owner-mobile-drawer"
+id="owner-more-menu"
+ref={drawerRef}
+aria-label="Owner menu"
+onCancel={() => setSidebarOpen(false)}
+onKeyDown={(event) => {
+  if (event.key !== "Tab") return;
+  const buttons = [...event.currentTarget.querySelectorAll("button:not(:disabled)")]
+    .filter(button => button.getClientRects().length > 0);
+  const first = buttons[0];
+  const last = buttons[buttons.length - 1];
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last?.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first?.focus();
+  }
+}}
 
 onClick={()=>
 setSidebarOpen(false)
@@ -546,6 +603,8 @@ e=>e.stopPropagation()
 }
 
 >
+
+<button type="button" className="owner-mobile-drawer__close" onClick={() => setSidebarOpen(false)}>Close menu</button>
 
 <Sidebar
 
@@ -565,7 +624,7 @@ stats={stats}
 
 </div>
 
-</div>
+</dialog>
 
 }
 
@@ -630,10 +689,6 @@ navItems={[...navItems, { key: "about", label: "About Us" }]}
 
 newOrderCount={newOrderCount}
 
-onMenuToggle={()=>
-setSidebarOpen(true)
-}
-
 onRefresh={refresh}
 
 loading={loadingOrders}
@@ -659,12 +714,13 @@ className="owner-content"
 activeTab==="home" &&
 
 <DashboardHome
+allowedTabs={navItems.map(item => item.key)}
 
 stats={stats}
 
 hotel={hotel}
 
-setActiveTab={setActiveTab}
+setActiveTab={changeTab}
 
 primaryColor={primaryColor}
 
@@ -817,9 +873,12 @@ activeTab==="inventory" &&
 </div>
 
 
+<OwnerBottomNav activeTab={activeTab} navItems={navItems} onNavigate={changeTab} onMore={() => setSidebarOpen(true)} moreOpen={sidebarOpen} />
+
 </div>
 
 );
 
 
 }
+import useRefreshOnResume from '../hooks/useRefreshOnResume';

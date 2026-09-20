@@ -2,8 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FiArrowLeft, FiMinus, FiPlus, FiSearch, FiShoppingBag, FiX } from "react-icons/fi";
 import api from "../api/axios";
 import { getDishPricing } from "../utils/pricing";
-import { sortDishesForDisplay } from "../utils/menuOrdering";
-import { buildCategoryList, categoryKey } from "../utils/menuCategories";
+import { groupMenuSections, sortDishesForDisplay } from "../utils/menuOrdering";
+import { buildCategoryList, categoryKey, dishCategoryName, resolveDishCategoryNames } from "../utils/menuCategories";
 import {
   getStaffOrdersEligibleForHandled,
   getStaffOrdersNeedingAttention,
@@ -14,6 +14,8 @@ import {
 import {
   MENU_CHANGED_EVENT,
   readMenuCache,
+  readMenuCategoryCache,
+  writeMenuCategoryCache,
   reconcileMenuFromServer,
 } from "../utils/offlineMenu";
 import { getRestaurantId } from "../utils/storageScope";
@@ -21,6 +23,7 @@ import { useConnectivity } from "../context/ConnectivityContext";
 import { useSync } from "../context/SyncContext";
 import { SYNC_STATE_EVENT } from "../utils/syncQueues";
 import SubcategoryChooser from "../components/menu/SubcategoryChooser";
+import useDialogFocus from "../hooks/useDialogFocus";
 import ComboSelector from "../components/guestmenu/ComboSelector";
 
 const tableLabel = (table) => table?.type === "room"
@@ -38,7 +41,7 @@ const cartLineKey = (menuId, selections = []) => (
   selections.length ? `${menuId}::${JSON.stringify(comboSignature(selections))}` : String(menuId)
 );
 
-export default function StaffOrder({ hotel, onOrderCreated }) {
+export default function StaffOrder({ hotel, onOrderCreated, active = true, visible = true, onRevealDraft }) {
   const restaurantId = getRestaurantId(hotel) || getRestaurantId();
   const { isOnline } = useConnectivity();
   const { syncNow } = useSync();
@@ -61,13 +64,38 @@ export default function StaffOrder({ hotel, onOrderCreated }) {
   const [tableError, setTableError] = useState("");
   const [attentionCount, setAttentionCount] = useState(getStaffOrdersNeedingAttention().length);
   const placingInFlight = useRef(false);
+  const [tablesLoading, setTablesLoading] = useState(true);
+  const [menuLoading, setMenuLoading] = useState(true);
+  const [menuError, setMenuError] = useState("");
+  const [menuRefresh, setMenuRefresh] = useState(0);
+  const [discardOpen, setDiscardOpen] = useState(false);
+  const discardRef = useRef(null);
+  const reviewRef = useRef(null);
+  const locationHeadingRef = useRef(null);
+  const focusLocationAfterDiscard = useRef(false);
+  const dishSearchRef = useRef(null);
+  const closeDiscard = useCallback(() => setDiscardOpen(false), []);
+  useDialogFocus(discardOpen, discardRef, closeDiscard);
+  useEffect(() => {
+    if (!discardOpen) {
+      if (focusLocationAfterDiscard.current) {
+        locationHeadingRef.current?.focus();
+        focusLocationAfterDiscard.current = false;
+      }
+      return undefined;
+    }
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = previous; };
+  }, [discardOpen]);
 
   const refreshQueueCounts = useCallback(() => {
     setAttentionCount(getStaffOrdersNeedingAttention().length);
   }, []);
 
   const fetchTables = useCallback(async () => {
-    if (!restaurantId) return;
+    if (!restaurantId) { setTablesLoading(false); return; }
+    setTablesLoading(true);
     const tableKey = `staff_tables_${restaurantId}`;
     setTableError("");
     const applyTables = (payload) => {
@@ -80,7 +108,7 @@ export default function StaffOrder({ hotel, onOrderCreated }) {
     try {
       // Primary: authenticated owner/staff table list (newer backend)
       const response = await api.get("/table");
-      applyTables(response.data);
+      if (!applyTables(response.data)) throw new Error("Unexpected tables response");
     } catch (primaryError) {
       console.warn("Staff table fetch failed, trying public fallback", primaryError);
       try {
@@ -99,34 +127,56 @@ export default function StaffOrder({ hotel, onOrderCreated }) {
         }
         setTableError("Tables could not be loaded. Check the connection and try again.");
       }
-    }
+    } finally { setTablesLoading(false); }
   }, [restaurantId]);
 
   useEffect(() => {
     if (!restaurantId) return;
+    let disposed = false;
+    let revision = 0;
+    const withCategories = (dishes) => resolveDishCategoryNames(dishes, readMenuCategoryCache(restaurantId));
     const fetchData = async () => {
-      setMenu(readMenuCache(restaurantId));
+      const requestRevision = ++revision;
+      setMenuLoading(true);
+      setMenuError("");
+      setMenu(withCategories(readMenuCache(restaurantId)));
+      // Catalog reads enrich the local menu independently: a slow category
+      // request must not hold up ordering, or discard queued local edits.
+      const catalogRequest = api.get(`/menu/categories/${restaurantId}`).then(({ data }) => {
+        if (disposed || requestRevision !== revision) return;
+        const categories = Array.isArray(data) ? data : data?.categories;
+        if (!Array.isArray(categories)) return;
+        writeMenuCategoryCache(restaurantId, categories);
+        setMenu(withCategories(readMenuCache(restaurantId)));
+      }).catch(() => { /* Retain the last saved category positions offline. */ });
       const menuResult = await Promise.allSettled([api.get(`/menu/${restaurantId}`)]);
+      if (disposed || requestRevision !== revision) return;
       if (menuResult[0].status === "fulfilled") {
         try {
-          setMenu(reconcileMenuFromServer(restaurantId, menuResult[0].value.data));
+          setMenu(withCategories(reconcileMenuFromServer(restaurantId, menuResult[0].value.data)));
         } catch (menuError) {
+          setMenuError("Could not refresh dishes. Showing the saved menu if available.");
           console.warn("Staff menu response was invalid", menuError);
-          setMenu(readMenuCache(restaurantId));
+          setMenu(withCategories(readMenuCache(restaurantId)));
         }
       } else {
+        setMenuError("Could not refresh dishes. Showing the saved menu if available.");
         console.warn("Staff menu fetch failed", menuResult[0].reason);
-        setMenu(readMenuCache(restaurantId));
+        setMenu(withCategories(readMenuCache(restaurantId)));
       }
+      setMenuLoading(false);
+      await catalogRequest;
     };
     fetchData();
     fetchTables();
-  }, [restaurantId, fetchTables]);
+    const unsubscribe = subscribeToRefresh(() => Promise.all([fetchData(), fetchTables()]), { intervalMs: 15000 });
+    return () => { disposed = true; unsubscribe(); };
+  }, [restaurantId, fetchTables, menuRefresh]);
 
   useEffect(() => {
     const handleMenuChanged = (event) => {
       if (!event?.detail?.restaurantId || event.detail.restaurantId === restaurantId) {
-        setMenu(readMenuCache(restaurantId));
+        setMenu(resolveDishCategoryNames(readMenuCache(restaurantId), readMenuCategoryCache(restaurantId)));
       }
     };
     const handleSync = (event) => {
@@ -161,7 +211,7 @@ export default function StaffOrder({ hotel, onOrderCreated }) {
   // Unique subcategories for the selected category
   const subCategories = useMemo(() => {
     const categoryFiltered = menu.filter((dish) => dish.isAvailable !== false).filter((dish) => {
-      return category === "All" || categoryKey(dish.category) === categoryKey(category);
+      return category === "All" || categoryKey(dishCategoryName(dish)) === categoryKey(category);
     });
     
     const set = new Set();
@@ -177,29 +227,15 @@ export default function StaffOrder({ hotel, onOrderCreated }) {
   const visibleMenu = useMemo(() => {
     const term = dishSearch.trim().toLowerCase();
     return sortDishesForDisplay(menu.filter((dish) => dish.isAvailable !== false).filter((dish) => {
-      return (category === "All" || categoryKey(dish.category) === categoryKey(category)) &&
+      return (category === "All" || categoryKey(dishCategoryName(dish)) === categoryKey(category)) &&
         (!term || String(dish.name || "").toLowerCase().includes(term));
     }));
   }, [category, dishSearch, menu]);
 
-  // Grouped menu items by subcategory
-  const groupedMenu = useMemo(() => {
-    const groups = {};
-    visibleMenu.forEach((dish) => {
-      const sub = (dish.subCategory || dish.subcategory || "").trim();
-      const groupName = sub || "";
-      
-      if (activeSubCategory !== "All" && groupName !== activeSubCategory) {
-        return;
-      }
-      
-      if (!groups[groupName]) {
-        groups[groupName] = [];
-      }
-      groups[groupName].push(dish);
-    });
-    return groups;
-  }, [visibleMenu, activeSubCategory]);
+  const groupedMenu = useMemo(() => groupMenuSections(
+    visibleMenu.filter((dish) => activeSubCategory === "All" || String(dish.subCategory || dish.subcategory || "").trim() === activeSubCategory),
+    categories
+  ), [visibleMenu, activeSubCategory, categories]);
 
   const quantityFor = (dishId) => cart
     .filter((item) => item.menuId === dishId)
@@ -246,7 +282,7 @@ export default function StaffOrder({ hotel, onOrderCreated }) {
   const cartCount = cart.reduce((total, item) => total + item.quantity, 0);
   const total = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
 
-  const resetOrder = () => {
+  const resetOrder = useCallback(() => {
     setCart([]);
     setGuestName("");
     setGuestContact("");
@@ -256,7 +292,30 @@ export default function StaffOrder({ hotel, onOrderCreated }) {
     setSelectedTable(null);
     setOrderType("dinein");
     setComboDish(null);
-  };
+    setDiscardOpen(false);
+  }, []);
+
+  const requestBack = useCallback(() => {
+    if (placingInFlight.current) return;
+    if (cart.length || guestName || guestContact) setDiscardOpen(true);
+    else resetOrder();
+  }, [cart.length, guestName, guestContact, resetOrder]);
+
+  useEffect(() => {
+    if (!active) return undefined;
+    const back = event => {
+      if (!visible && !cart.length && !guestName && !guestContact) return;
+      if (discardOpen || comboDish || selectedTable || orderType === "takeaway") {
+        if (!visible) onRevealDraft?.();
+        event.preventDefault();
+        if (discardOpen) closeDiscard();
+        else if (comboDish) setComboDish(null);
+        else requestBack();
+      }
+    };
+    window.addEventListener("flexiorder:owner-menu-back", back);
+    return () => window.removeEventListener("flexiorder:owner-menu-back", back);
+  }, [active, discardOpen, comboDish, selectedTable, orderType, requestBack, closeDiscard, visible, onRevealDraft, cart.length, guestName, guestContact]);
 
   const placeOrder = async () => {
     if (placingInFlight.current) return;
@@ -340,6 +399,14 @@ export default function StaffOrder({ hotel, onOrderCreated }) {
   return (
     <section className="staff-order-flow">
       <h1 className="sr-only">Staff Ordering</h1>
+      {discardOpen && <div className="ops-sheet-backdrop" onClick={closeDiscard}>
+        <section ref={discardRef} role="dialog" aria-modal="true" aria-labelledby="discard-order-title" className="ops-tools-sheet" tabIndex={-1} onClick={event => event.stopPropagation()}>
+          <h2 id="discard-order-title">Discard this order?</h2>
+          <p>Your selected dishes and guest details will be removed.</p>
+          <button type="button" onClick={closeDiscard}>Keep editing</button>
+          <button type="button" disabled={placing} onClick={() => { focusLocationAfterDiscard.current = true; resetOrder(); }}>Discard order</button>
+        </section>
+      </div>}
 
       {comboDish && (
         <ComboSelector
@@ -368,8 +435,9 @@ export default function StaffOrder({ hotel, onOrderCreated }) {
 
       {!selectedTable && orderType !== "takeaway" ? (
         <div className="staff-location-step">
-          {tables.length > 12 && (
-            <label className="ops-search"><FiSearch /><input value={tableSearch} onChange={(event) => setTableSearch(event.target.value)} placeholder="Search table or room" /></label>
+          <div className="staff-step-heading"><span>Step 1 of 2</span><h2 ref={locationHeadingRef} tabIndex={-1}>Choose a table or room</h2><p>Select where you’re taking this order.</p></div>
+          {tables.length > 0 && (
+            <label className="ops-search"><FiSearch /><input value={tableSearch} onChange={(event) => setTableSearch(event.target.value)} aria-label="Search table or room" placeholder="Search table or room" /></label>
           )}
           <div className="staff-location-grid">
             {visibleTables.map((table) => (
@@ -379,9 +447,12 @@ export default function StaffOrder({ hotel, onOrderCreated }) {
               </button>
             ))}
           </div>
-          {tables.length === 0 && tableError && (
+          {tablesLoading && !tables.length && <p role="status">Loading tables and rooms…</p>}
+          {!tablesLoading && !tableError && !tables.length && <p className="ops-empty-row">No tables or rooms are set up yet. Ask the restaurant owner to add them.</p>}
+          {tables.length > 0 && !visibleTables.length && <div className="ops-empty-row"><p>No matching tables or rooms.</p><button type="button" onClick={() => setTableSearch("")}>Clear location search</button></div>}
+          {tableError && (
             <div className="ops-inline-error staff-location-error" role="alert">
-              <span>{tableError}</span>
+              <span>{tables.length ? "Showing saved tables and rooms. " : ""}{tableError}</span>
               <button type="button" onClick={fetchTables}>Retry</button>
             </div>
           )}
@@ -392,19 +463,22 @@ export default function StaffOrder({ hotel, onOrderCreated }) {
       ) : (
         <div className="staff-menu-step">
           <header className="staff-menu-step__head">
-            <button type="button" className="ops-icon-button" aria-label="Back to tables" onClick={resetOrder}><FiArrowLeft /></button>
+            <button type="button" className="ops-icon-button" aria-label="Back to tables" disabled={placing} onClick={requestBack}><FiArrowLeft /></button>
             <div><strong>{orderType === "takeaway" ? "Takeaway" : tableLabel(selectedTable)}</strong><span>{cartCount ? `${cartCount} selected` : "Tap a dish to add"}</span></div>
-            <button type="button" className="staff-guest-toggle" onClick={() => setShowGuest((value) => !value)}>Guest details</button>
+            <button type="button" className="staff-guest-toggle" aria-expanded={showGuest} onClick={() => setShowGuest((value) => !value)}>Guest details</button>
           </header>
 
+          <div className="staff-step-heading"><span>Step 2 of 2</span><h2>Add dishes</h2></div>
+          {menuError && <div className="ops-inline-error" role="alert"><span>{menuError}</span><button type="button" onClick={() => setMenuRefresh(value => value + 1)}>Retry menu</button></div>}
+          {menuLoading && !menu.length && <p role="status">Loading dishes…</p>}
           {showGuest && (
             <div className="staff-guest-fields">
-              <input type="tel" value={guestContact} onChange={(event) => setGuestContact(event.target.value)} placeholder="Contact (optional)" />
-              <input value={guestName} onChange={(event) => setGuestName(event.target.value)} placeholder="Name (optional)" />
+              <input type="tel" value={guestContact} onChange={(event) => setGuestContact(event.target.value)} aria-label="Guest contact (optional)" placeholder="Contact (optional)" />
+              <input value={guestName} onChange={(event) => setGuestName(event.target.value)} aria-label="Guest name (optional)" placeholder="Name (optional)" />
             </div>
           )}
 
-          <label className="ops-search staff-dish-search"><FiSearch /><input value={dishSearch} onChange={(event) => setDishSearch(event.target.value)} placeholder="Search dishes" /></label>
+          <label className="ops-search staff-dish-search"><FiSearch /><input ref={dishSearchRef} aria-label="Search dishes" value={dishSearch} onChange={(event) => setDishSearch(event.target.value)} placeholder="Search dishes" /></label>
 
           <div className="staff-menu-filters">
             <div className="staff-menu-filter-group">
@@ -436,10 +510,11 @@ export default function StaffOrder({ hotel, onOrderCreated }) {
           </div>
 
           <div className="staff-dish-list">
-            {Object.entries(groupedMenu).map(([subCatName, subCatDishes]) => {
+            {groupedMenu.map(({ key, category: categoryName, sub: subCatName, dishes: subCatDishes }) => {
               if (!subCatDishes.length) return null;
               return (
-                <div key={subCatName || "other"}>
+                <div key={key} className="staff-category-section">
+                  {categoryName && <h2 className="staff-subcategory-header">{categoryName}</h2>}
                   {subCatName && <div className="staff-subcategory-header">{subCatName}</div>}
                   {subCatDishes.map((dish) => {
                     const quantity = quantityFor(dish._id);
@@ -466,12 +541,22 @@ export default function StaffOrder({ hotel, onOrderCreated }) {
                 </div>
               );
             })}
-            {!visibleMenu.length && <p className="ops-empty-row">No dishes found</p>}
+            {!groupedMenu.some(section => section.dishes.length) && !menuLoading && (!menuError || menu.length > 0) && <div className="ops-empty-row"><p>{menu.some(dish => dish.isAvailable !== false) ? "No dishes match these filters." : "No dishes are available right now."}</p>{(dishSearch || category !== "All" || activeSubCategory !== "All") && <button type="button" onClick={() => { setDishSearch(""); setCategory("All"); setActiveSubCategory("All"); }}>Clear dish filters</button>}</div>}
           </div>
 
           {cartCount > 0 && (
+            <section ref={reviewRef} tabIndex={-1} aria-label="Selected order items" className="rounded-xl border bg-white p-4 my-4">
+              <h3 className="font-bold mb-3">Review order</h3><button type="button" className="staff-review-edit" onClick={() => { dishSearchRef.current?.scrollIntoView({ block: "center" }); dishSearchRef.current?.focus(); }}>Add more dishes</button>
+              {cart.map(item => <div key={item.cartKey || item.menuId} className="flex justify-between gap-3 mb-3">
+                <span>{item.quantity} × {item.name}<OrderItemOptions item={item} /></span>
+                <button type="button" className="ops-icon-button" aria-label={`Remove one ${item.name} from order`}
+                  onClick={() => setCart(current => current.map(line => line.cartKey === item.cartKey ? { ...line, quantity: line.quantity - 1 } : line).filter(line => line.quantity > 0))}><FiMinus /></button>
+              </div>)}
+            </section>
+          )}
+          {cartCount > 0 && (
             <div className="staff-cart-bar">
-              <span><FiShoppingBag /><b>{cartCount} items</b><small>₹{total.toFixed(0)}</small></span>
+              <button type="button" className="staff-cart-review" aria-label={`Review order, ${cartCount} ${cartCount === 1 ? "item" : "items"}`} onClick={() => { reviewRef.current?.scrollIntoView({ block: "center" }); reviewRef.current?.focus({ preventScroll: true }); }}><FiShoppingBag /><span><b>{cartCount} {cartCount === 1 ? "item" : "items"} · ₹{total.toFixed(0)}</b><small>Review order</small></span></button>
               <button type="button" onClick={placeOrder} disabled={placing}>{placing ? "Sending…" : "Place Order"}</button>
             </div>
           )}
@@ -480,3 +565,5 @@ export default function StaffOrder({ hotel, onOrderCreated }) {
     </section>
   );
 }
+import { subscribeToRefresh } from '../utils/refreshOnResume';
+import OrderItemOptions from '../components/orders/OrderItemOptions';

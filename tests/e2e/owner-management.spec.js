@@ -16,14 +16,15 @@ const readDownloadJson = async (download) => {
 };
 
 const openOwnerTab = async (page, name) => {
-  if ((page.viewportSize()?.width || 0) < 768) {
-    const menu = page.getByRole("button", { name: "Open owner menu" });
+  if ((page.viewportSize()?.width || 0) < 768 && !["Menu", "Orders"].includes(name)) {
+    const menu = page.getByRole("button", { name: "More", exact: true });
     await expect(menu).toBeVisible();
     await menu.click();
   }
   const tab = page.getByRole("button", { name, exact: true }).filter({ visible: true });
   await expect(tab).toBeVisible();
   await tab.click();
+  if (name === "Menu") await page.locator(".owner-menu-tools summary").click();
 };
 
 test.beforeEach(async ({ page }) => {
@@ -81,9 +82,11 @@ test("owner theme selection applies immediately and survives reload", async ({ p
   await openOwnerTab(page, "Themes");
   await page.getByRole("button", { name: /Lavender Hues/ }).click();
   await expect(page.locator(".owner-shell")).toHaveCSS("--primary", "#a78bfa");
-  const savedDialog = page.waitForEvent("dialog");
-  await page.getByRole("button", { name: "Save Theme" }).click();
-  await (await savedDialog).accept();
+  const savedDialog = page.waitForEvent("dialog").then(dialog => dialog.accept());
+  await Promise.all([
+    savedDialog,
+    page.getByRole("button", { name: "Save Theme" }).click(),
+  ]);
 
   await page.reload();
   await expect(page.locator(".owner-shell")).toHaveCSS("--primary", "#a78bfa");
@@ -187,11 +190,14 @@ test("owner menu mode and GST settings save canonically and survive reload", asy
   await page.getByRole("button", { name: /^Simple menu/ }).click();
   await page.getByRole("checkbox", { name: "Enable GST" }).check();
   await page.getByPlaceholder("e.g. 5").fill("12");
-  const savedDialog = page.waitForEvent("dialog");
-  await page.getByRole("button", { name: "Save Settings" }).click();
-  const dialog = await savedDialog;
-  expect(dialog.message()).toBe("Profile updated successfully");
-  await dialog.accept();
+  const savedDialog = page.waitForEvent("dialog").then(async dialog => {
+    expect(dialog.message()).toBe("Profile updated successfully");
+    await dialog.accept();
+  });
+  await Promise.all([
+    savedDialog,
+    page.getByRole("button", { name: "Save Settings" }).click(),
+  ]);
 
   expect(submittedPayload).toMatchObject({
     menuMode: "simple",
@@ -287,8 +293,8 @@ test("owner can inspect completed order history", async ({ page }) => {
   }));
 
   await page.goto("/owner/dashboard");
-  await openOwnerTab(page, "History");
-  await expect(page.locator(".owner-header strong")).toHaveText("History");
+  await openOwnerTab(page, "Orders");
+  await expect(page.locator(".owner-header strong")).toHaveText("Orders");
   await page.getByRole("tab", { name: "History" }).click();
   await expect(page.getByText("Table 8", { exact: true })).toBeVisible();
 });
@@ -301,7 +307,7 @@ test("Simple app level hides optional owner controls immediately", async ({ page
   await expect(page.getByText("Staff access", { exact: true })).toHaveCount(0);
   await expect(page.getByRole("checkbox", { name: "God Mode" })).toBeVisible();
   if ((page.viewportSize()?.width || 0) < 768) {
-    await page.getByRole("button", { name: "Open owner menu" }).click();
+    await page.getByRole("button", { name: "More", exact: true }).click();
   }
   await expect(page.getByRole("button", { name: "Staff", exact: true })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Analytics", exact: true })).toHaveCount(0);
@@ -363,7 +369,7 @@ test("owner dashboard order board follows God Mode", async ({ page }) => {
   });
 
   await page.goto("/owner/dashboard");
-  await openOwnerTab(page, "History");
+  await openOwnerTab(page, "Orders");
   await page.getByRole("button", { name: /^Mark ready Table 8 order/ }).click();
   await expect(page.locator(".ops-order-card--ready")).toBeVisible();
   await expect.poll(() => statuses).toEqual(["ready"]);
@@ -506,7 +512,8 @@ test("demo menu import survives reload, reimports as skips, and re-exports equiv
   const downloadPromise = page.waitForEvent("download");
   await page.getByRole("button", { name: "Export menu" }).click();
   const reExported = await readDownloadJson(await downloadPromise);
-  expect(reExported.dishes).toEqual(demo.dishes);
+  // Older sample files omit menuType; canonical exports retain the simple/combo discriminator.
+  expect(reExported.dishes).toEqual(demo.dishes.map(dish => ({ menuType: "simple", ...dish })));
 });
 
 test("menu import falls back to single-dish writes when the bulk route is missing (404)", async ({ page }) => {
@@ -879,6 +886,9 @@ test("offline-created dish survives reload and syncs when the API returns", asyn
       _id: "dish-offline-server",
       name: "Offline Thali",
       category: "Main Course",
+      categoryId: { _id: "6a7d865d30af0144c44a9072", name: "Main Course" },
+      description: "",
+      spiceLevel: "",
       foodType: "veg",
       price: 280,
       prepTime: 18,

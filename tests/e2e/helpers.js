@@ -53,6 +53,16 @@ export const dishes = [
 ];
 
 const TEST_NOW_MS = Date.UTC(2100, 0, 1);
+const isolatedPages = new WeakSet();
+export const isolateTestNetwork = async page => {
+  if (isolatedPages.has(page)) return;
+  isolatedPages.add(page);
+  await page.route('**/*', route => {
+    const { hostname } = new URL(route.request().url());
+    return ['localhost', '127.0.0.1'].includes(hostname) ? route.continue() : fulfillJson(route, {});
+  });
+  await page.routeWebSocket('**/*', socket => socket.close());
+};
 
 export const makeToken = (subject = "staff-1", nowMs = TEST_NOW_MS) => {
   const encode = (value) => Buffer.from(JSON.stringify(value)).toString("base64url");
@@ -63,6 +73,7 @@ export const makeToken = (subject = "staff-1", nowMs = TEST_NOW_MS) => {
 };
 
 export const installSession = async (page, role = "staff") => {
+  await isolateTestNetwork(page);
   const user = {
     _id: `${role}-1`,
     email: `${role}@flexi.test`,
@@ -89,7 +100,47 @@ export const fulfillJson = (route, body, status = 200) => route.fulfill({
   body: JSON.stringify(body),
 });
 
+// Exercise native-only routing through Capacitor's real platform detection.
+// Plugin calls stay in memory: no device permissions, network or app exits.
+export const installNativeBridge = async page => {
+  await isolateTestNetwork(page);
+  await page.addInitScript(() => {
+    const listeners = new Map();
+    let nextId = 0;
+    window.androidBridge = {};
+    window.__nativeExitCount = 0;
+    window.__nativeCalls = [];
+    window.__emitNativeEvent = (plugin, eventName, data = {}) => {
+      for (const listener of listeners.values()) {
+        if (listener.plugin === plugin && listener.eventName === eventName) listener.callback(data);
+      }
+    };
+    window.Capacitor = {
+      PluginHeaders: ["App", "PushNotifications", "LocalNotifications", "Filesystem", "Share"].map(name => ({
+        name,
+        methods: [
+          { name: "addListener" },
+          ...["removeListener", "exitApp", "checkPermissions", "requestPermissions", "createChannel", "register", "writeFile", "share"].map(method => ({ name: method, rtype: "promise" })),
+        ],
+      })),
+      nativeCallback(plugin, method, options, callback) {
+        const id = String(++nextId);
+        if (method === "addListener") listeners.set(id, { plugin, eventName: options.eventName, callback });
+        return Promise.resolve(id);
+      },
+      nativePromise(plugin, method, options) {
+        window.__nativeCalls.push({ plugin, method, options });
+        if (method === "removeListener") listeners.delete(options.callbackId);
+        if (method === "exitApp") window.__nativeExitCount += 1;
+        if (plugin === "Filesystem" && method === "writeFile") return Promise.resolve({ uri: `content://flexiorder/${options.path}` });
+        return Promise.resolve(method.includes("Permissions") ? { receive: "denied", display: "denied" } : {});
+      },
+    };
+  });
+};
+
 export const mockGuestMenu = async (page, overrides = {}) => {
+  await isolateTestNetwork(page);
   const menuHotel = { ...hotel, ...(overrides.hotel || {}) };
   const menuDishes = overrides.dishes || dishes;
   const activeOrders = overrides.orders || [];

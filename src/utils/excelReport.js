@@ -114,7 +114,6 @@ export async function buildAnalyticsReportBlob({
   previousStats = {},
   chartData = [],
   popularDishes = [],
-  range = {},
   rangeLabel = "",
 }) {
   const accent = accentArgb(hotel);

@@ -1,4 +1,5 @@
 import { lazy, Suspense } from "react";
+import { Capacitor } from "@capacitor/core";
 import { Navigate, Routes, Route } from "react-router-dom";
 import "./App.css";
 
@@ -50,7 +51,7 @@ export default function App() {
         {/* Directly open Auth Page */}
        <Route
   path="/"
-  element={<HomeRedirect><LandingPage /></HomeRedirect>}
+  element={<HomeRedirect>{Capacitor.isNativePlatform() ? <Navigate to="/login" replace /> : <LandingPage />}</HomeRedirect>}
 />
 
         <Route

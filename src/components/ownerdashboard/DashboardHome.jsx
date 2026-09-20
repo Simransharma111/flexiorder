@@ -4,6 +4,7 @@ export default function DashboardHome({
   stats,
   hotel,
   setActiveTab,
+  allowedTabs = [],
 }) {
   const metrics = [
     {
@@ -89,46 +90,49 @@ export default function DashboardHome({
         )}
       </div>
 
+      <div className="owner-daily-actions">{allowedTabs.includes("orders") && <button type="button" className="owner-accent-bg" onClick={() => setActiveTab?.("orders")}>View orders</button>}{allowedTabs.includes("menu") && <button type="button" onClick={() => setActiveTab?.("menu")}>Manage menu</button>}</div>
       <div className="owner-metrics">
         {metrics.map((item) => {
           const Icon = item.icon;
+          const actionable = allowedTabs.includes(item.targetTab);
+          const Card = actionable ? "button" : "article";
           return (
-            <article
+            <Card type={actionable ? "button" : undefined}
               key={item.label}
-              onClick={() => setActiveTab && item.targetTab && setActiveTab(item.targetTab)}
-              style={{ cursor: setActiveTab ? "pointer" : "default" }}
-              className="clickable-metric-card"
+              onClick={actionable ? () => setActiveTab?.(item.targetTab) : undefined}
+              style={{ cursor: actionable ? "pointer" : "default" }}
+              className={actionable ? "clickable-metric-card" : ""}
             >
               <Icon />
               <span>{item.label}</span>
               <strong>{item.value}</strong>
-            </article>
+            </Card>
           );
         })}
       </div>
 
       <div className="owner-today__status">
-        <article onClick={() => setActiveTab?.("orders")}>
+        <button type="button" onClick={() => setActiveTab?.("orders")}>
           <span className="is-new" />
           <div>
             <strong>{stats?.pending || 0} new</strong>
             <small>Waiting for kitchen</small>
           </div>
-        </article>
-        <article onClick={() => setActiveTab?.("orders")}>
+        </button>
+        <button type="button" onClick={() => setActiveTab?.("orders")}>
           <span className="is-preparing" />
           <div>
             <strong>{stats?.preparing || 0} preparing</strong>
             <small>Work in progress</small>
           </div>
-        </article>
-        <article onClick={() => setActiveTab?.("orders")}>
+        </button>
+        <button type="button" onClick={() => setActiveTab?.("orders")}>
           <span className="is-ready" />
           <div>
             <strong>{stats?.ready || 0} ready</strong>
             <small>Waiting for delivery</small>
           </div>
-        </article>
+        </button>
       </div>
     </section>
   );

@@ -46,6 +46,7 @@ import {
   FiStar,
 } from "react-icons/fi";
 import DishForm from "../components/menu/DishForm";
+import MenuPdfDialog from "../components/menu/MenuPdfDialog";
 import MenuCategoryManager from "./MenuCategoryManager";
 
 const DEFAULT_CATEGORIES = [
@@ -82,6 +83,7 @@ export default function OwnerMenuManager({
   const [search, setSearch] = useState("");
   const [activeCategory, setActiveCategory] = useState("All");
   const [showCategories, setShowCategories] = useState(false);
+  const [showMenuPdf, setShowMenuPdf] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [importing, setImporting] = useState(false);
   const [importProgress, setImportProgress] = useState(null);
@@ -186,15 +188,9 @@ export default function OwnerMenuManager({
     try {
       const res = await api.get(`/menu/${hotelId}`);
 
-      const serverDishes = Array.isArray(res.data)
-        ? res.data
-        : Array.isArray(res.data?.dishes)
-        ? res.data.dishes
-        : [];
-
       const reconciled = reconcileMenuFromServer(
         hotelId,
-        serverDishes
+        res.data
       );
 
       setDishes(reconciled);
@@ -270,7 +266,9 @@ export default function OwnerMenuManager({
     setShowForm(true);
     setLoadError("");
 
-    window.scrollTo({
+    const ownerScroller = document.querySelector(".owner-shell > .flex");
+    const scrollTarget = ownerScroller && getComputedStyle(ownerScroller).overflowY === "auto" ? ownerScroller : window;
+    scrollTarget.scrollTo({
       top: 0,
       behavior: "smooth",
     });
@@ -359,6 +357,8 @@ const resolvedFields = {
   category: resolvedCategory,
   categoryId: resolvedCategoryId,
   categoryName: resolvedCategoryName,
+  ...(editingId && categoryId(readMenuCache(hotelId).find(dish => dish._id === editingId)?.category) !== resolvedCategoryId
+    ? { subCategory: "" } : {}),
 };
 
       if (editingId) {
@@ -407,7 +407,9 @@ const resolvedFields = {
     setShowForm(true);
     setLoadError("");
 
-    window.scrollTo({
+    const ownerScroller = document.querySelector(".owner-shell > .flex");
+    const scrollTarget = ownerScroller && getComputedStyle(ownerScroller).overflowY === "auto" ? ownerScroller : window;
+    scrollTarget.scrollTo({
       top: 0,
       behavior: "smooth",
     });
@@ -648,6 +650,7 @@ const resolvedFields = {
       ) || null
     );
   }, [dishes, editingId]);
+  useRefreshOnResume(fetchDishes, 15000);
 
   return (
     <div className="text-gray-900">
@@ -665,6 +668,25 @@ const resolvedFields = {
         </div>
 
         <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={openAddForm}
+            className="owner-accent-bg flex items-center justify-center gap-2 rounded-xl px-5 py-3 font-semibold"
+          >
+            <FiPlus />
+            Add Dish
+          </button>
+          <details className="owner-menu-tools">
+            <summary>Menu tools</summary>
+            <div className="owner-menu-tools__actions">
+          <button
+            type="button"
+            onClick={() => setShowMenuPdf(true)}
+            className="flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-700 transition hover:bg-gray-50"
+          >
+            <FiDownload />
+            Create menu PDF
+          </button>
           <button type="button" aria-expanded={showCategories}
             onClick={() => setShowCategories(value => !value)}
             className="rounded-xl border border-gray-200 bg-white px-4 py-3 font-semibold">
@@ -686,7 +708,8 @@ const resolvedFields = {
                   accept=".json,application/json"
                   onChange={importMenu}
                   disabled={importing}
-                  className="hidden"
+                  className="sr-only"
+                  aria-label="Import menu"
                 />
               </label>
 
@@ -710,21 +733,25 @@ const resolvedFields = {
             </>
           )}
 
-          <button
-            type="button"
-            onClick={openAddForm}
-            className="owner-accent-bg flex items-center justify-center gap-2 rounded-xl px-5 py-3 font-semibold"
-          >
-            <FiPlus />
-            Add Dish
-          </button>
+            </div>
+          </details>
         </div>
       </div>
+      {importing && <p role="status">Import in progress{importProgress ? `: ${importProgress[0]} of ${importProgress[1]} dishes` : "…"}</p>}
 
       {/* FEEDBACK */}
       {showCategories && <section className="mb-6" aria-label="Manage menu categories">
         <MenuCategoryManager key={hotelId} hotelId={hotelId} onCategoryUpdate={storeCategoryCatalog} />
       </section>}
+      <MenuPdfDialog
+        open={showMenuPdf}
+        onClose={() => setShowMenuPdf(false)}
+        restaurant={restaurant || user}
+        dishes={dishes}
+        categories={canonicalCategories}
+        isOnline={isOnline}
+        pendingCount={syncSummary.pending + syncSummary.attention}
+      />
       {feedback && (
         <div
           className="ops-inline-success mb-4"
@@ -1279,3 +1306,4 @@ function SmallTag({ children }) {
     </span>
   );
 }
+import useRefreshOnResume from '../hooks/useRefreshOnResume';

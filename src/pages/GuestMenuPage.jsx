@@ -993,9 +993,9 @@ outline-none
       </label>
     )}
 
-    <button type="button" onClick={openSchedule} className="guest-food-filters__schedule">
+    {orderingEnabled && <button type="button" onClick={openSchedule} className="guest-food-filters__schedule">
       <FiCalendar /> Schedule order
-    </button>
+    </button>}
   </div>
 </section>
 

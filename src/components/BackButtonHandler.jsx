@@ -18,11 +18,15 @@ export default function BackButtonHandler() {
 
   useEffect(() => {
     let listener = null;
+    let disposed = false;
 
     const setupListener = async () => {
       const result = await CapacitorApp.addListener(
         "backButton",
-        () => {
+        ({ canGoBack } = {}) => {
+          // Give an open owner menu first refusal before leaving its workspace.
+          const menuBack = new Event("flexiorder:owner-menu-back", { cancelable: true });
+          if (!window.dispatchEvent(menuBack)) return;
           const pathname = pathnameRef.current;
           const { user } = readStoredSession();
 
@@ -60,7 +64,8 @@ export default function BackButtonHandler() {
           // Public home -> exit app
           if (
             pathname === "/" ||
-            pathname === "/homepage"
+            pathname === "/homepage" ||
+            (!user && pathname === "/login" && !canGoBack)
           ) {
             CapacitorApp.exitApp();
             return;
@@ -71,12 +76,14 @@ export default function BackButtonHandler() {
         }
       );
 
-      listener = result;
+      if (disposed) result.remove();
+      else listener = result;
     };
 
-    setupListener();
+    setupListener().catch(error => console.warn("Native back button listener unavailable", error));
 
     return () => {
+      disposed = true;
       if (listener?.remove) {
         listener.remove();
       }

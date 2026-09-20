@@ -3,7 +3,6 @@ import { FiDownload, FiRefreshCw, FiTrendingUp, FiShoppingBag, FiCreditCard, FiC
 import api from "../api/axios";
 import { Share } from "@capacitor/share";
 import { downloadFile, isNativeApp, writeTempShareFile } from "../utils/fileDownload";
-import { buildAnalyticsReportBlob, reportFilename } from "../utils/excelReport";
 import {
   analyticsComparison,
   buildAnalyticsChartData,
@@ -71,47 +70,6 @@ export default function AnalyticsDashboard({ hotel = {}, orders = [], advancedEn
   const [exporting, setExporting] = useState(false);
   const [exportStatus, setExportStatus] = useState("");
 
-  // Build a branded Excel workbook for exactly the period the owner selected
-  // (today / month / quarter / custom). On the device it saves into
-  // Downloads/FlexiOrder and immediately opens the native share sheet.
-  const exportExcel = async () => {
-    if (exporting) return;
-    setExporting(true);
-    setExportStatus("");
-    try {
-      const blob = await buildAnalyticsReportBlob({
-        hotel,
-        orders: filteredOrdersForTimeframe,
-        stats,
-        previousStats,
-        chartData,
-        popularDishes: calculatePopularDishes(filteredOrdersForTimeframe, 8),
-        range,
-        rangeLabel: range?.label || "",
-      });
-      const filename = reportFilename(hotel, range);
-      if (isNativeApp()) {
-        const saved = await downloadFile(blob, filename);
-        let shareNote = "";
-        try {
-          const uri = await writeTempShareFile(blob, filename);
-          await Share.share({ title: `${hotel?.name || "Restaurant"} report`, url: uri, dialogTitle: "Share the report" });
-          shareNote = " · sharing sheet opened";
-        } catch {
-          shareNote = "";
-        }
-        setExportStatus(`Saved to ${saved.label || "Downloads/FlexiOrder"}${shareNote}.`);
-      } else {
-        await downloadFile(blob, filename);
-        setExportStatus("Report downloaded.");
-      }
-    } catch (requestError) {
-      console.error(requestError);
-      setExportStatus("Report could not be created. Try again when the connection is stable.");
-    } finally {
-      setExporting(false);
-    }
-  };
 
   const range = useMemo(() => resolveAnalyticsRange({
     mode: rangeMode,
@@ -150,6 +108,49 @@ export default function AnalyticsDashboard({ hotel = {}, orders = [], advancedEn
     () => calculatePopularDishes(filteredOrdersForTimeframe),
     [filteredOrdersForTimeframe],
   );
+
+  // Build a branded Excel workbook for exactly the period the owner selected
+  // (today / month / quarter / custom). On the device it saves into
+  // Downloads/FlexiOrder and immediately opens the native share sheet.
+  const exportExcel = async () => {
+    if (exporting) return;
+    setExporting(true);
+    setExportStatus("");
+    try {
+      const { buildAnalyticsReportBlob, reportFilename } = await import('../utils/excelReport');
+      const blob = await buildAnalyticsReportBlob({
+        hotel,
+        orders: filteredOrdersForTimeframe,
+        stats,
+        previousStats,
+        chartData,
+        popularDishes: calculatePopularDishes(filteredOrdersForTimeframe, 8),
+        range,
+        rangeLabel: range?.label || "",
+      });
+      const filename = reportFilename(hotel, range);
+      if (isNativeApp()) {
+        const saved = await downloadFile(blob, filename);
+        let shareNote = "";
+        try {
+          const uri = await writeTempShareFile(blob, filename);
+          await Share.share({ title: `${hotel?.name || "Restaurant"} report`, url: uri, dialogTitle: "Share the report" });
+          shareNote = " · sharing sheet opened";
+        } catch {
+          shareNote = "";
+        }
+        setExportStatus(`Saved to ${saved.label || "Downloads/FlexiOrder"}${shareNote}.`);
+      } else {
+        await downloadFile(blob, filename);
+        setExportStatus("Report downloaded.");
+      }
+    } catch (requestError) {
+      console.error(requestError);
+      setExportStatus("Report could not be created. Try again when the connection is stable.");
+    } finally {
+      setExporting(false);
+    }
+  };
 
   const metrics = [
     { key: "revenue", label: "Revenue", value: currency(stats.totalRevenue), comparison: analyticsComparison(stats.totalRevenue, previousStats.totalRevenue), icon: FiCreditCard },

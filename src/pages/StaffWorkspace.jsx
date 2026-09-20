@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import api from "../api/axios";
 import socket from "../socket";
 import { triggerLocalOrderNotification } from "../utils/fcmPush";
+import useDialogFocus from "../hooks/useDialogFocus";
 import StaffOrder from "./StaffOrder";
 import Orders from "../components/ownerdashboard/Orders";
 import { getScopedStorageKey, rememberRestaurantId } from "../utils/storageScope";
@@ -33,6 +34,18 @@ export default function StaffWorkspace() {
   const [refreshing, setRefreshing] = useState(false);
   const [updatingOrdering, setUpdatingOrdering] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [loadError, setLoadError] = useState("");
+  const toolsRef = useRef(null);
+  const closeTools = useCallback(() => setMenuOpen(false), []);
+  useDialogFocus(menuOpen, toolsRef, closeTools);
+  useEffect(() => {
+    if (!menuOpen) return undefined;
+    const handleBack = event => { event.preventDefault(); event.stopImmediatePropagation(); closeTools(); };
+    window.addEventListener("flexiorder:owner-menu-back", handleBack, true);
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { window.removeEventListener("flexiorder:owner-menu-back", handleBack, true); document.body.style.overflow = previous; };
+  }, [menuOpen, closeTools]);
     const settingsRevision = useRef(0);
   const orderingRequestRevision = useRef(0);
   const currentRole = readStoredSession().user?.role;
@@ -44,36 +57,45 @@ export default function StaffWorkspace() {
 
   const fetchData = useCallback(async () => {
     const requestRevision = settingsRevision.current;
-    try {
-      const [hotelResponse, ordersResponse] = await Promise.all([
-        api.get("/hotel/me"),
-        api.get("/kitchen/orders"),
-      ]);
-      const nextHotel = hydrateHotelFeatures(hotelResponse.data?.hotel || hotelResponse.data);
-      rememberRestaurantId(nextHotel);
-      const nextOrders = ordersResponse.data?.orders || ordersResponse.data || [];
-      if (requestRevision === settingsRevision.current) {
-        setHotel(nextHotel);
-        localStorage.setItem(getScopedStorageKey(HOTEL_CACHE_KEY), JSON.stringify(nextHotel));
-      }
-      setOrders((current) => persistOrders(
-        reconcileAuthoritativeOrders(current, nextOrders, getPendingKitchenUpdates())
-      ));
-    } catch (error) {
-      console.warn("Staff workspace loading failed", error);
-      try {
-        const cachedHotel = localStorage.getItem(getScopedStorageKey(HOTEL_CACHE_KEY));
-        const cachedOrders = localStorage.getItem(getScopedStorageKey(ORDERS_CACHE_KEY));
-        if (cachedHotel && requestRevision === settingsRevision.current) {
-          setHotel(JSON.parse(cachedHotel));
+    const results = await Promise.allSettled([
+      (async () => {
+        try {
+          const { data } = await api.get("/hotel/me");
+          const nextHotel = hydrateHotelFeatures(data?.hotel || data);
+          if (!nextHotel?._id) throw new Error("Restaurant response is missing its identity.");
+          rememberRestaurantId(nextHotel);
+          if (requestRevision === settingsRevision.current) {
+            setHotel(nextHotel);
+            localStorage.setItem(getScopedStorageKey(HOTEL_CACHE_KEY), JSON.stringify(nextHotel));
+          }
+        } catch (error) {
+          try {
+            const cached = localStorage.getItem(getScopedStorageKey(HOTEL_CACHE_KEY));
+            if (cached && requestRevision === settingsRevision.current) setHotel(JSON.parse(cached));
+          } catch { /* Keep already displayed restaurant information. */ }
+          throw error;
         }
-        if (cachedOrders) setOrders((current) => mergeOrders(current, JSON.parse(cachedOrders)));
-      } catch (cacheError) {
-        console.warn("Staff workspace cache failed", cacheError);
-      }
-    } finally {
-      setLoading(false);
-    }
+      })(),
+      (async () => {
+        try {
+          const { data } = await api.get("/kitchen/orders");
+          const nextOrders = data?.orders || data;
+          if (!Array.isArray(nextOrders)) throw new Error("Unexpected orders response.");
+          setOrders(current => persistOrders(
+            reconcileAuthoritativeOrders(current, nextOrders, getPendingKitchenUpdates())
+          ));
+        } catch (error) {
+          try {
+            const cached = JSON.parse(localStorage.getItem(getScopedStorageKey(ORDERS_CACHE_KEY)) || "[]");
+            if (Array.isArray(cached)) setOrders(current => mergeOrders(current, cached));
+          } catch { /* Keep already displayed orders and pending work. */ }
+          throw error;
+        }
+      })(),
+    ]);
+    setLoadError(results.some(result => result.status === "rejected")
+      ? "Could not refresh the workspace. Saved information may be out of date." : "");
+    setLoading(false);
   }, [persistOrders]);
 
   const refreshNow = async () => {
@@ -88,11 +110,8 @@ export default function StaffWorkspace() {
 
   useEffect(() => {
     fetchData();
-    const interval = window.setInterval(fetchData, 15000);
-    return () => {
-      window.clearInterval(interval);
-    };
   }, [fetchData]);
+  useRefreshOnResume(fetchData, 15000);
 
   useEffect(() => {
     if (!hotel?._id) return undefined;
@@ -216,19 +235,22 @@ export default function StaffWorkspace() {
 
   return (
     <main className="ops-workspace ops-waiter-workspace" style={getHotelThemeStyle(hotel)}>
+      <div className="ops-workspace-identity"><strong>{hotel?.name || "Waiter workspace"}</strong><span>Waiter workspace</span></div>
+      {loadError && <div className="ops-inline-error" role="alert"><span>{hotel ? loadError : "Could not load your restaurant. Check your connection and retry."}</span><button type="button" onClick={refreshNow} disabled={refreshing}>Retry workspace</button></div>}
       <header className="ops-waiter-tabs">
         <div role="tablist" aria-label="Waiter workspace">
           <button type="button" role="tab" aria-selected={activeTab === "orders"} className={activeTab === "orders" ? "is-active" : ""} onClick={() => setActiveTab("orders")}>Orders</button>
           <button type="button" role="tab" aria-selected={activeTab === "take"} className={activeTab === "take" ? "is-active" : ""} onClick={() => setActiveTab("take")}>Take Order</button>
         </div>
-        <span className={`ops-connection-dot is-${connectionStatus}`} title={connectionLabel === "Offline" ? "Offline · work is saved" : connectionLabel} aria-label={connectionLabel} />
+        <span className={`ops-connection-dot is-${connectionStatus}`} title={connectionLabel} aria-label={connectionLabel} />
         <button type="button" className="ops-icon-button" aria-label="Refresh waiter workspace" onClick={refreshNow} disabled={refreshing}><FiRefreshCw className={refreshing ? "animate-spin" : ""} /></button>
-        <button type="button" className="ops-icon-button" aria-label="More waiter options" onClick={() => setMenuOpen(true)}><FiMoreVertical /></button>
+        <button type="button" className="ops-icon-button" aria-label="More waiter options" aria-haspopup="dialog" aria-expanded={menuOpen} aria-controls="waiter-options" onClick={() => setMenuOpen(true)}><FiMoreVertical /></button>
       </header>
 
       {menuOpen && (
         <div className="ops-sheet-backdrop" onClick={() => setMenuOpen(false)}>
-          <aside className="ops-tools-sheet" onClick={(event) => event.stopPropagation()}>
+          <aside ref={toolsRef} id="waiter-options" role="dialog" aria-modal="true" aria-label="Waiter options" tabIndex={-1} className="ops-tools-sheet" onClick={(event) => event.stopPropagation()}>
+            <button type="button" aria-label="Close waiter options" className="ops-icon-button" onClick={closeTools}><FiX /></button>
             <div className="ops-tools-sheet__brand"><strong>{hotel?.name || "Restaurant"}</strong><span>Waiter workspace</span></div>
             {canSwitch && <button type="button" onClick={() => navigate("/kitchen")}>Kitchen workspace</button>}
             {["owner", "superadmin"].includes(currentRole) && (
@@ -243,21 +265,22 @@ export default function StaffWorkspace() {
         </div>
       )}
 
-      <div className="ops-waiter-content">
+      {hotel && <div className="ops-waiter-content" aria-busy={loading}>
         <div hidden={activeTab !== "take"}>
-          <StaffOrder hotel={hotel} onOrderCreated={addVisibleOrder} />
+          <StaffOrder hotel={hotel} active={!menuOpen} visible={activeTab === "take"} onRevealDraft={() => setActiveTab("take")} onOrderCreated={addVisibleOrder} />
         </div>
         <div hidden={activeTab !== "orders"}>
           <Orders
             orders={orders}
             refresh={fetchData}
-            onOrdersChange={setOrders}
+            onOrdersChange={(next) => setOrders(persistOrders(next))}
             godModeEnabled={featureSettings.godModeEnabled}
             allowBulkDelivery={canBulkDeliver}
             hotel={hotel}
           />
         </div>
-      </div>
+      </div>}
     </main>
   );
 }
+import useRefreshOnResume from '../hooks/useRefreshOnResume';

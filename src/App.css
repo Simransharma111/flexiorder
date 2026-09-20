@@ -1696,9 +1696,25 @@ img {
 .owner-header span { overflow: hidden; color: var(--theme-text-secondary, var(--ops-muted)); opacity: 1; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
 .owner-header__alert { min-width: 24px; height: 24px; display: grid; place-items: center; border-radius: 999px; background: var(--ops-new); color: #fff; font-size: 11px; font-style: normal; font-weight: 850; }
 .owner-header .owner-header__notification-warning { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 4px; overflow: visible; border-radius: 999px; background: #fff1f2; color: #be123c; padding: 5px 7px; font-size: 10px; font-weight: 800; white-space: nowrap; }
-.owner-content { max-width: 1280px; margin: 0 auto; padding: 10px; }
-.owner-mobile-drawer { position: fixed; inset: 0; z-index: 90; background: rgba(22,32,29,.42); }
-.owner-mobile-drawer__panel { width: min(82vw, 290px); height: 100%; background: var(--theme-surface, var(--ops-card)); color: var(--theme-text, var(--ops-ink)); }
+.owner-content { max-width: 1280px; margin: 0 auto; padding: 10px 10px calc(82px + env(safe-area-inset-bottom, 0px)); }
+.owner-bottom-nav { position: fixed; inset: auto 0 0; z-index: 40; display: flex; gap: 4px; border-top: 1px solid var(--theme-border-strong, var(--ops-border)); padding: 6px max(8px, env(safe-area-inset-right, 0px)) calc(6px + env(safe-area-inset-bottom, 0px)) max(8px, env(safe-area-inset-left, 0px)); background: var(--theme-surface, var(--ops-card)); }
+.owner-bottom-nav button { position: relative; flex: 1; min-width: 0; min-height: 56px; display: grid; justify-items: center; align-content: center; gap: 3px; border: 0; border-radius: 10px; background: transparent; color: var(--theme-text-secondary, var(--ops-muted)); font-size: 12px; font-weight: 650; }
+.owner-bottom-nav button svg { width: 21px; height: 21px; }
+.owner-bottom-nav button.is-active { background: var(--primary); color: var(--theme-on-primary, #fff); font-weight: 850; }
+.owner-bottom-nav button.is-active::before { content: ""; position: absolute; top: 3px; width: 18px; height: 3px; border-radius: 2px; background: currentColor; }
+.owner-bottom-nav button:focus-visible, .owner-mobile-drawer__close:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+.owner-mobile-drawer { position: fixed; inset: 0; z-index: 90; width: 100%; max-width: none; height: 100dvh; max-height: none; margin: 0; padding: 0; border: 0; background: transparent; }
+.owner-mobile-drawer::backdrop { background: rgba(22,32,29,.42); }
+.owner-mobile-drawer__panel { display: flex; flex-direction: column; width: min(82vw, 290px); height: 100%; padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); background: var(--theme-surface, var(--ops-card)); color: var(--theme-text, var(--ops-ink)); }
+.owner-mobile-drawer__panel .owner-rail { min-height: 0; flex: 1; }
+.owner-mobile-drawer__close { flex-shrink: 0; min-height: 44px; margin: 4px 8px; border: 1px solid var(--theme-border-strong, var(--ops-border)); border-radius: 8px; background: var(--theme-surface, var(--ops-card)); color: var(--theme-text, var(--ops-ink)); font-weight: 700; }
+
+@media (max-width: 767px) {
+  .owner-shell { height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
+  .owner-shell > .flex { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior-y: contain; }
+  .owner-bottom-nav { position: relative; inset: auto; flex-shrink: 0; }
+  .owner-content { padding-bottom: 16px; }
+}
 
 .owner-rail { height: 100%; display: flex; flex-direction: column; border-right: 1px solid var(--theme-border, var(--ops-border)); background: var(--theme-surface, var(--ops-card)); color: var(--theme-text, var(--ops-ink)); }
 .owner-rail__brand { min-height: 64px; display: flex; align-items: center; gap: 9px; border-bottom: 1px solid var(--ops-border); padding: 8px; }
@@ -1920,7 +1936,7 @@ img {
 .veg-badge.is-nonveg { color: #b91c1c; }
 
 .owner-metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-.owner-metrics article {
+.owner-metrics button {
   min-height: 78px;
   display: grid;
   grid-template-columns: 28px 1fr;
@@ -1931,16 +1947,16 @@ img {
   padding: 9px;
   transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.2s ease, border-color 0.2s ease;
 }
-.owner-metrics article.clickable-metric-card:hover {
+.owner-metrics button.clickable-metric-card:hover {
   transform: translateY(-2px);
   box-shadow: var(--shadow-sm);
   border-color: var(--primary);
 }
-.owner-metrics article svg { grid-row: 1 / 3; width: 20px; height: 20px; color: var(--primary-ink, var(--primary)); }
-.owner-metrics article span { color: var(--ops-muted); font-size: 10px; }
-.owner-metrics article strong { font-size: 19px; line-height: 1.1; }
+.owner-metrics button svg { grid-row: 1 / 3; width: 20px; height: 20px; color: var(--primary-ink, var(--primary)); }
+.owner-metrics button span { color: var(--ops-muted); font-size: 10px; }
+.owner-metrics button strong { font-size: 19px; line-height: 1.1; }
 .owner-today__status { overflow: hidden; border: 1px solid var(--ops-border); border-radius: 11px; background: var(--ops-card); }
-.owner-today__status article {
+.owner-today__status button {
   min-height: 58px;
   display: flex;
   align-items: center;
@@ -1949,24 +1965,24 @@ img {
   padding: 8px 10px;
   transition: background-color 0.2s ease, transform 0.15s ease;
 }
-.owner-today__status article:hover {
+.owner-today__status button:hover {
   background: rgba(255, 255, 255, 0.03);
 }
-.owner-today__status article:active {
+.owner-today__status button:active {
   transform: scale(0.99);
 }
-.owner-today__status article:last-child { border-bottom: 0; }
-.owner-today__status article > span { width: 8px; height: 32px; border-radius: 999px; background: var(--ops-new); }
-.owner-today__status article > span.is-preparing { background: var(--ops-preparing); }
-.owner-today__status article > span.is-ready { background: var(--ops-ready); }
-.owner-today__status article > div { display: grid; }
+.owner-today__status button:last-child { border-bottom: 0; }
+.owner-today__status button > span { width: 8px; height: 32px; border-radius: 999px; background: var(--ops-new); }
+.owner-today__status button > span.is-preparing { background: var(--ops-preparing); }
+.owner-today__status button > span.is-ready { background: var(--ops-ready); }
+.owner-today__status button > div { display: grid; }
 .owner-today__status strong { font-size: 14px; }
 .owner-today__status small { color: var(--ops-muted); font-size: 10px; }
 
 @media (min-width: 768px) {
   .owner-desktop-rail { position: fixed; inset: 0 auto 0 0; z-index: 40; display: block; width: 66px; }
   .owner-main { margin-left: 66px; width: calc(100% - 66px); }
-  .owner-mobile-menu { display: none; }
+  .owner-bottom-nav { display: none; }
   .owner-rail__brand { justify-content: center; }
   .owner-rail__brand > div, .owner-rail nav span, .owner-rail__logout span { display: none; }
   .owner-rail nav button, .owner-rail__logout { justify-content: center; padding: 0; }
@@ -2322,3 +2338,39 @@ img {
   font-weight: 800;
   line-height: 1.3;
 }
+.order-item-options { display: block; font-size: 13px; font-weight: 500; line-height: 1.5; margin-top: 4px; color: inherit; white-space: normal; overflow-wrap: anywhere; }
+.order-item-options > span { display: block; }
+.guest-active-order__items { flex-direction: column; overflow: visible; }
+.guest-active-order__items > span { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+.ops-order-card__item-row .order-item-options { font-weight: 500; font-size: 13px; }
+
+/* Daily owner and waiter workflows. */
+.owner-daily-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 16px; }
+.owner-daily-actions button, .staff-review-edit, .ops-empty-row button { min-height: 44px; padding: 10px 16px; border: 1px solid var(--ops-border); border-radius: 10px; font-weight: 700; }
+.owner-metrics button, .owner-today__status button { width: 100%; color: inherit; text-align: left; }
+.owner-metrics article { min-height: 78px; display: grid; grid-template-columns: 28px 1fr; align-items: center; border: 1px solid var(--ops-border); border-radius: 10px; background: var(--ops-card); padding: 9px; }
+.owner-metrics article svg { grid-row: 1 / 3; color: var(--primary); }
+.owner-metrics article span { color: var(--ops-muted); font-size: 10px; }
+.owner-metrics article strong { font-size: 19px; }
+.owner-today__status button { background: transparent; }
+.owner-menu-tools { width: 100%; }
+.owner-menu-tools summary { min-height: 44px; padding: 12px; cursor: pointer; font-weight: 650; border: 1px solid var(--ops-border); border-radius: 10px; }
+.owner-menu-tools__actions { display: flex; flex-wrap: wrap; gap: 8px; padding-top: 12px; }
+.owner-menu-tools label:focus-within { outline: 3px solid var(--primary); outline-offset: 2px; }
+.ops-workspace-identity { padding: 14px 16px 8px; display: grid; min-width: 0; }
+.ops-workspace-identity strong { font-size: 17px; overflow-wrap: anywhere; }
+.ops-workspace-identity span, .staff-step-heading > span, .staff-step-heading p { color: var(--ops-muted); font-size: 13px; }
+.staff-step-heading { margin: 12px 0 16px; }
+.staff-step-heading h2 { font-size: 22px; line-height: 1.3; font-weight: 750; margin: 4px 0; }
+.staff-location-tile strong, .staff-dish-row__main strong { overflow-wrap: anywhere; }
+.staff-order-flow { padding-bottom: calc(96px + env(safe-area-inset-bottom)); }
+.staff-cart-bar .staff-cart-review { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; background: transparent; color: inherit; text-align: left; padding: 6px; }
+.staff-cart-review span { display: grid; }
+.staff-cart-review b { font-size: 13px; }
+.staff-cart-review small { font-size: 12px; text-decoration: underline; }
+.staff-menu-step [aria-label="Selected order items"] { scroll-margin-block: 100px; }
+.staff-review-edit { margin-bottom: 16px; }
+.ops-tools-sheet h2 { font-size: 20px; font-weight: 750; }
+.ops-tools-sheet p { padding: 8px 0 16px; }
+.owner-today button:focus-visible, .owner-menu-tools summary:focus-visible, .staff-order-flow button:focus-visible, .ops-waiter-workspace button:focus-visible { outline: 3px solid var(--primary); outline-offset: 3px; }
+@media (min-width: 768px) { .owner-menu-tools { width: auto; min-width: 160px; } .owner-menu-tools__actions { max-width: 440px; } }

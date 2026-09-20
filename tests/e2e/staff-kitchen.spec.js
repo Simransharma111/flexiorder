@@ -3,6 +3,7 @@ import {
   fulfillJson,
   hotel,
   installSession,
+  installNativeBridge,
   kitchenOrder,
   mockGuestMenu,
   mockStaffWorkspace,
@@ -145,7 +146,7 @@ test("God Mode kitchen moves only the activated order directly to compact Ready"
 
   await page.goto("/kitchen");
   await expect(page.locator(".ops-order-card--new")).toHaveCount(2);
-  const first = page.getByRole("button", { name: /^Mark ready Table 8 order/ }).first();
+  const first = page.locator(".ops-order-card--new").filter({ hasText: "Order #1042" }).getByRole("button", { name: /^Mark ready Table 8 order/ });
   await first.focus();
   await page.keyboard.press("Enter");
   await expect(page.locator(".ops-order-card--ready")).toHaveCount(1);
@@ -212,6 +213,7 @@ test("God Mode queues direct Ready offline once and replays the same mutation id
   });
 
   await page.goto("/kitchen");
+  await expect(page.getByRole("button", { name: /^Mark ready Table 8 order/ })).toBeVisible();
   await context.setOffline(true);
   await page.getByRole("button", { name: /^Mark ready Table 8 order/ }).click();
   await expect(page.locator(".ops-order-card--ready")).toBeVisible();
@@ -908,4 +910,138 @@ test("customer visual and simple menus use one compact category chooser", async 
   await page.reload();
   await expect(page.getByRole("button", { name: /Category All/ })).toBeVisible();
   await expect(page.locator(".guest-menu-main-panel .menu-subcategory-trigger")).toHaveCount(1);
+});
+
+test("waiter draft survives tabs, review and cancelled discard; explicit discard clears it", async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 740 });
+  await installSession(page, "staff");
+  await mockStaffWorkspace(page);
+  await page.goto('/owner/order');
+  await expect(page.getByText('Flexi Test Kitchen', { exact: true })).toBeVisible();
+  await page.getByRole('tab', { name: 'Take Order' }).click();
+  await page.getByRole('button', { name: 'Table 8' }).click();
+  await page.getByRole('button', { name: 'Add Paneer Tikka' }).click();
+  await page.getByRole('button', { name: 'Review order, 1 item' }).click();
+  await expect(page.getByRole('region', { name: 'Selected order items' })).toBeFocused();
+  await page.getByRole('button', { name: 'Add more dishes' }).click();
+  await expect(page.getByRole('textbox', { name: 'Search dishes' })).toBeFocused();
+  await page.getByRole('tab', { name: 'Orders', exact: true }).click();
+  await page.getByRole('tab', { name: 'Take Order' }).click();
+  await expect(page.getByRole('button', { name: 'Review order, 1 item' })).toBeVisible();
+  await page.getByRole('button', { name: 'Back to tables' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Discard this order?' });
+  await expect(dialog.getByRole('button', { name: 'Keep editing' })).toBeFocused();
+  await page.keyboard.press('Shift+Tab');
+  await expect(dialog.getByRole('button', { name: 'Discard order' })).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(dialog).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Back to tables' })).toBeFocused();
+  await expect(page.getByRole('button', { name: 'Review order, 1 item' })).toBeVisible();
+  await page.getByRole('button', { name: 'Back to tables' }).click();
+  await dialog.getByRole('button', { name: 'Discard order' }).click();
+  await expect(page.getByRole('heading', { name: 'Choose a table or room' })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
+
+test("waiter options contain focus and restore it, with clear filtered location recovery", async ({ page }) => {
+  await installSession(page, 'staff');
+  await mockStaffWorkspace(page);
+  await page.goto('/owner/order');
+  const trigger = page.getByRole('button', { name: 'More waiter options' });
+  await trigger.click();
+  const dialog = page.getByRole('dialog', { name: 'Waiter options' });
+  await expect(dialog.getByRole('button', { name: 'Close waiter options' })).toBeFocused();
+  await page.keyboard.press('Shift+Tab');
+  expect(await dialog.evaluate(node => node.contains(document.activeElement))).toBe(true);
+  await page.keyboard.press('Escape');
+  await expect(trigger).toBeFocused();
+  await page.getByRole('tab', { name: 'Take Order' }).click();
+  await page.getByRole('textbox', { name: 'Search table or room' }).fill('missing');
+  await expect(page.getByText('No matching tables or rooms.')).toBeVisible();
+  await page.getByRole('button', { name: 'Clear location search' }).click();
+  await page.getByRole('button', { name: 'Table 8' }).click();
+  await page.getByRole('textbox', { name: 'Search dishes' }).fill('missing');
+  await expect(page.getByText('No dishes match these filters.')).toBeVisible();
+  await page.getByRole('button', { name: 'Clear dish filters' }).click();
+  await expect(page.getByRole('button', { name: 'Add Paneer Tikka' })).toBeVisible();
+});
+
+test("native Back closes waiter options before protecting an unsent order", async ({ page }) => {
+  await installNativeBridge(page);
+  await installSession(page, 'staff');
+  await mockStaffWorkspace(page);
+  await page.goto('/owner/order');
+  await page.getByRole('tab', { name: 'Take Order' }).click();
+  await page.getByRole('button', { name: 'Table 8' }).click();
+  await page.getByRole('button', { name: 'Add Paneer Tikka' }).click();
+  await page.getByRole('button', { name: 'More waiter options' }).click();
+  await page.evaluate(() => window.__emitNativeEvent('App', 'backButton'));
+  await expect(page.getByRole('dialog', { name: 'Waiter options' })).toHaveCount(0);
+  await expect(page.getByRole('dialog', { name: 'Discard this order?' })).toHaveCount(0);
+  await page.evaluate(() => window.__emitNativeEvent('App', 'backButton'));
+  await expect(page.getByRole('dialog', { name: 'Discard this order?' })).toBeVisible();
+  await page.evaluate(() => window.__emitNativeEvent('App', 'backButton'));
+  await expect(page.getByRole('dialog', { name: 'Discard this order?' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Review order, 1 item' })).toBeVisible();
+  expect(await page.evaluate(() => window.__nativeExitCount)).toBe(0);
+});
+
+test("failed waiter loading is not shown as an empty restaurant and retry recovers", async ({ page }) => {
+  await installSession(page, 'staff');
+  await mockStaffWorkspace(page);
+  let fail = true;
+  await page.route('**/hotel/me', route => fulfillJson(route, fail ? { message: 'Unavailable' } : hotel, fail ? 503 : 200));
+  await page.goto('/owner/order');
+  await expect(page.getByText('Could not load your restaurant. Check your connection and retry.')).toBeVisible();
+  await expect(page.getByText('No tables or rooms are set up yet.', { exact: false })).toHaveCount(0);
+  fail = false;
+  await page.getByRole('button', { name: 'Retry workspace' }).click();
+  await page.getByRole('tab', { name: 'Take Order' }).click();
+  await expect(page.getByRole('button', { name: 'Table 8' })).toBeVisible();
+});
+
+test("waiter can take orders when only the orders list fails", async ({ page }) => {
+  await installSession(page, 'staff');
+  await mockStaffWorkspace(page);
+  await page.route('**/kitchen/orders', route => fulfillJson(route, { message: 'Unavailable' }, 503));
+  await page.goto('/owner/order');
+  await expect(page.getByText('Could not refresh the workspace. Saved information may be out of date.')).toBeVisible();
+  await page.getByRole('tab', { name: 'Take Order' }).click();
+  await page.getByRole('button', { name: 'Table 8' }).click();
+  await expect(page.getByRole('button', { name: 'Add Paneer Tikka' })).toBeVisible();
+});
+
+test("native Back protects a retained draft from the Orders tab", async ({ page }) => {
+  await installNativeBridge(page);
+  await installSession(page, 'staff');
+  await mockStaffWorkspace(page);
+  await page.goto('/owner/order');
+  await page.getByRole('tab', { name: 'Take Order' }).click();
+  await page.getByRole('button', { name: 'Table 8' }).click();
+  await page.getByRole('button', { name: 'Add Paneer Tikka' }).click();
+  await page.getByRole('tab', { name: 'Orders', exact: true }).click();
+  await page.evaluate(() => window.__emitNativeEvent('App', 'backButton'));
+  const dialog = page.getByRole('dialog', { name: 'Discard this order?' });
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole('button', { name: 'Keep editing' }).click();
+  await expect(page.getByRole('button', { name: 'Review order, 1 item' })).toBeVisible();
+  await page.getByRole('button', { name: 'Back to tables' }).click();
+  await dialog.getByRole('button', { name: 'Discard order' }).click();
+  await expect(page.getByRole('heading', { name: 'Choose a table or room' })).toBeFocused();
+  expect(await page.evaluate(() => window.__nativeExitCount)).toBe(0);
+});
+
+test("cached dishes retain filter recovery after a failed refresh", async ({ page }) => {
+  await installSession(page, 'staff');
+  await mockStaffWorkspace(page);
+  await page.goto('/owner/order');
+  await page.getByRole('tab', { name: 'Take Order' }).click();
+  await page.getByRole('button', { name: 'Table 8' }).click();
+  await expect(page.getByRole('button', { name: 'Add Paneer Tikka' })).toBeVisible();
+  await page.route('**/menu/hotel-1', route => fulfillJson(route, { message: 'Unavailable' }, 503));
+  await page.getByRole('textbox', { name: 'Search dishes' }).fill('missing');
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await expect(page.getByRole('button', { name: 'Retry menu' })).toBeVisible({ timeout: 20000 });
+  await page.getByRole('button', { name: 'Clear dish filters' }).click();
+  await expect(page.getByRole('button', { name: 'Add Paneer Tikka' })).toBeVisible();
 });
