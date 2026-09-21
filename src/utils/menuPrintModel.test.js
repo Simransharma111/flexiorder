@@ -77,3 +77,24 @@ it("normalizes print typography and allows an optional poster cover", () => {
       .toMatchObject({ textStyle, textSize: "large", includeCover: true, layout: "poster" });
   }
 });
+
+
+it("keeps embedded category positions and the same subcategory sequence as the Flexi menu", () => {
+  const dishes = [
+    { _id: "dessert", name: "Cake", category: {name:"Desserts",displayOrder:3}, price:1, displayOrder:1 },
+    { _id: "hot-one", name: "Soup", category: {name:"Starters",displayOrder:1}, subCategory:"Hot", price:1, displayOrder:1 },
+    { _id: "cold", name: "Salad", category: {name:"Starters",displayOrder:1}, subCategory:"Cold", price:1, displayOrder:2 },
+    { _id: "hot-two", name: "Tikka", category: {name:"Starters",displayOrder:1}, subCategory:"Hot", price:1, displayOrder:3 },
+    { _id: "main", name: "Rice", category: {name:"Mains",displayOrder:2}, price:1 },
+  ];
+  const model = buildMenuPrintModel({ dishes });
+  expect(model.sections.map(s => s.name)).toEqual(["Starters", "Mains", "Desserts"]);
+  expect(model.sections.flatMap(s => s.dishes.map(d => d.id))).toEqual(["hot-one", "hot-two", "cold", "main", "dessert"]);
+  const selected = buildMenuPrintModel({ dishes, selectedDishIds:new Set(["hot-two","cold","dessert"]) });
+  expect(selected.sections.flatMap(s => s.dishes.map(d => d.id))).toEqual(["hot-two","cold","dessert"]);
+});
+
+it("uses the same alphabetical tie-break as the live menu when category positions tie", () => {
+ const model=buildMenuPrintModel({categories:[{name:"Z",displayOrder:1},{name:"A",displayOrder:1}],dishes:[{_id:"z",name:"Z",category:"Z",price:1},{_id:"a",name:"A",category:"A",price:1}]});
+ expect(model.sections.map(s=>s.name)).toEqual(["A","Z"]);
+});

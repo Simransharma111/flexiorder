@@ -1,5 +1,5 @@
-import { categoryKey, dishCategoryName } from "./menuCategories";
-import { sortDishesForDisplay } from "./menuOrdering";
+import { buildCategoryList, categoryKey, dishCategoryName } from "./menuCategories";
+import { groupMenuSections } from "./menuOrdering";
 import { isSimpleMenu } from "./menuPresentation";
 import { getDishPricing } from "./pricing";
 
@@ -68,17 +68,6 @@ const buildCombo = (dish, warnings) => {
   return included.length || choices.length ? { included, choices } : null;
 };
 
-const orderedCategories = (categories = []) => [...categories]
-  .map((category, index) => ({ category, index }))
-  .sort((left, right) => {
-    const leftOrder = Number(left.category?.displayOrder);
-    const rightOrder = Number(right.category?.displayOrder);
-    const leftRank = Number.isFinite(leftOrder) && leftOrder > 0 ? leftOrder : Infinity;
-    const rightRank = Number.isFinite(rightOrder) && rightOrder > 0 ? rightOrder : Infinity;
-    return leftRank - rightRank || left.index - right.index;
-  })
-  .map(({ category }) => categoryKey(category));
-
 const validatedQrUrl = (value) => {
   const source = cleanText(value);
   if (!source) return "";
@@ -117,10 +106,12 @@ export const buildMenuPrintModel = ({
   const warnings = [];
   const allowedDishes = selectedDishIds instanceof Set ? selectedDishIds : null;
   const allowedCategories = selectedCategoryKeys instanceof Set ? selectedCategoryKeys : null;
-  const categoryOrder = orderedCategories(categories);
+  const displayCategories = buildCategoryList(dishes, categories);
+  const categoryOrder = displayCategories.map(categoryKey);
   const byCategory = new Map();
 
-  sortDishesForDisplay(dishes).forEach((dish) => {
+  // Match the guest menu, including embedded category positions and subcategory grouping.
+  groupMenuSections(dishes, displayCategories).flatMap(section => section.dishes).forEach((dish) => {
     const id = menuPrintDishId(dish);
     const category = dishCategoryName(dish) || "Uncategorized";
     const key = categoryKey(category);

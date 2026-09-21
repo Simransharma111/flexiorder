@@ -113,3 +113,21 @@ test("typography changes clear the old preview and poster cover pages navigate c
   await expect(page.getByLabel("Text style", { exact: true })).toHaveValue("classic");
   await expect(page.getByLabel("Text size", { exact: true })).toHaveValue("large");
 });
+
+test("PDF follows saved category positions and keeps subcategory dishes together", async ({page}) => {
+  const starters={_id:"aaaaaaaaaaaaaaaaaaaaaaaa",name:"Starters",displayOrder:1};
+  const desserts={_id:"bbbbbbbbbbbbbbbbbbbbbbbb",name:"Desserts",displayOrder:2};
+  await page.route("**/menu/categories/hotel-1",route=>fulfillJson(route,[desserts,starters]));
+  await page.route("**/menu/hotel-1",route=>fulfillJson(route,[
+    {_id:"cake",name:"Cake",category:desserts,price:100,isAvailable:true,displayOrder:1},
+    {_id:"soup",name:"Hot Soup",category:starters,subCategory:"Hot",price:120,isAvailable:true,displayOrder:1},
+    {_id:"salad",name:"Cold Salad",category:starters,subCategory:"Cold",price:90,isAvailable:true,displayOrder:2},
+    {_id:"tikka",name:"Hot Tikka",category:starters,subCategory:"Hot",price:150,isAvailable:true,displayOrder:3},
+  ]));
+  await page.goto("/owner/dashboard");
+  await page.getByRole("button",{name:"Menu",exact:true}).click();
+  await page.locator(".owner-menu-tools summary").click();
+  await page.getByRole("button",{name:"Create menu PDF"}).click();
+  await page.getByRole("button",{name:"Generate preview"}).click();
+  await expect(page.locator(".menu-pdf-dialog__accessibility")).toHaveText(/Starters: Hot Soup.*Hot Tikka.*Cold Salad.*Desserts: Cake/,{timeout:20000});
+});
