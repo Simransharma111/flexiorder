@@ -185,6 +185,8 @@ export const buildMenuPrintModel = ({
         ? (settings.format === "A5" ? "A5" : "A4")
         : (settings.format === "A3" ? "A3" : "A4"),
       includeCover: Boolean(settings.includeCover),
+      textStyle: ["modern", "classic", "bold"].includes(settings.textStyle) ? settings.textStyle : "modern",
+      textSize: settings.textSize === "large" ? "large" : "standard",
       includeLogo: settings.includeLogo !== false,
       includePhotos: settings.includePhotos ?? !isSimpleMenu(restaurant),
       includeDescriptions: settings.includeDescriptions !== false,

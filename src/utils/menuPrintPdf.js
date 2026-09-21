@@ -1,11 +1,9 @@
 import { jsPDF } from "jspdf";
+import brandLogo from "../assets/logo.png";
 
 const MM_TO_PX = 5; // 127 dpi keeps A3 previews useful without huge memory pressure.
 const FORMAT_MM = { A3: [297, 420], A4: [210, 297], A5: [148, 210] };
-const MARGIN = 62;
-const HEADER_BOTTOM = 160;
-const HERO_BOTTOM = 370;
-const FOOTER_HEIGHT = 98;
+
 const aborted = () => new DOMException("PDF creation cancelled", "AbortError");
 const checkpoint = (signal) => { if (signal?.aborted) throw aborted(); };
 const yieldWork = () => new Promise((resolve) => setTimeout(resolve, 0));
@@ -38,12 +36,6 @@ const wrap = (context, text, maxWidth) => {
   });
   if (line) lines.push(line);
   return lines;
-};
-
-const drawLines = (ctx, text, x, y, width, lineHeight, maxLines = Infinity) => {
-  const lines = wrap(ctx, text, width).slice(0, maxLines);
-  lines.forEach((line, index) => ctx.fillText(line, x, y + index * lineHeight));
-  return lines.length * lineHeight;
 };
 
 const makeCanvas = ({ width, height }) => {
@@ -114,7 +106,8 @@ const loadImage = (url, signal) => new Promise((resolve) => {
 
 const preloadImages = async (model, signal, onProgress) => {
   const requestedUrls = [...new Set([
-    ...(model.settings.includeLogo ? [model.restaurant.banner] : []),
+    brandLogo,
+    model.restaurant.banner,
     ...(model.settings.includeLogo ? [model.restaurant.logo] : []),
     ...(model.settings.includePhotos
       ? model.sections.flatMap((section) => section.dishes.map((dish) => dish.image))
@@ -144,7 +137,7 @@ const preloadImages = async (model, signal, onProgress) => {
     }
   };
   await Promise.all(Array.from({ length: Math.min(3, urls.length) }, worker));
-  return { images, failed: [...skipped, ...urls.filter((url) => !images.has(url))] };
+  return { images, failed: [...skipped, ...urls.filter((url) => url !== brandLogo && !images.has(url))] };
 };
 
 const fallbackPaginate = (model) => {
@@ -184,301 +177,284 @@ const fallbackPaginate = (model) => {
   return pages.length ? pages : [];
 };
 
-const measureEntry = (ctx, entry, model, priorSection, priorSubcategory, width) => {
-  const { section, dish } = entry;
-  const scale = model.settings.layout === "poster" ? 1.22 : 1;
-  let height = 0;
-  if (priorSection !== section.key) height += 58 * scale;
-  if (dish.subcategory && priorSubcategory !== dish.subcategory) height += 23 * scale;
-  const hasImage = model.settings.includePhotos && dish.image;
-  const imageWidth = hasImage ? 125 * scale : 0;
-  const priceWidth = dish.isPrintNote ? 0 : (dish.hasDiscount ? 220 : 125) * scale;
-  ctx.font = `700 ${18 * scale}px system-ui, sans-serif`;
-  let contentHeight = wrap(ctx, dish.name, width - imageWidth - priceWidth).length * 23 * scale + 1;
-  if (model.settings.includeDietary && dish.dietary) contentHeight += 19 * scale;
-  if (model.settings.includeDescriptions && dish.description) {
-    ctx.font = `${14 * scale}px system-ui, sans-serif`;
-    contentHeight += wrap(ctx, dish.description, width - imageWidth).length * 18 * scale;
+const continuedDish = (dish, changes) => ({ ...dish, ...changes, name: `${dish.name} (continued)`, image: "" });
+const printableSections = (model) => model.settings.notes ? [...model.sections, {
+  key: "__print-note__", name: "Please note", dishes: [{ id: "__print-note__", name: model.settings.notes,
+    description: "", image: "", dietary: "", priceLabel: "", combo: null, subcategory: "", isPrintNote: true }],
+}] : model.sections;
+
+const design = (model, metrics) => {
+  const scale = (model.settings.layout === "poster" ? 1.12 : 1) * (metrics.width > 1100 ? 1.24 : 1);
+  const large = model.settings.textSize === "large" ? 1.18 : 1;
+  const family = model.settings.textStyle === "classic" ? 'Georgia, "Times New Roman", serif' : 'system-ui, sans-serif';
+  const size = 27 * scale * large;
+  return { margin: metrics.width * .055, footer: 98, hero: metrics.height * .30, compact: 160,
+    size, line: size * 1.3, small: size * .72, family,
+    font: (factor = 1, weight = 600) => `${model.settings.textStyle === "bold" ? Math.max(weight, 700) : weight} ${size * factor}px ${family}` };
+};
+
+// Header and cover share bounded, top-aligned text boxes. Any metadata that
+// cannot fit at readable size becomes ordinary paginated content, never lost.
+export const measureMenuBranding = (ctx, model, metrics, images = new Map(), mode = "hero") => {
+  const d = design(model, metrics);
+  const cover = mode === "cover"; const hero = mode === "hero";
+  const logo = model.settings.includeLogo && images.get(model.restaurant.logo);
+  const logoSize = cover ? metrics.width * .25 : hero ? Math.min(180, metrics.width * .18) : 92;
+  const x = d.margin + (!cover && logo ? logoDimensions(logo, logoSize).width + 28 : 0);
+  const width = metrics.width - x - d.margin;
+  const top = cover ? metrics.height * .52 : hero ? 38 : 24;
+  const bottom = cover ? metrics.height - 125 : (hero ? d.hero : d.compact) - 23;
+  const contact = model.settings.includeContact
+    ? [model.restaurant.address, model.restaurant.phone, model.restaurant.email, model.restaurant.website].filter(Boolean).join(" · ") : "";
+  const metadata = cover ? [model.restaurant.tagline, contact].filter(Boolean).join(" · ") : hero ? contact : "";
+  const metadataSize = d.size * (cover ? .7 : .58);
+  const metadataLine = metadataSize * 1.3;
+  ctx.font = `500 ${metadataSize}px ${d.family}`;
+  const metadataLines = wrap(ctx, metadata, metrics.width - d.margin * 2);
+  const metadataReserve = Math.min(metadataLines.length, cover ? 4 : 3) * metadataLine;
+  const menuSize = d.size * (cover ? 1.1 : .66);
+  const menuHeight = menuSize * 1.3;
+  const titleBudget = Math.max(35, bottom - top - menuHeight - 34 - metadataReserve);
+  let size = cover ? metrics.width * .068 : d.size * (hero ? 1.7 : 1.08);
+  ctx.font = `800 ${size}px ${d.family}`;
+  let titleLines = wrap(ctx, model.restaurant.name, width);
+  const minimum = Math.min(size, 23);
+  while (titleLines.length * size * 1.16 > titleBudget && size > minimum) {
+    size = Math.max(minimum, size - 1); ctx.font = `800 ${size}px ${d.family}`;
+    titleLines = wrap(ctx, model.restaurant.name, width);
   }
+  const titleLimit = Math.max(1, Math.floor(titleBudget / (size * 1.16)));
+  const titleOverflow = titleLines.length > titleLimit;
+  titleLines = titleLines.slice(0, titleLimit);
+  if (titleOverflow) {
+    const last = titleLines.length - 1;
+    while (ctx.measureText(`${titleLines[last]}…`).width > width && titleLines[last]) titleLines[last] = titleLines[last].slice(0, -1);
+    titleLines[last] += "…";
+  }
+  const title = { lines: titleLines, x, y: top, font: ctx.font, line: size * 1.16 };
+  const menuY = top + titleLines.length * title.line + 14;
+  const metadataY = Math.max(menuY + menuHeight + 16, !cover && logo ? (hero ? 42 : 25) + logoSize + 16 : 0);
+  const metadataFits = metadataY + metadataLines.length * metadataLine <= bottom;
+  return { logo, logoSize, title, menu: { x, y: menuY, font: d.font(cover ? 1.1 : .66, 650) },
+    metadata: { lines: metadataFits ? metadataLines : [], x: d.margin, y: metadataY, font: `500 ${metadataSize}px ${d.family}`, line: metadataLine },
+    overflow: { name: titleOverflow ? model.restaurant.name : "", contact: !metadataFits && metadata ? contact : "", tagline: cover && !metadataFits ? model.restaurant.tagline : "" } };
+};
+
+const drawBrandText = (ctx, layout) => {
+  ctx.textBaseline = "top";
+  ctx.fillStyle = "#fffdf8"; ctx.font = layout.title.font;
+  layout.title.lines.forEach((line, i) => ctx.fillText(line, layout.title.x, layout.title.y + i * layout.title.line));
+  ctx.font = layout.menu.font; ctx.fillStyle = "#ffce99"; ctx.fillText("M E N U", layout.menu.x, layout.menu.y);
+  ctx.font = layout.metadata.font; ctx.fillStyle = "#fffdf8";
+  layout.metadata.lines.forEach((line, i) => ctx.fillText(line, layout.metadata.x, layout.metadata.y + i * layout.metadata.line));
+  ctx.textBaseline = "alphabetic";
+};
+
+// One measured representation drives both pagination and painting. A row can be
+// fragmented at any text line, including names, prices and single combo options.
+const rowGeometry = (ctx, dish, model, width, d, images) => {
+  const photo = model.settings.includePhotos && dish.image && (!images || images.has(dish.image));
+  const imageWidth = photo ? d.size * 4.7 : 0;
+  const padding = d.size * .55;
+  const inner = width - padding * 2;
+  const priceWidth = dish.isPrintNote ? 0 : inner * .29;
+  const nameWidth = inner - imageWidth - priceWidth - (priceWidth ? padding : 0);
+  const lines = (text, maxWidth, factor = 1, weight = 600, color = "#252521") => {
+    ctx.font = d.font(factor, weight);
+    return wrap(ctx, text, maxWidth).map((text) => ({ text, font: ctx.font, color, height: d.line * factor }));
+  };
+  const names = lines(dish.name, nameWidth, 1, 750);
+  const priceParts = dish.priceLabel.split(" · was ");
+  const prices = dish.isPrintNote ? [] : [
+    ...lines(priceParts[0], priceWidth, 1, 800, "#873810"),
+    ...(priceParts[1] ? lines(`was ${priceParts[1]}`, priceWidth, .7, 500, "#655b52") : []),
+  ];
+  const bands = Array.from({ length: Math.max(names.length, prices.length) }, (_, index) => ({
+    left: names[index], right: prices[index], height: Math.max(names[index]?.height || 0, prices[index]?.height || 0),
+  }));
+  const append = (text, color = "#58554d", weight = 450) => bands.push(...lines(text, inner - imageWidth, .72, weight, color)
+    .map((left) => ({ left, height: left.height })));
+  if (model.settings.includeDietary && dish.dietary) append(dish.dietary, dish.dietary === "Veg" ? "#24693d" : "#993c2b", 650);
+  if (model.settings.includeDescriptions && dish.description) append(dish.description);
   if (dish.combo) {
-    ctx.font = `600 ${13 * scale}px system-ui, sans-serif`;
-    if (dish.combo.included.length) contentHeight += wrap(ctx, `Included: ${dish.combo.included.join(", ")}`, width - imageWidth).length * 17 * scale;
-    dish.combo.choices.forEach((choice) => {
-      contentHeight += wrap(ctx, `${choice.name} — ${choice.instruction}: ${choice.items.join(", ") || "not set"}`, width - imageWidth).length * 17 * scale;
-    });
+    if (dish.combo.included.length) append(`Included: ${dish.combo.included.join(", ")}`);
+    dish.combo.choices.forEach((choice) => append(`${choice.name} — ${choice.instruction}: ${choice.items.join(", ") || "not set"}`));
   }
-  return height + Math.max(contentHeight + 24 * scale, hasImage ? 96 * scale : 45 * scale);
+  return { bands, padding, imageWidth, priceWidth, minHeight: photo ? d.size * 3.7 : 0 };
 };
 
-const continuedDish = (dish, changes) => ({
-  ...dish,
-  ...changes,
-  name: `${dish.name.replace(/ \(continued\)$/i, "")} (continued)`,
-  image: "",
-});
-
-const printableSections = (model) => model.settings.notes ? [
-  ...model.sections,
-  {
-    key: "__print-note__",
-    name: "Please note",
-    dishes: [{
-      id: "__print-note__",
-      name: model.settings.notes,
-      description: "",
-      image: "",
-      dietary: "",
-      priceLabel: "",
-      combo: null,
-      subcategory: "",
-      isPrintNote: true,
-    }],
-  },
-] : model.sections;
-
-const splitOversizedDish = (ctx, section, dish, model, width, maximumHeight, depth = 0) => {
-  const entry = { section, dish };
-  if (depth >= 12 || measureEntry(ctx, entry, model, null, null, width) <= maximumHeight) return [dish];
-  if (dish.isPrintNote && dish.name.length > 1) {
-    const midpoint = Math.floor(dish.name.length / 2);
-    const boundary = dish.name.lastIndexOf(" ", midpoint);
-    const splitAt = boundary > 0 ? boundary : midpoint;
-    return [
-      ...splitOversizedDish(ctx, section, { ...dish, name: dish.name.slice(0, splitAt).trim() }, model, width, maximumHeight, depth + 1),
-      ...splitOversizedDish(ctx, section, { ...dish, name: dish.name.slice(splitAt).trim() }, model, width, maximumHeight, depth + 1),
-    ];
-  }
-  if (dish.description?.length > 1) {
-    const midpoint = Math.floor(dish.description.length / 2);
-    const boundary = dish.description.lastIndexOf(" ", midpoint);
-    const splitAt = boundary > 0 ? boundary : midpoint;
-    const first = { ...dish, description: dish.description.slice(0, splitAt).trim(), combo: null };
-    const second = continuedDish(dish, { description: dish.description.slice(splitAt).trim() });
-    return [
-      ...splitOversizedDish(ctx, section, first, model, width, maximumHeight, depth + 1),
-      ...splitOversizedDish(ctx, section, second, model, width, maximumHeight, depth + 1),
-    ];
-  }
-  const included = dish.combo?.included || [];
-  const choices = dish.combo?.choices || [];
-  if (choices.length > 1) {
-    const midpoint = Math.ceil(choices.length / 2);
-    const first = { ...dish, combo: { included, choices: choices.slice(0, midpoint) } };
-    const second = continuedDish(dish, { combo: { included: [], choices: choices.slice(midpoint) } });
-    return [
-      ...splitOversizedDish(ctx, section, first, model, width, maximumHeight, depth + 1),
-      ...splitOversizedDish(ctx, section, second, model, width, maximumHeight, depth + 1),
-    ];
-  }
-  if (included.length > 1) {
-    const midpoint = Math.ceil(included.length / 2);
-    const first = { ...dish, combo: { included: included.slice(0, midpoint), choices: [] } };
-    const second = continuedDish(dish, { combo: { included: included.slice(midpoint), choices } });
-    return [
-      ...splitOversizedDish(ctx, section, first, model, width, maximumHeight, depth + 1),
-      ...splitOversizedDish(ctx, section, second, model, width, maximumHeight, depth + 1),
-    ];
-  }
-  const optionItems = choices[0]?.items || [];
-  if (optionItems.length > 1) {
-    const midpoint = Math.ceil(optionItems.length / 2);
-    const firstChoice = { ...choices[0], items: optionItems.slice(0, midpoint) };
-    const secondChoice = { ...choices[0], items: optionItems.slice(midpoint) };
-    return [
-      ...splitOversizedDish(ctx, section, { ...dish, combo: { included, choices: [firstChoice] } }, model, width, maximumHeight, depth + 1),
-      ...splitOversizedDish(ctx, section, continuedDish(dish, { combo: { included: [], choices: [secondChoice] } }), model, width, maximumHeight, depth + 1),
-    ];
-  }
-  return [dish];
-};
-
-/** Packs the actual printable text heights, rather than an item-count guess. */
-export const paginateMenuPrintModel = (model, metrics = pageMetrics(model.settings)) => {
-  const printableModel = { ...model, sections: printableSections(model) };
-  if (typeof document === "undefined") return fallbackPaginate(printableModel);
-  const canvas = makeCanvas({ width: 1, height: 1 });
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return fallbackPaginate(model);
-  const width = metrics.width - MARGIN * 2;
-  const bodyEnd = metrics.height - FOOTER_HEIGHT;
+export const paginateMenuPrintModel = (model, metrics = pageMetrics(model.settings), images) => {
+  if (metrics.width < 500 || metrics.height < 800) throw new Error("Page is too small for a readable menu.");
+  let sections = printableSections(model);
+  if (typeof document === "undefined") return fallbackPaginate({ ...model, sections });
+  const ctx = makeCanvas({ width: 1, height: 1 }).getContext("2d");
+  if (!ctx) return fallbackPaginate({ ...model, sections });
+  const branding = [measureMenuBranding(ctx, model, metrics, images), measureMenuBranding(ctx, model, metrics, images, "compact")];
+  if (model.settings.includeCover) branding.push(measureMenuBranding(ctx, model, metrics, images, "cover"));
+  const overflow = Object.fromEntries(["name", "contact", "tagline"].map((key) => [key, branding.find((entry) => entry.overflow[key])?.overflow[key] || ""]));
+  const metadata = [overflow.name, overflow.tagline, overflow.contact].filter(Boolean).join(" · ");
+  if (metadata) sections = [...sections, { key: "__restaurant-details__", name: "Restaurant details", dishes: [{ id: "__restaurant-details__", name: metadata,
+    description: "", image: "", dietary: "", priceLabel: "", combo: null, subcategory: "", isPrintNote: true }] }];
+  const d = design(model, metrics);
+  const width = metrics.width - d.margin * 2;
+  const end = metrics.height - d.footer - 14;
   const pages = [];
   let page = [];
-  let y = HERO_BOTTOM;
-  let priorSection = null;
-  let priorSubcategory = null;
-
-  const maximumEntryHeight = bodyEnd - HEADER_BOTTOM - 60;
-  printableModel.sections.forEach((section) => {
-    const printableDishes = section.dishes.flatMap((dish) =>
-      splitOversizedDish(ctx, section, dish, printableModel, width, maximumEntryHeight));
-    printableDishes.forEach((dish, dishIndex) => {
-      const entry = { section, dish, showHeading: dishIndex === 0 || !page.some((item) => item.section.key === section.key) };
-      let height = measureEntry(ctx, entry, printableModel, priorSection, priorSubcategory, width);
-      if (page.length && y + height > bodyEnd) {
-        pages.push(page);
-        page = [];
-        y = HEADER_BOTTOM;
-        priorSection = null;
-        priorSubcategory = null;
-        height = measureEntry(ctx, entry, printableModel, priorSection, priorSubcategory, width);
+  let y = d.hero + 22;
+  let priorSection;
+  let priorSubcategory;
+  const nextPage = () => { if (page.length) pages.push(page); page = []; y = d.compact + 22; priorSection = null; priorSubcategory = null; };
+  const headingLines = (text, kind) => {
+    const font = d.font(kind === "section" ? 1.05 : .72, 750);
+    ctx.font = font;
+    const height = d.line * (kind === "section" ? 1.05 : .72) + 16;
+    return wrap(ctx, text, width - 28).map((text) => ({ kind, text, height, font }));
+  };
+  const appendHeading = (line) => { page.push({ ...line, y }); y += line.height; };
+  sections.forEach((section) => section.dishes.forEach((dish) => {
+    const geometry = rowGeometry(ctx, dish, model, width, d, images);
+    const categoryLines = headingLines(section.name, "section");
+    const subcategoryLines = dish.subcategory ? headingLines(dish.subcategory, "subcategory") : [];
+    const allHeadings = [...categoryLines, ...subcategoryLines];
+    const totalHeadingHeight = allHeadings.reduce((sum, line) => sum + line.height, 0);
+    const fullHeight = geometry.padding * 2 + Math.max(geometry.minHeight, geometry.bands.reduce((sum, band) => sum + band.height, 0));
+    const pendingHeadings = () => [...(priorSection !== section.key ? categoryLines : []),
+      ...(dish.subcategory && (priorSection !== section.key || priorSubcategory !== dish.subcategory) ? subcategoryLines : [])];
+    let cursor = 0;
+    while (cursor < geometry.bands.length) {
+      const continuation = cursor > 0;
+      const continuationHeight = continuation ? d.line * .72 : 0;
+      const needed = continuationHeight + geometry.padding * 2 + Math.max(geometry.minHeight, geometry.bands[cursor].height);
+      let headings = pendingHeadings();
+      let headingHeight = headings.reduce((sum, line) => sum + line.height, 0);
+      const rowReserve = !continuation && fullHeight + totalHeadingHeight <= end - d.compact - 22 ? fullHeight : needed;
+      if (page.length && y + headingHeight + rowReserve > end) {
+        nextPage(); headings = pendingHeadings(); headingHeight = totalHeadingHeight;
       }
-      page.push(entry);
-      y += height;
-      priorSection = section.key;
-      priorSubcategory = dish.subcategory || null;
-    });
-  });
+      if (y + headingHeight + needed <= end) {
+        headings.forEach(appendHeading);
+      } else {
+        // Exceptional multi-page headings retain every line. On the final row
+        // page restore concise category/subcategory context without repeating
+        // the entire oversized heading and risking a pagination loop.
+        headings.forEach((line) => {
+          if (y + line.height > end) nextPage();
+          appendHeading(line);
+        });
+        const context = [categoryLines[0], subcategoryLines[0]].filter(Boolean);
+        const contextHeight = context.reduce((sum, line) => sum + line.height, 0);
+        if (y + needed + contextHeight > end) nextPage();
+        if (!page.some((entry) => entry.kind === "section")) appendHeading(context[0]);
+        if (subcategoryLines.length && !page.some((entry) => entry.kind === "subcategory")) appendHeading(context[1]);
+      }
+      priorSection = section.key; priorSubcategory = dish.subcategory || null;
+      let height = geometry.padding * 2 + continuationHeight;
+      const bands = [];
+      while (cursor < geometry.bands.length && y + Math.max(height + geometry.bands[cursor].height, geometry.minHeight + geometry.padding * 2) <= end) {
+        bands.push(geometry.bands[cursor++]); height += bands[bands.length - 1].height;
+      }
+      if (!bands.length) throw new Error("Menu content cannot fit this paper size. Choose a larger paper size.");
+      height = Math.max(height, geometry.minHeight + geometry.padding * 2);
+      page.push({ section, dish, geometry: { ...geometry, bands }, y, height, continuation });
+      y += height + 12;
+      if (cursor < geometry.bands.length) nextPage();
+    }
+  }));
   if (page.length) pages.push(page);
   return pages;
 };
 
-const initials = (name) => String(name || "Menu").split(/\s+/).filter(Boolean).slice(0, 2)
-  .map((part) => part[0]).join("").toUpperCase();
+const logoDimensions = (logo, size) => ({ width: logo && logo.naturalWidth / logo.naturalHeight > 1.5 ? size * 1.65 : size, height: size });
+const drawLogo = (ctx, logo, x, y, size) => {
+  const { width, height } = logoDimensions(logo, size);
+  ctx.fillStyle = "#fffdf8"; ctx.beginPath(); ctx.roundRect(x, y, width, height, size * .10); ctx.fill();
+  if (!logo) return;
+  const ratio = Math.min(width * .88 / logo.naturalWidth, height * .88 / logo.naturalHeight);
+  const w = logo.naturalWidth * ratio; const h = logo.naturalHeight * ratio;
+  ctx.drawImage(logo, x + (width - w) / 2, y + (height - h) / 2, w, h);
+};
 
-const drawHeader = ({ ctx, model, metrics, pageNumber, images, hero }) => {
-  const headerHeight = hero ? HERO_BOTTOM - 34 : 112;
-  ctx.fillStyle = "#342923";
-  ctx.fillRect(0, 18, metrics.width, headerHeight);
+const drawFooter = (ctx, metrics, images, number) => {
+  const x = metrics.width * .055; const y = metrics.height - 85;
+  ctx.fillStyle = "#fffdf8"; ctx.fillRect(0, y - 8, metrics.width, 93);
+  ctx.strokeStyle = "#d6c7b7"; ctx.beginPath(); ctx.moveTo(x, y - 8); ctx.lineTo(metrics.width - x, y - 8); ctx.stroke();
+  const brand = images.get(brandLogo);
+  // The bundled square asset includes its own wordmark and whitespace. Use its
+  // cup emblem at a useful size, with a crisp canvas wordmark beside it.
+  if (brand) ctx.drawImage(brand, 85, 45, 535, 440, x, y + 6, 72, 59);
+  ctx.fillStyle = "#174d36"; ctx.font = "750 26px system-ui, sans-serif";
+  ctx.fillText("FlexiOrder", x + (brand ? 83 : 0), y + 43);
+  ctx.fillStyle = "#6a625b"; ctx.font = "500 18px system-ui, sans-serif";
+  ctx.textAlign = "right"; ctx.fillText(String(number), metrics.width - x, y + 42); ctx.textAlign = "left";
+};
+
+const drawHeader = (ctx, model, metrics, images, hero) => {
+  const d = design(model, metrics); const height = hero ? d.hero : d.compact;
+  ctx.fillStyle = "#233c32"; ctx.fillRect(0, 0, metrics.width, height);
   const banner = images.get(model.restaurant.banner);
-  if (banner) {
-    ctx.save();
-    ctx.globalAlpha = 0.5;
-    drawImageCover(ctx, banner, 0, 18, metrics.width, headerHeight);
-    ctx.restore();
-    const overlay = ctx.createLinearGradient(0, 0, metrics.width, 0);
-    overlay.addColorStop(0, "rgba(30, 20, 17, .88)");
-    overlay.addColorStop(0.62, "rgba(30, 20, 17, .48)");
-    overlay.addColorStop(1, "rgba(30, 20, 17, .76)");
-    ctx.fillStyle = overlay;
-    ctx.fillRect(0, 18, metrics.width, headerHeight);
+  if (banner && hero) {
+    drawImageCover(ctx, banner, 0, 0, metrics.width, height);
+    const gradient = ctx.createLinearGradient(0, 0, metrics.width, height);
+    gradient.addColorStop(0, "rgba(15,30,23,.84)"); gradient.addColorStop(1, "rgba(15,30,23,.30)");
+    ctx.fillStyle = gradient; ctx.fillRect(0, 0, metrics.width, height);
   }
-  ctx.fillStyle = "#e36a2e";
-  ctx.fillRect(0, 18 + headerHeight - 12, metrics.width, 12);
-  const logo = model.settings.includeLogo ? images.get(model.restaurant.logo) : null;
-  const logoSize = hero ? 122 : 88;
-  const logoY = hero ? 92 : 39;
-  if (logo) {
-    drawImageCover(ctx, logo, MARGIN, logoY, logoSize, hero ? 98 : 70, 12);
-  } else {
-    const radius = hero ? 49 : 35;
-    ctx.fillStyle = "#f6d4bd"; ctx.beginPath(); ctx.arc(MARGIN + radius, logoY + radius, radius, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = "#342923"; ctx.font = `700 ${hero ? 32 : 24}px system-ui, sans-serif`; ctx.textAlign = "center";
-    ctx.fillText(initials(model.restaurant.name), MARGIN + radius, logoY + radius + 8); ctx.textAlign = "left";
-  }
-  ctx.fillStyle = "#fffaf4";
-  ctx.font = `700 ${hero ? 48 : 31}px system-ui, sans-serif`;
-  const titleX = MARGIN + (hero ? 148 : 108);
-  const titleY = hero ? 147 : 68;
-  drawLines(ctx, model.restaurant.name, titleX, titleY, metrics.width - MARGIN - titleX, hero ? 53 : 35, 2);
-  ctx.font = `600 ${hero ? 18 : 14}px system-ui, sans-serif`;
-  ctx.fillStyle = "#f6d4bd";
-  ctx.fillText("MENU", titleX, hero ? 232 : 112);
-  if (hero && model.settings.includeContact) {
-    const contact = [model.restaurant.address, model.restaurant.phone, model.restaurant.email, model.restaurant.website]
-      .filter(Boolean).join("  ·  ");
-    if (contact) {
-      ctx.font = "15px system-ui, sans-serif";
-      ctx.fillStyle = "#fffaf4";
-      drawLines(ctx, contact, MARGIN, HERO_BOTTOM - 48, metrics.width - MARGIN * 2, 19, 2);
-    }
-  }
-  ctx.fillStyle = "#6b625c";
-  ctx.font = "18px system-ui, sans-serif";
-  ctx.textAlign = "right";
-  ctx.fillText(`Page ${pageNumber}`, metrics.width - MARGIN, metrics.height - 38);
-  ctx.textAlign = "left";
+  const layout = measureMenuBranding(ctx, model, metrics, images, hero ? "hero" : "compact");
+  if (layout.logo) drawLogo(ctx, layout.logo, d.margin, hero ? 42 : 25, layout.logoSize);
+  drawBrandText(ctx, layout);
+  ctx.fillStyle = "#de803d"; ctx.fillRect(0, height - 7, metrics.width, 7);
 };
 
 const drawDocumentPage = ({ entries, model, metrics, pageNumber, images, isFirstContentPage }) => {
-  const { canvas, ctx } = pageBase(metrics);
-  const margin = MARGIN;
-  const width = metrics.width - margin * 2;
-  const scale = model.settings.layout === "poster" ? 1.22 : 1;
-  let y = isFirstContentPage ? HERO_BOTTOM : HEADER_BOTTOM;
-  drawHeader({ ctx, model, metrics, pageNumber, images, hero: isFirstContentPage });
-  let priorSection = null;
-  let priorSubcategory = null;
-  entries.forEach(({ section, dish }) => {
-    if (priorSection !== section.key) {
-      ctx.fillStyle = "#f6d4bd";
-      ctx.beginPath(); ctx.roundRect(margin, y + 2, width, 34 * scale, 8); ctx.fill();
-      ctx.fillStyle = "#7c3219";
-      ctx.font = `700 ${22 * scale}px system-ui, sans-serif`;
-      y += 27 * scale;
-      ctx.fillText(section.name, margin + 14, y);
-      y += 31 * scale;
-      priorSection = section.key;
-      priorSubcategory = null;
+  const { canvas, ctx } = pageBase(metrics); const d = design(model, metrics);
+  const width = metrics.width - d.margin * 2;
+  drawHeader(ctx, model, metrics, images, isFirstContentPage);
+  entries.forEach((entry) => {
+    const { y, height } = entry;
+    if (entry.kind) {
+      ctx.fillStyle = entry.kind === "section" ? "#ecdcc8" : "#fffdf8";
+      ctx.beginPath(); ctx.roundRect(d.margin, y, width, height - 5, 7); ctx.fill();
+      ctx.font = entry.font; ctx.fillStyle = "#51402e"; ctx.textBaseline = "top";
+      ctx.fillText(entry.text, d.margin + 14, y + 5); ctx.textBaseline = "alphabetic";
+      return;
     }
-    if (dish.subcategory && priorSubcategory !== dish.subcategory) {
-      ctx.fillStyle = "#625a55";
-      ctx.font = `600 ${15 * scale}px system-ui, sans-serif`;
-      ctx.fillText(dish.subcategory, margin, y);
-      y += 23 * scale;
-      priorSubcategory = dish.subcategory;
+    const { dish, geometry } = entry;
+    ctx.fillStyle = "#f7f0e5"; ctx.beginPath(); ctx.roundRect(d.margin, y, width, height, 10); ctx.fill();
+    ctx.fillStyle = "#c77b3a"; ctx.fillRect(d.margin, y + 12, 3, height - 24);
+    const photo = images.get(dish.image);
+    if (photo && geometry.imageWidth) drawImageCover(ctx, photo, d.margin + geometry.padding, y + geometry.padding, geometry.imageWidth - 18, geometry.minHeight, 8);
+    let lineY = y + geometry.padding;
+    ctx.textBaseline = "top";
+    if (entry.continuation) {
+      ctx.font = d.font(.6, 650); ctx.fillStyle = "#756451";
+      const labels = wrap(ctx, `Continued · ${dish.name}`, width - geometry.padding * 2 - geometry.imageWidth - 20);
+      const label = labels[0] + (labels.length > 1 ? "…" : "");
+      ctx.fillText(label, d.margin + geometry.padding + geometry.imageWidth, lineY);
+      lineY += d.line * .72;
     }
-    const image = model.settings.includePhotos ? images.get(dish.image) : null;
-    const imageWidth = image ? 125 * scale : 0;
-  const priceWidth = dish.isPrintNote ? 0 : (dish.hasDiscount ? 220 : 125) * scale;
-    if (image) {
-      drawImageCover(ctx, image, margin, y - 20 * scale, 105 * scale, 85 * scale, 8);
-    }
-    const x = margin + imageWidth;
-    ctx.fillStyle = "#211c19";
-    ctx.font = `700 ${18 * scale}px system-ui, sans-serif`;
-    const nameHeight = drawLines(ctx, dish.name, x, y, width - imageWidth - priceWidth, 23 * scale);
-    if (!dish.isPrintNote) {
-      ctx.font = `700 ${17 * scale}px system-ui, sans-serif`;
-      ctx.textAlign = "right"; ctx.fillText(dish.priceLabel, margin + width, y); ctx.textAlign = "left";
-    }
-    let dishY = y + nameHeight + 1;
-    if (model.settings.includeDietary && dish.dietary) {
-      ctx.fillStyle = dish.dietary === "Veg" ? "#237b45" : "#a33b2d";
-      ctx.font = `600 ${13 * scale}px system-ui, sans-serif`;
-      ctx.fillText(dish.dietary, x, dishY); dishY += 19 * scale;
-    }
-    if (model.settings.includeDescriptions && dish.description) {
-      ctx.fillStyle = "#625a55"; ctx.font = `${14 * scale}px system-ui, sans-serif`;
-      dishY += drawLines(ctx, dish.description, x, dishY, width - imageWidth, 18 * scale);
-    }
-    if (dish.combo) {
-      ctx.fillStyle = "#4e4038"; ctx.font = `600 ${13 * scale}px system-ui, sans-serif`;
-      if (dish.combo.included.length) {
-        dishY += drawLines(ctx, `Included: ${dish.combo.included.join(", ")}`, x, dishY, width - imageWidth, 17 * scale);
-      }
-      dish.combo.choices.forEach((choice) => {
-        dishY += drawLines(ctx, `${choice.name} — ${choice.instruction}: ${choice.items.join(", ") || "not set"}`, x, dishY, width - imageWidth, 17 * scale);
-      });
-    }
-    y = Math.max(dishY + 24 * scale, y + (image ? 96 * scale : 45 * scale));
+    geometry.bands.forEach(({ left, right, height: lineHeight }) => {
+      if (left) { ctx.font = left.font; ctx.fillStyle = left.color; ctx.fillText(left.text, d.margin + geometry.padding + geometry.imageWidth, lineY); }
+      if (right) { ctx.font = right.font; ctx.fillStyle = right.color; ctx.textAlign = "right";
+        ctx.fillText(right.text, metrics.width - d.margin - geometry.padding, lineY); ctx.textAlign = "left"; }
+      lineY += lineHeight;
+    });
+    ctx.textBaseline = "alphabetic";
   });
-  const footer = [
-    `Snapshot: ${new Date(model.capturedAt).toLocaleString()}`,
-    model.settings.includeContact && [model.restaurant.address, model.restaurant.phone, model.restaurant.email, model.restaurant.website]
-      .filter(Boolean).join(" · "),
-    model.restaurant.qrUrl,
-  ].filter(Boolean).join("   |   ");
-  if (footer) {
-    ctx.fillStyle = "#625a55"; ctx.font = "12px system-ui, sans-serif";
-    drawLines(ctx, footer, margin, metrics.height - 63, width - 85, 15, 2);
-  }
+  drawFooter(ctx, metrics, images, pageNumber);
   return canvas.toDataURL("image/png");
 };
 
 const drawCover = (model, metrics, images) => {
-  const { canvas, ctx } = pageBase(metrics);
-  ctx.fillStyle = "#e36a2e"; ctx.fillRect(0, 18, metrics.width, metrics.height - 18);
-  const logo = model.settings.includeLogo ? images.get(model.restaurant.logo) : null;
-  if (logo) drawImageCover(ctx, logo, metrics.width / 2 - 80, metrics.height / 2 - 260, 160, 128, 18);
-  ctx.fillStyle = "#fffaf4"; ctx.textAlign = "center";
-  ctx.font = "700 46px system-ui, sans-serif";
-  drawLines(ctx, model.restaurant.name, metrics.width / 2, metrics.height / 2 - 30, 840, 58, 3);
-  ctx.font = "24px system-ui, sans-serif"; ctx.fillText("Menu", metrics.width / 2, metrics.height / 2 + 150);
-  if (model.restaurant.tagline) {
-    ctx.font = "18px system-ui, sans-serif";
-    drawLines(ctx, model.restaurant.tagline, metrics.width / 2, metrics.height / 2 + 205, 640, 24, 3);
-  }
-  ctx.textAlign = "left";
+  const { canvas, ctx } = pageBase(metrics); const d = design(model, metrics);
+  ctx.fillStyle = "#233c32"; ctx.fillRect(0, 0, metrics.width, metrics.height);
+  const banner = images.get(model.restaurant.banner);
+  if (banner) drawImageCover(ctx, banner, 0, 0, metrics.width, metrics.height);
+  const gradient = ctx.createLinearGradient(0, 0, 0, metrics.height);
+  gradient.addColorStop(0, "rgba(13,27,20,.15)"); gradient.addColorStop(.48, "rgba(13,27,20,.46)"); gradient.addColorStop(1, "rgba(13,27,20,.96)");
+  ctx.fillStyle = gradient; ctx.fillRect(0, 0, metrics.width, metrics.height);
+  const layout = measureMenuBranding(ctx, model, metrics, images, "cover");
+  if (layout.logo) drawLogo(ctx, layout.logo, d.margin, metrics.height * .14, layout.logoSize);
+  drawBrandText(ctx, layout);
+  drawFooter(ctx, metrics, images, 1);
   return canvas.toDataURL("image/png");
 };
 
@@ -489,9 +465,9 @@ export const createMenuPrintPdf = async (model, { signal, onProgress } = {}) => 
   const metrics = pageMetrics(model.settings);
   const assets = await preloadImages(model, signal, onProgress);
   checkpoint(signal);
-  const layout = paginateMenuPrintModel(model, metrics);
+  const layout = paginateMenuPrintModel(model, metrics, assets.images);
   const artwork = [];
-  if (model.settings.layout === "booklet" && model.settings.includeCover) artwork.push(drawCover(model, metrics, assets.images));
+  if (model.settings.includeCover) artwork.push(drawCover(model, metrics, assets.images));
   for (let index = 0; index < layout.length; index += 1) {
     checkpoint(signal);
     artwork.push(drawDocumentPage({ entries: layout[index], model, metrics, pageNumber: artwork.length + 1, images: assets.images, isFirstContentPage: index === 0 }));

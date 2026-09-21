@@ -67,3 +67,13 @@ describe("menu print model", () => {
     expect(model.sections[0].dishes[1].priceLabel).toBe("Price on request");
   });
 });
+
+
+it("normalizes print typography and allows an optional poster cover", () => {
+  expect(buildMenuPrintModel({ settings: { textStyle: "unknown", textSize: "tiny" } }).settings)
+    .toMatchObject({ textStyle: "modern", textSize: "standard", includeCover: false });
+  for (const textStyle of ["modern", "classic", "bold"]) {
+    expect(buildMenuPrintModel({ settings: { textStyle, textSize: "large", includeCover: true } }).settings)
+      .toMatchObject({ textStyle, textSize: "large", includeCover: true, layout: "poster" });
+  }
+});

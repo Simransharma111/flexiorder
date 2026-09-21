@@ -46,7 +46,7 @@ test("owner previews an A5 booklet cover and complete print-only note", async ({
   await page.getByRole("button", { name: "Create menu PDF" }).click();
   await page.getByLabel("Multipage booklet").check();
   await page.getByLabel("Paper size").selectOption("A5");
-  await page.getByLabel("Cover (booklet)").check();
+  await page.getByLabel("Full-image cover page").check();
   await page.getByLabel("Print-only note").fill("Please tell us about allergies before ordering.");
   await page.getByRole("button", { name: "Generate preview" }).click();
   await expect(page.getByText(/Preview ready|photo.*unavailable/i)).toBeVisible({ timeout: 20_000 });
@@ -77,4 +77,39 @@ test("Android owner saves the generated PDF through the native file helper", asy
   await page.evaluate(() => window.__emitNativeEvent("App", "backButton", { canGoBack: true }));
   await expect(page.getByRole("dialog", { name: "Create menu PDF" })).toHaveCount(0);
   await expect(page).toHaveURL(/\/owner\/dashboard$/);
+});
+
+
+test("typography changes clear the old preview and poster cover pages navigate correctly", async ({ page }) => {
+  await page.goto("/owner/dashboard");
+  await page.getByRole("button", { name: "Menu", exact: true }).click();
+  await page.locator(".owner-menu-tools summary").click();
+  await page.getByRole("button", { name: "Create menu PDF" }).click();
+  const preview = page.locator(".menu-pdf-dialog__preview img");
+  const generate = page.getByRole("button", { name: "Generate preview" });
+  await generate.click();
+  await expect(preview).toBeVisible({ timeout: 20_000 });
+  const originalArtwork = await preview.getAttribute("src");
+  await page.getByLabel("Text style", { exact: true }).selectOption("classic");
+  await expect(preview).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Download PDF" })).toHaveCount(0);
+  await generate.click();
+  await expect(preview).toBeVisible({ timeout: 20_000 });
+  expect(await preview.getAttribute("src")).not.toBe(originalArtwork);
+  await page.getByLabel("Text size", { exact: true }).selectOption("large");
+  await expect(preview).toHaveCount(0);
+  await page.getByLabel("Full-image cover page").check();
+  await expect(page.getByLabel("Poster", { exact: true })).toBeChecked();
+  await generate.click();
+  await expect(preview).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByText(/Page 1 of [2-9]/)).toBeVisible();
+  const coverArtwork = await preview.getAttribute("src");
+  await expect(page.getByRole("button", { name: "Previous PDF page" })).toBeDisabled();
+  await page.getByRole("button", { name: "Next PDF page" }).click();
+  await expect(page.getByText(/Page 2 of [2-9]/)).toBeVisible();
+  expect(await preview.getAttribute("src")).not.toBe(coverArtwork);
+  await page.getByRole("button", { name: "Previous PDF page" }).click();
+  await expect(preview).toHaveAttribute("src", coverArtwork);
+  await expect(page.getByLabel("Text style", { exact: true })).toHaveValue("classic");
+  await expect(page.getByLabel("Text size", { exact: true })).toHaveValue("large");
 });

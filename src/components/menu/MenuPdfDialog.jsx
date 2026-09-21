@@ -12,7 +12,7 @@ import "./MenuPdfDialog.css";
 const INITIAL_SETTINGS = {
   format: "A4", layout: "poster", includeCover: false, includeLogo: true,
   includePhotos: undefined, includeDescriptions: true, includeDietary: true,
-  includeContact: true, notes: "",
+  includeContact: true, notes: "", textStyle: "modern", textSize: "standard",
 };
 
 export default function MenuPdfDialog({ open, onClose, restaurant, dishes, categories, isOnline, pendingCount = 0 }) {
@@ -77,7 +77,7 @@ export default function MenuPdfDialog({ open, onClose, restaurant, dishes, categ
       const format = value === "booklet"
         ? (current.format === "A5" ? "A5" : "A4")
         : (current.format === "A3" ? "A3" : "A4");
-      return { ...current, layout: value, format, includeCover: value === "booklet" && current.includeCover };
+      return { ...current, layout: value, format, includeCover: current.includeCover };
     });
     setResult(null); setPage(0);
   };
@@ -173,10 +173,14 @@ export default function MenuPdfDialog({ open, onClose, restaurant, dishes, categ
           <fieldset><legend>Print layout</legend><label><input type="radio" checked={settings.layout === "poster"} onChange={() => updateSetting("layout", "poster")} /> Poster</label><label><input type="radio" checked={settings.layout === "booklet"} onChange={() => updateSetting("layout", "booklet")} /> Multipage booklet</label>
             <select aria-label="Paper size" value={settings.format} onChange={(event) => updateSetting("format", event.target.value)}>{settings.layout === "poster" ? <><option>A4</option><option>A3</option></> : <><option>A4</option><option>A5</option></>}</select>
           </fieldset>
-          <fieldset><legend>Include</legend>{[["includeCover", "Cover (booklet)"], ["includeLogo", "Restaurant logo"], ["includePhotos", "Dish photos"], ["includeDescriptions", "Descriptions"], ["includeDietary", "Dietary labels"], ["includeContact", "Contact details"]].map(([key, label]) => <label key={key}><input type="checkbox" checked={Boolean(settings[key])} onChange={(event) => updateSetting(key, event.target.checked)} disabled={key === "includeCover" && settings.layout !== "booklet"} /> {label}</label>)}</fieldset>
+          <fieldset className="menu-pdf-dialog__type"><legend>Text appearance</legend>
+            <label>Text style<select aria-label="Text style" value={settings.textStyle} onChange={(event) => updateSetting("textStyle", event.target.value)}><option value="modern">Modern · clean sans serif</option><option value="classic">Classic · elegant serif</option><option value="bold">Bold · strong contrast</option></select></label>
+            <label>Text size<select aria-label="Text size" value={settings.textSize} onChange={(event) => updateSetting("textSize", event.target.value)}><option value="standard">Standard</option><option value="large">Large · easier to read</option></select></label>
+          </fieldset>
+          <fieldset><legend>Include</legend>{[["includeCover", "Full-image cover page"], ["includeLogo", "Restaurant logo"], ["includePhotos", "Dish photos"], ["includeDescriptions", "Descriptions"], ["includeDietary", "Dietary labels"], ["includeContact", "Contact details"]].map(([key, label]) => <label key={key}><input type="checkbox" checked={Boolean(settings[key])} onChange={(event) => updateSetting(key, event.target.checked)} /> {label}</label>)}</fieldset>
           <label className="menu-pdf-dialog__notes">Print-only note<textarea value={settings.notes} onChange={(event) => updateSetting("notes", event.target.value)} placeholder="e.g. Prices subject to change" maxLength="280" /></label>
           <details><summary>Select dishes ({selectedCount})</summary>{orderedCategoryKeys.map((category) => { const categoryDishes = dishes.filter((dish) => categoryKey(dishCategoryName(dish) || "Uncategorized") === category); const availableIds = categoryDishes.filter((dish) => dish.isAvailable !== false).map(menuPrintDishId).filter(Boolean); return <div className="menu-pdf-dialog__category" key={category}><label><input type="checkbox" checked={availableIds.length > 0 && availableIds.every((id) => selected.has(id))} onChange={() => toggleCategory(category)} disabled={!availableIds.length} /> {categoryDishes[0] ? dishCategoryName(categoryDishes[0]) || "Uncategorized" : "Uncategorized"}</label>{categoryDishes.map((dish) => <label className="menu-pdf-dialog__dish" key={menuPrintDishId(dish)}><input type="checkbox" checked={selected.has(menuPrintDishId(dish))} onChange={() => toggleDish(menuPrintDishId(dish))} disabled={dish.isAvailable === false} /> {dish.name || "Unnamed dish"}{dish.isAvailable === false ? " (hidden)" : ""}</label>)}</div>; })}</details>
-          <p className="menu-pdf-dialog__hint">Category order follows the current menu. Poster pages continue rather than shrinking text. QR links are not added unless an existing public QR identifier is supplied.</p>
+          <p className="menu-pdf-dialog__hint">Category order follows the current menu. Poster pages continue rather than shrinking text. Large text may add pages. Enable a full-image cover for an image-led first page.</p>
           <button type="button" className="menu-pdf-dialog__generate" onClick={generate} disabled={!selectedCount || working}>{working ? progress || "Creating…" : result ? <><FiRefreshCw /> Regenerate preview</> : "Generate preview"}</button>{working && <button type="button" className="menu-pdf-dialog__cancel" onClick={cancel}>Cancel generation</button>}
         </aside>
         <main className="menu-pdf-dialog__preview" aria-live="polite"><h3>Preview</h3>{result ? <><img src={result.pages[page]} alt={`Printable menu page ${page + 1} of ${result.pages.length}`} /><div className="menu-pdf-dialog__pages"><button type="button" onClick={() => setPage((value) => Math.max(0, value - 1))} disabled={!page} aria-label="Previous PDF page"><FiChevronLeft /></button><span>Page {page + 1} of {result.pages.length}</span><button type="button" onClick={() => setPage((value) => Math.min(result.pages.length - 1, value + 1))} disabled={page === result.pages.length - 1} aria-label="Next PDF page"><FiChevronRight /></button></div><div className="menu-pdf-dialog__actions"><button type="button" onClick={download}><FiDownload /> Download PDF</button><button type="button" onClick={share}><FiShare2 /> Save / share</button></div><p className="menu-pdf-dialog__accessibility">Accessible summary: {result.snapshot.sections.map((section) => `${section.name}: ${section.dishes.map((dish) => `${dish.name}, ${dish.priceLabel}`).join("; ")}`).join(". ")}</p></> : <p className="menu-pdf-dialog__empty">Configure the print copy and generate a preview. PDF text is rasterized for print-focused multilingual pages and is not selectable.</p>}{message && <p className="menu-pdf-dialog__status" role="status">{message}</p>}</main>
