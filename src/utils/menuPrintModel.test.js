@@ -98,3 +98,13 @@ it("uses the same alphabetical tie-break as the live menu when category position
  const model=buildMenuPrintModel({categories:[{name:"Z",displayOrder:1},{name:"A",displayOrder:1}],dishes:[{_id:"z",name:"Z",category:"Z",price:1},{_id:"a",name:"A",category:"A",price:1}]});
  expect(model.sections.map(s=>s.name)).toEqual(["A","Z"]);
 });
+
+
+it("does not let a hidden dish change the visible menu subcategory order", () => {
+ const model=buildMenuPrintModel({dishes:[
+  {_id:"hidden",name:"Hidden",category:"Mains",subCategory:"Hot",displayOrder:1,isAvailable:false,price:1},
+  {_id:"cold",name:"Salad",category:"Mains",subCategory:"Cold",displayOrder:2,price:1},
+  {_id:"hot",name:"Curry",category:"Mains",subCategory:"Hot",displayOrder:3,price:1},
+ ]});
+ expect(model.sections[0].dishes.map(d=>d.id)).toEqual(["cold","hot"]);
+});

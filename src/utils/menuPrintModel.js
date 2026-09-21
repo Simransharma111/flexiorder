@@ -106,12 +106,13 @@ export const buildMenuPrintModel = ({
   const warnings = [];
   const allowedDishes = selectedDishIds instanceof Set ? selectedDishIds : null;
   const allowedCategories = selectedCategoryKeys instanceof Set ? selectedCategoryKeys : null;
-  const displayCategories = buildCategoryList(dishes, categories);
+  const availableDishes = dishes.filter(dish => dish?.isAvailable !== false);
+  const displayCategories = buildCategoryList(availableDishes, categories);
   const categoryOrder = displayCategories.map(categoryKey);
   const byCategory = new Map();
 
   // Match the guest menu, including embedded category positions and subcategory grouping.
-  groupMenuSections(dishes, displayCategories).flatMap(section => section.dishes).forEach((dish) => {
+  groupMenuSections(availableDishes, displayCategories).flatMap(section => section.dishes).forEach((dish) => {
     const id = menuPrintDishId(dish);
     const category = dishCategoryName(dish) || "Uncategorized";
     const key = categoryKey(category);
