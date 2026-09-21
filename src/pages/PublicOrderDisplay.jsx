@@ -19,6 +19,8 @@ import {
 } from "../utils/orderModel";
 import { clearAuthSession, getStoredAuthToken, readStoredSession } from "../utils/session";
 import { getScopedStorageKey } from "../utils/storageScope";
+import useRefreshOnResume from "../hooks/useRefreshOnResume";
+import { OPERATIONAL_FALLBACK_POLL_MS } from "../utils/refreshOnResume";
 
 const CACHE_KEY = "flexiorder_public_display_orders";
 const HOTEL_CACHE_KEY = "flexiorder_public_display_hotel";
@@ -87,9 +89,8 @@ export default function PublicOrderDisplay() {
 
   useEffect(() => {
     fetchDisplay();
-    const interval = window.setInterval(fetchDisplay, 15000);
-    return () => window.clearInterval(interval);
   }, [fetchDisplay]);
+  useRefreshOnResume(fetchDisplay, OPERATIONAL_FALLBACK_POLL_MS);
 
   useEffect(() => {
     if (!hotel?._id) return undefined;

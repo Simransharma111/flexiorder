@@ -3,7 +3,7 @@ const mocks = vi.hoisted(() => ({ native: false, on: vi.fn(), off: vi.fn(), addL
 vi.mock('@capacitor/core', () => ({ Capacitor: { isNativePlatform: () => mocks.native } }));
 vi.mock('@capacitor/app', () => ({ App: { addListener: mocks.addListener } }));
 vi.mock('../socket', () => ({ default: { on: mocks.on, off: mocks.off } }));
-import { subscribeToRefresh } from './refreshOnResume';
+import { OPERATIONAL_FALLBACK_POLL_MS, subscribeToRefresh } from './refreshOnResume';
 
 describe('resume reconciliation', () => {
   let dispose;
@@ -65,5 +65,8 @@ describe('resume reconciliation', () => {
     window.dispatchEvent(new Event('online')); await Promise.resolve();
     expect(refresh).toHaveBeenCalledTimes(2);
     warn.mockRestore();
+  });
+  it('uses a conservative operational fallback while keeping event reconciliation', () => {
+    expect(OPERATIONAL_FALLBACK_POLL_MS).toBe(60_000);
   });
 });

@@ -54,7 +54,11 @@ export const AuthProvider = ({
     token
   ) => {
 
-    clearAuthSession({ notify: false });
+    const previousToken = readStoredSession().token;
+    clearAuthSession({
+      notify: false,
+      unregisterNotifications: Boolean(previousToken && previousToken !== token),
+    });
     const saved = saveAuthSession(userData, token);
     setUser(saved ? userData : null);
     return saved;

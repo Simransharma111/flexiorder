@@ -650,7 +650,7 @@ const resolvedFields = {
       ) || null
     );
   }, [dishes, editingId]);
-  useRefreshOnResume(fetchDishes, 15000);
+  useRefreshOnResume(fetchDishes, OPERATIONAL_FALLBACK_POLL_MS);
 
   return (
     <div className="text-gray-900">
@@ -1307,3 +1307,4 @@ function SmallTag({ children }) {
   );
 }
 import useRefreshOnResume from '../hooks/useRefreshOnResume';
+import { OPERATIONAL_FALLBACK_POLL_MS } from '../utils/refreshOnResume';

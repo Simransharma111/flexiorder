@@ -1,4 +1,5 @@
 import { getRestaurantId } from "./storageScope.js";
+import { endNotificationSession } from "./fcmPush.js";
 
 export const AUTH_CLEARED_EVENT = "flexiorder:auth-cleared";
 
@@ -51,7 +52,9 @@ export const isTokenExpired = (token, now = Date.now()) => {
 
 export const isUnauthorizedResponse = (error) => error?.response?.status === 401;
 
-export const clearAuthSession = ({ notify = true } = {}) => {
+export const clearAuthSession = ({ notify = true, unregisterNotifications = true } = {}) => {
+  const authToken = safeGetItem("token");
+  if (unregisterNotifications && authToken) void endNotificationSession(authToken);
   safeRemoveItem("token");
   safeRemoveItem("user");
   safeRemoveItem("role");
@@ -68,7 +71,7 @@ export const clearSessionForUnauthorizedResponse = (error) => {
   const currentToken = safeGetItem("token");
   if (!requestToken || requestToken !== currentToken) return false;
 
-  clearAuthSession();
+  clearAuthSession({ unregisterNotifications: false });
   return true;
 };
 

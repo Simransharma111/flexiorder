@@ -169,7 +169,10 @@ export default function StaffOrder({ hotel, onOrderCreated, active = true, visib
     };
     fetchData();
     fetchTables();
-    const unsubscribe = subscribeToRefresh(() => Promise.all([fetchData(), fetchTables()]), { intervalMs: 15000 });
+    const unsubscribe = subscribeToRefresh(
+      () => Promise.all([fetchData(), fetchTables()]),
+      { intervalMs: OPERATIONAL_FALLBACK_POLL_MS },
+    );
     return () => { disposed = true; unsubscribe(); };
   }, [restaurantId, fetchTables, menuRefresh]);
 
@@ -565,5 +568,5 @@ export default function StaffOrder({ hotel, onOrderCreated, active = true, visib
     </section>
   );
 }
-import { subscribeToRefresh } from '../utils/refreshOnResume';
+import { OPERATIONAL_FALLBACK_POLL_MS, subscribeToRefresh } from '../utils/refreshOnResume';
 import OrderItemOptions from '../components/orders/OrderItemOptions';

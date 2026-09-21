@@ -2,6 +2,8 @@ import { App } from '@capacitor/app';
 import { Capacitor } from '@capacitor/core';
 import socket from '../socket';
 
+export const OPERATIONAL_FALLBACK_POLL_MS = 60_000;
+
 // Reconcile missed events through the existing APIs after an app/browser wake-up.
 export const subscribeToRefresh = (refresh, { intervalMs = 0 } = {}) => {
   let stopped = false;

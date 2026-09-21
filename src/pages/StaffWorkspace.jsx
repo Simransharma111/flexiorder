@@ -4,6 +4,8 @@ import { useNavigate } from "react-router-dom";
 import api from "../api/axios";
 import socket from "../socket";
 import { triggerLocalOrderNotification } from "../utils/fcmPush";
+import NotificationStatusNotice from "../components/NotificationStatusNotice";
+import { OPERATIONAL_FALLBACK_POLL_MS } from "../utils/refreshOnResume";
 import useDialogFocus from "../hooks/useDialogFocus";
 import StaffOrder from "./StaffOrder";
 import Orders from "../components/ownerdashboard/Orders";
@@ -111,7 +113,7 @@ export default function StaffWorkspace() {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
-  useRefreshOnResume(fetchData, 15000);
+  useRefreshOnResume(fetchData, OPERATIONAL_FALLBACK_POLL_MS);
 
   useEffect(() => {
     if (!hotel?._id) return undefined;
@@ -236,6 +238,7 @@ export default function StaffWorkspace() {
   return (
     <main className="ops-workspace ops-waiter-workspace" style={getHotelThemeStyle(hotel)}>
       <div className="ops-workspace-identity"><strong>{hotel?.name || "Waiter workspace"}</strong><span>Waiter workspace</span></div>
+      <NotificationStatusNotice />
       {loadError && <div className="ops-inline-error" role="alert"><span>{hotel ? loadError : "Could not load your restaurant. Check your connection and retry."}</span><button type="button" onClick={refreshNow} disabled={refreshing}>Retry workspace</button></div>}
       <header className="ops-waiter-tabs">
         <div role="tablist" aria-label="Waiter workspace">

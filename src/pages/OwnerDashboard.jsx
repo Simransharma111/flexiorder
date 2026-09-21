@@ -25,6 +25,7 @@ import { triggerLocalOrderNotification } from "../utils/fcmPush";
 import Header from "../components/ownerdashboard/Header";
 import Sidebar from "../components/ownerdashboard/Sidebar";
 import OwnerBottomNav from "../components/ownerdashboard/OwnerBottomNav";
+import NotificationStatusNotice from "../components/NotificationStatusNotice";
 
 import DashboardHome from "../components/ownerdashboard/DashboardHome";
 import Orders from "../components/ownerdashboard/Orders";
@@ -272,7 +273,7 @@ fetchHotel();
 fetchOrders();
 
 },[]);
-useRefreshOnResume(() => Promise.all([fetchHotel(), fetchOrders()]), 15000);
+useRefreshOnResume(() => Promise.all([fetchHotel(), fetchOrders()]), OPERATIONAL_FALLBACK_POLL_MS);
 
 
 
@@ -697,6 +698,8 @@ connectionLabel={connectionLabel}
 
 />
 
+<NotificationStatusNotice />
+
 
 
 
@@ -882,3 +885,4 @@ activeTab==="inventory" &&
 
 }
 import useRefreshOnResume from '../hooks/useRefreshOnResume';
+import { OPERATIONAL_FALLBACK_POLL_MS } from '../utils/refreshOnResume';
