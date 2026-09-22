@@ -63,8 +63,8 @@ test('owner can reach category editor and save a position without losing categor
     return fulfillJson(route, categories.find(category => category._id === starters._id));
   });
   await page.goto('/owner/dashboard');
-  if ((page.viewportSize()?.width || 0) < 768) await page.getByRole('button', { name: 'Open owner menu' }).click();
   await page.getByRole('button', { name: 'Menu', exact: true }).filter({ visible: true }).click();
+  await page.locator('.owner-menu-tools summary').click();
   await page.getByRole('button', { name: 'Manage categories', exact: true }).click();
   await page.getByRole('button', { name: 'Edit Starters category' }).click();
   await page.getByLabel('Category position', { exact: true }).fill('3');

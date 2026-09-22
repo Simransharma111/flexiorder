@@ -25,6 +25,7 @@
     "@capacitor/local-notifications": "8.2.0",
     "@capacitor/push-notifications": "8.1.1",
     "@capacitor/share": "^8.0.1",
+    "@zxing/browser": "^0.2.1",
     "axios": "^1.19.0",
     "exceljs": "^4.4.0",
     "framer-motion": "12.38.0",

@@ -184,7 +184,7 @@ setError("");
 
 
 const res=await api.get(
-`/qr/menu/${qrId}`,
+`/qr/menu/${encodeURIComponent(qrId)}`,
 {skipAuth:true}
 );
 
@@ -613,7 +613,7 @@ return;
 
 
 navigate(
-`/cart/${qrId}`
+`/cart/${encodeURIComponent(qrId)}`
 );
 
 

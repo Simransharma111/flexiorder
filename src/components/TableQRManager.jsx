@@ -1,1240 +1,223 @@
-import { useEffect, useState } from "react";
-import { QRCodeCanvas } from "qrcode.react";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
+import { Link, useLocation } from 'react-router-dom';
+import { QRCodeSVG } from 'qrcode.react';
+import { App } from '@capacitor/app';
+import { Capacitor } from '@capacitor/core';
+import { FiDownload, FiGrid, FiHome, FiPlus, FiRefreshCw } from 'react-icons/fi';
+import api from '../api/axios';
+import { useAuth } from '../context/AuthContext';
+import { useConnectivity } from '../context/ConnectivityContext';
+import { getRestaurantId, getScopedStorageKey } from '../utils/storageScope';
+import { readTables, saveTableQr, tableLabel, tableQrUrl } from '../utils/tableQr';
+import QrDialog from './tables/QrDialog';
+import './tables/tableQr.css';
 
-import {
-  FiEdit2,
-  FiExternalLink,
-  FiRefreshCw,
-  FiTrash2,
-  FiPlus,
-  FiMoreVertical,
-  FiGrid,
-  FiHome,
-} from "react-icons/fi";
-
-import api from "../api/axios";
-import { getPublicAppUrl } from "../config/env";
+const QrScannerDialog = lazy(() => import('./tables/QrScannerDialog'));
+const messageFor = error => error.response?.data?.message || error.message || 'Something went wrong. Please retry.';
+function cachedTables(key) {
+  try {
+    const value = JSON.parse(localStorage.getItem(key) || '[]');
+    return Array.isArray(value) ? value.filter(t => t && typeof t._id === 'string' && typeof t.tableNumber === 'string' && ['room', 'table'].includes(t.type)) : [];
+  } catch { return []; }
+}
 
 export default function TableQRManager() {
-  // =====================================================
-  // STATE
-  // =====================================================
+  // Account changes mount fresh UI state; old requests keep their own busy refs.
+  useAuth();
+  return <ScopedTableQRManager key={`${getScopedStorageKey('flexiorder_table_qr')}:${localStorage.getItem('token') || ''}`} />;
+}
 
-  const [tableName, setTableName] = useState("");
-  const [tables, setTables] = useState([]);
-
-  const [type, setType] = useState("table");
-
-  const [loading, setLoading] = useState(false);
-
-  const [fetchingTables, setFetchingTables] = useState(false);
-
-  const [qrInputs, setQrInputs] = useState({});
-
-  const [openMenu, setOpenMenu] = useState(null);
-
-  const [showReassign, setShowReassign] = useState({});
-
-  const [assigningQR, setAssigningQR] = useState(null);
-
-  const [removingQR, setRemovingQR] = useState(null);
-
-  const [editingTable, setEditingTable] = useState(null);
-
-  const [editingName, setEditingName] = useState("");
-
-  const [renaming, setRenaming] = useState(null);
-
-  // =====================================================
-  // AUTH HEADER
-  // =====================================================
-
-  const getAuthConfig = () => {
-    const token = localStorage.getItem("token");
-
-    return {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    };
-  };
-
-  // =====================================================
-  // FETCH TABLES / ROOMS
-  // =====================================================
-
-  const fetchTables = async () => {
-    try {
-      setFetchingTables(true);
-
-      const res = await api.get(
-        "/table",
-        getAuthConfig()
-      );
-
-      setTables(res.data?.tables || []);
-    } catch (err) {
-      console.error("TABLE FETCH ERROR:", err);
-
-      console.error(
-        "TABLE FETCH RESPONSE:",
-        err.response?.data
-      );
-
-      alert(
-        err.response?.data?.message ||
-          "Failed to load tables and rooms"
-      );
-    } finally {
-      setFetchingTables(false);
-    }
-  };
-
-  // =====================================================
-  // INITIAL LOAD
-  // =====================================================
-
+function ScopedTableQRManager() {
+  const { pathname } = useLocation();
+  const { user } = useAuth();
+  const { isOffline } = useConnectivity();
+  const scope = getScopedStorageKey('flexiorder_table_qr');
+  const session = `${scope}:${localStorage.getItem('token') || ''}`;
+  const [data, setData] = useState(() => ({ scope, tables: cachedTables(scope), stale: true }));
+  const tables = data.scope === scope ? data.tables : [];
+  const [fetching, setFetching] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+  const [draft, setDraft] = useState(null);
+  const [formError, setFormError] = useState('');
+  const [scanning, setScanning] = useState(false);
+  const [preview, setPreview] = useState(null);
+  const [removing, setRemoving] = useState(null);
+  const [selected, setSelected] = useState([]);
+  const [filter, setFilter] = useState('all');
+  const [search, setSearch] = useState('');
+  const [exporting, setExporting] = useState('');
+  const writing = useRef(false);
+  const exportingRef = useRef(false);
+  const generation = useRef(0);
+  const alive = useRef(true);
+  const activeSession = useRef(session);
   useEffect(() => {
-    fetchTables();
-  }, []);
-
-  // =====================================================
-  // CREATE TABLE / ROOM
-  // =====================================================
-
-  const createTable = async () => {
-    const trimmedName = tableName.trim();
-
-    if (!trimmedName) {
-      alert(
-        type === "room"
-          ? "Please enter a room number"
-          : "Please enter a table number"
-      );
-
-      return;
-    }
-
+    activeSession.current = session; alive.current = true;
+    return () => { alive.current = false; };
+  }, [session]);
+  const validSession = useCallback(() => alive.current && activeSession.current === session && `${getScopedStorageKey('flexiorder_table_qr')}:${localStorage.getItem('token') || ''}` === session, [session]);
+  const storeTables = useCallback((values, stale = false) => {
+    if (!validSession()) return;
+    setData({ scope, tables: values, stale });
+    setPreview(current => current ? values.find(t => t._id === current._id && t.qrId) || null : null);
+    try { localStorage.setItem(scope, JSON.stringify(values)); } catch { /* Reads still work when storage is full. */ }
+  }, [scope, validSession]);
+  const refresh = useCallback(async () => {
+    if (isOffline || writing.current || !validSession()) return;
+    const request = ++generation.current;
+    setFetching(true);
     try {
-      setLoading(true);
-
-      const res = await api.post(
-        "/table",
-        {
-          tableNumber: trimmedName,
-          type,
-        },
-        getAuthConfig()
-      );
-
-      console.log(
-        "CREATE TABLE SUCCESS:",
-        res.data
-      );
-
-      setTableName("");
-
-      await fetchTables();
-    } catch (err) {
-      console.error(
-        "CREATE TABLE ERROR:",
-        err
-      );
-
-      console.error(
-        "CREATE TABLE RESPONSE:",
-        err.response?.data
-      );
-
-      alert(
-        err.response?.data?.message ||
-          "Failed to create table or room"
-      );
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // =====================================================
-  // HANDLE QR INPUT
-  // =====================================================
-
-  const handleQRInputChange = (
-    tableId,
-    value
-  ) => {
-    setQrInputs((prev) => ({
-      ...prev,
-      [tableId]: value,
-    }));
-  };
-
-  // =====================================================
-  // ASSIGN / REASSIGN QR
-  // =====================================================
-
-  const assignQR = async (tableId) => {
-    const qrId =
-      qrInputs[tableId]?.trim();
-
-    if (!qrId) {
-      alert("Please enter a QR ID");
-      return;
-    }
-
-    try {
-      setAssigningQR(tableId);
-
-      const res = await api.put(
-        "/table/assign-qr",
-        {
-          tableId,
-          qrId,
-        },
-        getAuthConfig()
-      );
-
-      console.log(
-        "ASSIGN QR SUCCESS:",
-        res.data
-      );
-
-      // Clear input
-      setQrInputs((prev) => ({
-        ...prev,
-        [tableId]: "",
-      }));
-
-      // Close reassign section
-      setShowReassign((prev) => ({
-        ...prev,
-        [tableId]: false,
-      }));
-
-      // Close menu
-      setOpenMenu(null);
-
-      // Refresh tables
-      await fetchTables();
-    } catch (err) {
-      console.error(
-        "ASSIGN QR ERROR:",
-        err
-      );
-
-      console.error(
-        "ASSIGN QR RESPONSE:",
-        err.response?.data
-      );
-
-      alert(
-        err.response?.data?.message ||
-          "Failed to assign QR"
-      );
-    } finally {
-      setAssigningQR(null);
-    }
-  };
-
-  // =====================================================
-  // REMOVE QR
-  // =====================================================
-
-  const removeQR = async (tableId) => {
-    if (!tableId) {
-      alert("Invalid table ID");
-      return;
-    }
-
-    try {
-      setRemovingQR(tableId);
-
-      console.log(
-        "REMOVING QR FROM TABLE:",
-        tableId
-      );
-
-      /*
-       * IMPORTANT:
-       *
-       * Correct endpoint:
-       *
-       * /qr/remove-qr
-       *
-       * NOT:
-       *
-       * api/qr/remove-qr
-       */
-
-      const res = await api.put(
-        "/qr/remove-qr",
-        {
-          tableId,
-        },
-        getAuthConfig()
-      );
-
-      console.log(
-        "REMOVE QR SUCCESS:",
-        res.data
-      );
-
-      // Close menu
-      setOpenMenu(null);
-
-      // Close reassign section
-      setShowReassign((prev) => ({
-        ...prev,
-        [tableId]: false,
-      }));
-
-      // Clear QR input
-      setQrInputs((prev) => ({
-        ...prev,
-        [tableId]: "",
-      }));
-
-      // Refresh table data
-      await fetchTables();
-    } catch (err) {
-      console.error(
-        "REMOVE QR ERROR:",
-        err
-      );
-
-      console.error(
-        "REMOVE QR STATUS:",
-        err.response?.status
-      );
-
-      console.error(
-        "REMOVE QR RESPONSE:",
-        err.response?.data
-      );
-
-      alert(
-        err.response?.data?.message ||
-          "Failed to remove QR assignment"
-      );
-    } finally {
-      setRemovingQR(null);
-    }
-  };
-
-  const startRename = (table) => {
-        setEditingTable(table._id);
-        setEditingName(table.tableNumber);
-        setOpenMenu(null);
-      };
-
-  const cancelRename = () => {
-    setEditingTable(null);
-    setEditingName("");
-  };
-
-  const renameTable = async (table) => {
-    const trimmedName = editingName.trim();
-
-    if (!trimmedName || trimmedName === table.tableNumber) {
-      cancelRename();
-
-      return;
-    }
-
-    try {
-      setRenaming(table._id);
-
-      const res = await api.put(
-        `/table/${table._id}`,
-        { tableNumber: trimmedName },
-        getAuthConfig()
-      );
-
-      const updated = res.data?.table;
-
-      setTables((current) =>
-        current.map((item) =>
-          item._id === table._id ? { ...item, ...updated } : item
-        )
-      );
-
-      cancelRename();
-    } catch (err) {
-      if (err?.response?.status === 404) {
-        alert(
-          "Renaming tables needs the latest server update. The QR link and orders keep working, but the name can only be changed after the backend is redeployed."
-        );
-      } else {
-        alert(
-          err.response?.data?.message ||
-            "Failed to rename"
-        );
+      const values = await readTables(api);
+      if (request !== generation.current || !validSession()) return;
+      storeTables(values); setError('');
+    } catch (failure) {
+      if (request === generation.current && validSession()) {
+        setError(messageFor(failure)); setData(current => ({ ...current, stale: true }));
       }
-    } finally {
-      setRenaming(null);
+    } finally { if (request === generation.current && validSession()) setFetching(false); }
+  }, [isOffline, storeTables, validSession]);
+  useEffect(() => {
+    setData({ scope, tables: cachedTables(scope), stale: true });
+    setDraft(null); setPreview(null); setRemoving(null); setSelected([]); setScanning(false);
+    setError(''); setNotice('');
+  }, [scope, session]);
+  useEffect(() => {
+    let disposed = false;
+    let handle;
+    refresh();
+    const focus = () => { if (document.visibilityState !== 'hidden') refresh(); };
+    window.addEventListener('focus', focus);
+    window.addEventListener('online', focus);
+    document.addEventListener('visibilitychange', focus);
+    if (Capacitor.isNativePlatform()) App.addListener('appStateChange', state => { if (state.isActive) refresh(); })
+      .then(value => { if (disposed) value.remove(); else handle = value; }).catch(() => {});
+    return () => {
+      disposed = true; handle?.remove();
+      window.removeEventListener('focus', focus); window.removeEventListener('online', focus);
+      document.removeEventListener('visibilitychange', focus);
+    };
+  }, [refresh]);
+
+  const openEditor = (type, table = null, method = table ? 'keep' : 'auto') => {
+    setFormError('');
+    setDraft({ type, name: table?.tableNumber || '', table, original: Boolean(table), method, code: '', registered: false, uncertainCreate: false });
+  };
+  const updateDraft = changes => setDraft(current => ({ ...current, ...(('code' in changes || 'method' in changes) ? { registered: false, codeNormalized: false } : {}), ...changes }));
+  const upsert = table => {
+    setData(current => {
+      if (!validSession()) return current;
+      const values = current.tables.some(t => t._id === table._id) ? current.tables.map(t => t._id === table._id ? table : t) : [...current.tables, table];
+      try { localStorage.setItem(scope, JSON.stringify(values)); } catch { /* Best-effort cache. */ }
+      return { scope, tables: values, stale: current.stale };
+    });
+  };
+  const save = async event => {
+    event.preventDefault();
+    if (writing.current || isOffline || !validSession()) return;
+    writing.current = true; generation.current++; setFetching(false); setBusy(true); setFormError('');
+    try {
+      const saved = await saveTableQr(api, draft, tables, progress => {
+        if (!validSession()) return;
+        setDraft(progress);
+        if (progress.table) upsert(progress.table);
+      }, getRestaurantId(user) || getRestaurantId());
+      if (validSession()) { upsert(saved); setDraft(null); setNotice(`${tableLabel(saved)} saved.`); }
+    } catch (failure) { if (validSession()) setFormError(messageFor(failure)); }
+    finally {
+      writing.current = false;
+      if (validSession()) { setBusy(false); refresh(); }
     }
   };
-
-  // =====================================================
-  // TOGGLE THREE DOT MENU
-  // =====================================================
-
-  const toggleMenu = (tableId) => {
-    setOpenMenu((prev) =>
-      prev === tableId
-        ? null
-        : tableId
-    );
+  const remove = async () => {
+    if (writing.current || isOffline || !validSession()) return;
+    writing.current = true; generation.current++; setFetching(false); setBusy(true); setFormError('');
+    try {
+      const latest = (await readTables(api)).find(t => t._id === removing._id);
+      if (!validSession()) return;
+      if (!latest) throw new Error('This table or room is no longer available. Refresh the list.');
+      if (latest.qrId && latest.qrId !== removing.qrId) throw new Error('The QR changed on another device. Close this dialog and refresh before removing it.');
+      if (latest.qrId) {
+        try {
+          const response = await api.put('/qr/remove-qr', { tableId: removing._id });
+          if (response.data?.success !== true) throw new Error('QR removal was not confirmed. Refresh and retry.');
+        } catch (failure) {
+          const confirmed = (await readTables(api).catch(() => [])).find(t => t._id === removing._id && !t.qrId);
+          if (!confirmed) throw failure;
+        }
+      }
+      if (validSession()) {
+        upsert({ ...removing, qrId: null }); setNotice(`QR removed from ${tableLabel(removing)}.`); setRemoving(null);
+      }
+    } catch (failure) { if (validSession()) setFormError(messageFor(failure)); }
+    finally { writing.current = false; if (validSession()) { setBusy(false); refresh(); } }
   };
-
-  // =====================================================
-  // TOGGLE REASSIGN
-  // =====================================================
-
-  const toggleReassign = (tableId) => {
-    setShowReassign((prev) => ({
-      ...prev,
-      [tableId]: !prev[tableId],
-    }));
-
-    setOpenMenu(null);
+  const download = async (items, individual = false) => {
+    if (exportingRef.current) return;
+    exportingRef.current = true; setExporting('Preparing QR download…'); setError('');
+    try {
+      const exporter = await import('../utils/tableQrExport');
+      const result = individual ? await exporter.downloadTableQr(items[0], validSession) : await exporter.downloadTableQrPdf(items, (done, total) => { if (validSession()) setExporting(`Preparing QR ${done} of ${total}…`); }, validSession);
+      if (validSession()) setNotice(result?.native ? `Saved to ${result.label}` : 'QR download ready. Check your downloads.');
+    } catch (failure) { if (validSession()) setError(messageFor(failure)); }
+    finally { exportingRef.current = false; if (validSession()) setExporting(''); }
   };
-
-  // =====================================================
-  // PUBLIC QR URL
-  // =====================================================
-
-  const getQRUrl = (qrId) => {
-    if (!qrId) return "";
-
-    return `${getPublicAppUrl()}/qr/${qrId}`;
-  };
-
-  // =====================================================
-  // RENDER
-  // =====================================================
-
-  return (
-    <div
-      className="
-        text-ink
-        p-4
-        md:p-6
-      "
-    >
-      {/* =====================================================
-          HEADER
-      ===================================================== */}
-
-      <div
-        className="
-          mb-8
-          rounded-panel
-          bg-white
-          border
-          border-hairline
-          shadow-card
-          p-5
-        "
-      >
-        <div className="mb-5">
-          <h1
-            className="
-              text-2xl
-              font-black
-            "
-          >
-            QR Tables Management
-          </h1>
-
-          <p
-            className="
-              text-sm
-              text-ink-secondary
-              mt-1
-            "
-          >
-            Create tables or rooms and
-            assign QR codes to them.
-          </p>
-        </div>
-
-        {/* CREATE FORM */}
-
-        <div
-          className="
-            flex
-            flex-col
-            md:flex-row
-            gap-3
-          "
-        >
-          {/* TYPE */}
-
-          <select
-            value={type}
-            onChange={(e) =>
-              setType(e.target.value)
-            }
-            className="
-              bg-white
-              border
-              border-hairline
-              rounded-card
-              px-4
-              py-3
-              text-ink
-              focus:border-brand
-              focus:ring-2
-              focus:ring-brand/20
-            "
-          >
-            <option value="table">
-              Table
-            </option>
-
-            <option value="room">
-              Room
-            </option>
-          </select>
-
-          {/* NAME */}
-
-          <input
-            value={tableName}
-            onChange={(e) =>
-              setTableName(e.target.value)
-            }
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                createTable();
-              }
-            }}
-            placeholder={
-              type === "room"
-                ? "Room 101"
-                : "Table A1"
-            }
-            className="
-              flex-1
-              bg-white
-              border
-              border-hairline
-              rounded-card
-              px-4
-              py-3
-              text-ink
-              placeholder:text-ink-disabled
-              focus:border-brand
-              focus:ring-2
-              focus:ring-brand/20
-            "
-          />
-
-          {/* CREATE BUTTON */}
-
-          <button
-            onClick={createTable}
-            disabled={loading}
-            className="
-              owner-accent-bg
-              disabled:opacity-50
-              disabled:cursor-not-allowed
-              rounded-card
-              px-6
-              py-3
-              font-bold
-              flex
-              items-center
-              justify-center
-              gap-2
-              transition
-            "
-          >
-            <FiPlus />
-
-            {loading
-              ? "Creating..."
-              : "Create"}
-          </button>
-        </div>
-      </div>
-
-      {/* =====================================================
-          LOADING
-      ===================================================== */}
-
-      {fetchingTables && (
-        <div
-          className="
-            mb-5
-            text-center
-            text-ink-secondary
-            text-sm
-          "
-        >
-          Loading tables and rooms...
-        </div>
-      )}
-
-      {/* =====================================================
-          EMPTY STATE
-      ===================================================== */}
-
-      {!fetchingTables &&
-        tables.length === 0 && (
-          <div
-            className="
-              rounded-panel
-              bg-white
-              border
-              border-hairline
-              shadow-card
-              p-10
-              text-center
-            "
-          >
-            <FiGrid
-              className="
-                mx-auto
-                text-4xl
-                text-ink-disabled
-                mb-4
-              "
-            />
-
-            <h2
-              className="
-                text-lg
-                font-bold
-              "
-            >
-              No tables or rooms yet
-            </h2>
-
-            <p
-              className="
-                text-sm
-                text-ink-secondary
-                mt-2
-              "
-            >
-              Create your first table or
-              room above.
-            </p>
-          </div>
-        )}
-
-      {/* =====================================================
-          TABLE GRID
-      ===================================================== */}
-
-      <div
-        className="
-          grid
-          grid-cols-1
-          md:grid-cols-2
-          xl:grid-cols-3
-          gap-5
-        "
-      >
-        {tables.map((table) => {
-          const hasQR = Boolean(
-            table.qrId
-          );
-
-          const isRemoving =
-            removingQR === table._id;
-
-          const isAssigning =
-            assigningQR === table._id;
-
-          const qrUrl =
-            getQRUrl(table.qrId);
-
-          return (
-            <div
-              key={table._id}
-              className="
-                relative
-                rounded-panel
-                bg-white
-                border
-                border-hairline
-                shadow-card
-                p-5
-                transition
-              "
-            >
-              {/* =================================================
-                  TOP
-              ================================================= */}
-
-              <div
-                className="
-                  flex
-                  justify-between
-                  items-start
-                "
-              >
-                {/* TITLE */}
-
-                <div>
-                  <div
-                    className="
-                      flex
-                      items-center
-                      gap-2
-                      owner-accent
-                      text-xs
-                      font-bold
-                      uppercase
-                    "
-                  >
-                    {table.type ===
-                    "room" ? (
-                      <FiHome />
-                    ) : (
-                      <FiGrid />
-                    )}
-
-                    {table.type}
-                  </div>
-
-                  {editingTable === table._id ? (
-                    <div className="mt-2 flex items-center gap-2">
-                      <input
-                        value={editingName}
-                        onChange={(event) => setEditingName(event.target.value)}
-                        onKeyDown={(event) => {
-                          if (event.key === "Enter") {
-                            renameTable(table);
-                          }
-                          if (event.key === "Escape") {
-                            cancelRename();
-                          }
-                        }}
-                        autoFocus
-                        disabled={renaming === table._id}
-                        aria-label={table.type === "room" ? "Room name" : "Table name"}
-                        className="owner-input w-32 px-2.5 py-2 text-base font-bold"
-                      />
-
-                      <button
-                        type="button"
-                        onClick={() => renameTable(table)}
-                        disabled={renaming === table._id}
-                        className="owner-accent-bg px-3 py-2 rounded-lg text-xs font-bold disabled:opacity-60"
-                      >
-                        {renaming === table._id ? "Saving..." : "Save"}
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={cancelRename}
-                        disabled={renaming === table._id}
-                        className="px-3 py-2 rounded-lg text-xs font-bold border border-hairline text-ink-secondary hover:text-ink disabled:opacity-60"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  ) : (
-                    <h2
-                      className="
-                        text-xl
-                        font-black
-                        mt-2
-                      "
-                    >
-                      {table.type ===
-                      "room"
-                        ? `Room ${table.tableNumber}`
-                        : `Table ${table.tableNumber}`}
-                    </h2>
-                  )}
-                </div>
-
-                {/* THREE DOT MENU */}
-
-                <div
-                  className="
-                    relative
-                  "
-                >
-                  <button
-                    onClick={() =>
-                      toggleMenu(
-                        table._id
-                      )
-                    }
-                    className="
-                      p-2
-                      rounded-card
-                      text-ink-secondary
-                      hover:bg-subtle
-                      hover:text-ink
-                      transition
-                    "
-                  >
-                    <FiMoreVertical />
-                  </button>
-
-                  {openMenu ===
-                    table._id && (
-                    <div
-                      className="
-                        absolute
-                        right-0
-                        top-10
-                        w-44
-                        bg-white
-                        border
-                        border-hairline
-                        rounded-card
-                        shadow-pop
-                        z-20
-                        overflow-hidden
-                      "
-                    >
-                      {/* RENAME */}
-
-                      <button
-                        onClick={() =>
-                          startRename(table)
-                        }
-                        className="
-                          w-full
-                          px-4
-                          py-3
-                          text-left
-                          text-ink
-                          hover:bg-subtle
-                          flex
-                          gap-2
-                          items-center
-                        "
-                      >
-                        <FiEdit2 />
-
-                        Edit name
-                      </button>
-
-                      {/* REASSIGN */}
-
-                      <button
-                        onClick={() =>
-                          toggleReassign(
-                            table._id
-                          )
-                        }
-                        disabled={isRemoving}
-                        className="
-                          w-full
-                          px-4
-                          py-3
-                          text-left
-                          text-ink
-                          hover:bg-subtle
-                          flex
-                          gap-2
-                          items-center
-                          disabled:opacity-50
-                        "
-                      >
-                        <FiRefreshCw />
-
-                        Reassign
-                      </button>
-
-                      {/* REMOVE */}
-
-                      {hasQR && (
-                        <button
-                          onClick={() =>
-                            removeQR(
-                              table._id
-                            )
-                          }
-                          disabled={
-                            isRemoving
-                          }
-                          className="
-                            w-full
-                            px-4
-                            py-3
-                            text-left
-                            hover:bg-status-delayed-surface
-                            text-status-delayed-ink
-                            flex
-                            gap-2
-                            items-center
-                            disabled:opacity-50
-                          "
-                        >
-                          <FiTrash2 />
-
-                          {isRemoving
-                            ? "Removing..."
-                            : "Remove QR"}
-                        </button>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* =================================================
-                  QR DISPLAY
-              ================================================= */}
-
-              <div
-                className="
-                  mt-5
-                  bg-white
-                  rounded-2xl
-                  p-3
-                  flex
-                  justify-center
-                  min-h-[144px]
-                  items-center
-                "
-              >
-                {hasQR ? (
-                  <QRCodeCanvas
-                    value={qrUrl}
-                    size={120}
-                    includeMargin
-                  />
-                ) : (
-                  <div
-                    className="
-                      h-[120px]
-                      flex
-                      flex-col
-                      items-center
-                      justify-center
-                      text-black
-                      text-sm
-                    "
-                  >
-                    <FiGrid
-                      className="
-                        text-2xl
-                        mb-2
-                        text-ink-disabled
-                      "
-                    />
-
-                    No QR Assigned
-                  </div>
-                )}
-              </div>
-
-              {/* =================================================
-                  STATUS
-              ================================================= */}
-
-              <div
-                className="
-                  mt-4
-                  flex
-                  justify-between
-                  items-center
-                  gap-3
-                "
-              >
-                <p
-                  className="
-                    text-xs
-                    text-ink-secondary
-                    truncate
-                    flex-1
-                  "
-                  title={
-                    table.qrId ||
-                    "Not Assigned"
-                  }
-                >
-                  QR:{" "}
-                  {table.qrId ||
-                    "Not Assigned"}
-                </p>
-
-                <div
-                  className={`
-                    px-3
-                    py-1
-                    rounded-full
-                    text-xs
-                    font-bold
-                    whitespace-nowrap
-                    ${
-                      hasQR
-                        ? "bg-status-ready-surface text-status-ready-ink"
-                        : "bg-subtle text-ink-secondary"
-                    }
-                  `}
-                >
-                  {hasQR
-                    ? "QR Active"
-                    : "No QR"}
-                </div>
-              </div>
-
-              {/* =================================================
-                  OPEN MENU
-              ================================================= */}
-
-              {hasQR && (
-                <a
-                  href={qrUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="
-                    mt-5
-                    w-full
-                    flex
-                    items-center
-                    justify-center
-                    gap-2
-                    owner-accent-bg
-                    rounded-card
-                    py-3
-                    font-bold
-                    transition
-                  "
-                >
-                  <FiExternalLink />
-
-                  Open Menu
-                </a>
-              )}
-
-              {/* =================================================
-                  REASSIGN AREA
-              ================================================= */}
-
-              {showReassign[
-                table._id
-              ] && (
-                <div
-                  className="
-                    mt-4
-                    p-4
-                    rounded-card
-                    bg-canvas
-                    border
-                    border-hairline
-                    space-y-3
-                  "
-                >
-                  <p
-                    className="
-                      text-sm
-                      font-bold
-                    "
-                  >
-                    Reassign QR
-                  </p>
-
-                  <p
-                    className="
-                      text-xs
-                      text-ink-secondary
-                    "
-                  >
-                    Enter the new QR ID.
-                    The existing QR will
-                    be released automatically.
-                  </p>
-
-                  <input
-                    value={
-                      qrInputs[
-                        table._id
-                      ] || ""
-                    }
-                    onChange={(e) =>
-                      handleQRInputChange(
-                        table._id,
-                        e.target.value
-                      )
-                    }
-                    onKeyDown={(e) => {
-                      if (
-                        e.key === "Enter"
-                      ) {
-                        assignQR(
-                          table._id
-                        );
-                      }
-                    }}
-                    placeholder="Enter new QR ID"
-                    disabled={isAssigning}
-                    className="
-                      w-full
-                      bg-white
-                      border
-                      border-hairline
-                      rounded-card
-                      px-4
-                      py-3
-                      text-ink
-                      focus:border-brand
-                      focus:ring-2
-                      focus:ring-brand/20
-                      placeholder:text-ink-disabled
-                      disabled:opacity-50
-                    "
-                  />
-
-                  <div
-                    className="
-                      flex
-                      gap-2
-                    "
-                  >
-                    <button
-                      onClick={() =>
-                        assignQR(
-                          table._id
-                        )
-                      }
-                      disabled={
-                        isAssigning
-                      }
-                      className="
-                        flex-1
-                        bg-status-preparing-line
-                        text-white
-                        hover:brightness-95
-                        disabled:opacity-50
-                        rounded-card
-                        py-3
-                        font-bold
-                        transition
-                      "
-                    >
-                      {isAssigning
-                        ? "Assigning..."
-                        : "Confirm Reassign"}
-                    </button>
-
-                    <button
-                      onClick={() => {
-                        setShowReassign(
-                          (prev) => ({
-                            ...prev,
-                            [table._id]:
-                              false,
-                          })
-                        );
-
-                        setQrInputs(
-                          (prev) => ({
-                            ...prev,
-                            [table._id]:
-                              "",
-                          })
-                        );
-                      }}
-                      className="
-                        px-4
-                        rounded-card
-                        border
-                        border-hairline
-                        bg-white
-                        text-ink
-                        hover:bg-subtle
-                        transition
-                      "
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* =================================================
-                  ASSIGN FIRST QR
-              ================================================= */}
-
-              {!hasQR && (
-                <div
-                  className="
-                    mt-4
-                    space-y-3
-                  "
-                >
-                  <input
-                    value={
-                      qrInputs[
-                        table._id
-                      ] || ""
-                    }
-                    onChange={(e) =>
-                      handleQRInputChange(
-                        table._id,
-                        e.target.value
-                      )
-                    }
-                    onKeyDown={(e) => {
-                      if (
-                        e.key === "Enter"
-                      ) {
-                        assignQR(
-                          table._id
-                        );
-                      }
-                    }}
-                    placeholder="Enter QR ID"
-                    disabled={isAssigning}
-                    className="
-                      w-full
-                      bg-white
-                      border
-                      border-hairline
-                      rounded-card
-                      px-4
-                      py-3
-                      text-ink
-                      focus:border-brand
-                      focus:ring-2
-                      focus:ring-brand/20
-                      placeholder:text-ink-disabled
-                      disabled:opacity-50
-                    "
-                  />
-
-                  <button
-                    onClick={() =>
-                      assignQR(
-                        table._id
-                      )
-                    }
-                    disabled={isAssigning}
-                    className="
-                      w-full
-                      bg-status-ready-line
-                      text-white
-                      hover:brightness-95
-                      disabled:opacity-50
-                      rounded-card
-                      py-3
-                      font-bold
-                      transition
-                    "
-                  >
-                    {isAssigning
-                      ? "Assigning..."
-                      : "Assign QR"}
-                  </button>
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
+  const hasAssignments = tables.some(t => t.qrId);
+  useEffect(() => {
+    // Make export available later in this session if the connection is lost.
+    if (!isOffline && hasAssignments) import('../utils/tableQrExport').catch(() => {});
+  }, [isOffline, hasAssignments]);
+  const assigned = tables.filter(t => t.qrId);
+  const selectedTables = assigned.filter(t => selected.includes(t._id));
+  const visible = tables.filter(t => (filter === 'all' || t.type === filter) && `${tableLabel(t)} ${t.qrId || ''}`.toLowerCase().includes(search.toLowerCase()));
+  const frozen = draft && (draft.uncertainCreate || (!draft.original && draft.table));
+  const qrFrozen = draft?.uncertainCreate;
+
+  return <section className="tqr" aria-label="Tables and Rooms">
+    {pathname === "/qr" && <Link className="tqr-back" to="/owner/dashboard">← Back to dashboard</Link>}
+    <div className="tqr-hero">
+      <div><p className="tqr-eyebrow">SET UP · PRINT · WELCOME GUESTS</p><h1>Tables &amp; Rooms</h1><p>Give each table or room a QR code, then print it for your guests.</p></div>
+      <div className="tqr-actions"><button className="tqr-primary" disabled={busy || isOffline || Boolean(exporting)} onClick={() => openEditor('table')}><FiPlus /> Add Table</button><button disabled={busy || isOffline || Boolean(exporting)} onClick={() => openEditor('room')}><FiPlus /> Add Room</button></div>
     </div>
-  );
+    {(isOffline || data.stale) && <p className="tqr-note" role="status">{isOffline ? 'You are offline. Saved QR codes can still be viewed and downloaded. Connect to make changes.' : 'Showing saved assignments until the latest list loads. Printed codes may have changed on another device.'}</p>}
+    {error && <p className="tqr-error" role="alert">{error}</p>}
+    {notice && <p className="tqr-success" role="status">{notice}</p>}
+    <div className="tqr-toolbar">
+      <div className="tqr-filters" aria-label="Filter locations">{[['all', 'All'], ['table', 'Tables'], ['room', 'Rooms']].map(([value, label]) => <button key={value} aria-pressed={filter === value} onClick={() => setFilter(value)}>{label} <span>{value === 'all' ? tables.length : tables.filter(t => t.type === value).length}</span></button>)}</div>
+      <label className="tqr-search"><span className="sr-only">Search tables, rooms or codes</span><input placeholder="Search name or code" value={search} onChange={event => setSearch(event.target.value)} /></label>
+      <button aria-label="Refresh tables and rooms" disabled={fetching || busy || isOffline || Boolean(exporting)} onClick={refresh}><FiRefreshCw />{fetching ? 'Refreshing…' : 'Refresh'}</button>
+    </div>
+    <div className="tqr-exportbar">
+      <label><input type="checkbox" aria-label="Select all assigned QR codes" checked={assigned.length > 0 && selectedTables.length === assigned.length} disabled={!assigned.length} onChange={event => setSelected(event.target.checked ? assigned.map(t => t._id) : [])} />{selectedTables.length ? `${selectedTables.length} selected` : 'Select QR codes to print'}</label>
+      <div className="tqr-actions"><button disabled={!selectedTables.length || Boolean(exporting)} onClick={() => download(selectedTables)}><FiDownload /> Download Selected PDF</button><button className="tqr-primary" disabled={!assigned.length || Boolean(exporting)} onClick={() => download(assigned)}><FiDownload /> Download All PDF</button></div>
+      {exporting && <p role="status">{exporting}</p>}
+    </div>
+    <div className="tqr-grid">
+      {visible.map(table => <article className="tqr-card" key={table._id} aria-label={tableLabel(table)}>
+        <header><div><p className="tqr-type">{table.type === 'room' ? <FiHome /> : <FiGrid />}{table.type === 'room' ? 'Room' : 'Table'}</p><h2>{tableLabel(table)}</h2></div><input type="checkbox" aria-label={`Select ${tableLabel(table)}`} disabled={!table.qrId} checked={Boolean(table.qrId) && selected.includes(table._id)} onChange={event => setSelected(current => event.target.checked ? [...current, table._id] : current.filter(id => id !== table._id))} /></header>
+        <div className="tqr-card-main">{table.qrId ? <button className="tqr-qr-preview" aria-label={`View QR for ${tableLabel(table)}`} onClick={() => setPreview(table)}><QRCodeSVG value={tableQrUrl(table.qrId)} size={116} marginSize={4} level="M" /></button> : <div className="tqr-placeholder"><FiGrid /><span>Add a QR for guests</span></div>}<div className="tqr-code-info"><span className={table.qrId ? 'tqr-badge' : 'tqr-badge tqr-unassigned'}>{table.qrId ? 'Assigned' : 'Not assigned'}</span><p className="tqr-code">{table.qrId || 'Generate, enter or scan a code.'}</p></div></div>
+        <div className="tqr-card-actions">{table.qrId ? <><button onClick={() => setPreview(table)}>View QR</button><button disabled={Boolean(exporting)} onClick={() => download([table], true)}><FiDownload /> Download QR</button><button disabled={busy || isOffline || Boolean(exporting)} onClick={() => openEditor(table.type, table, 'manual')}>Scan / Replace QR</button></> : <><button disabled={busy || isOffline || Boolean(exporting)} onClick={() => openEditor(table.type, table, 'auto')}>Generate QR</button><button disabled={busy || isOffline || Boolean(exporting)} onClick={() => { openEditor(table.type, table, 'manual'); setScanning(true); }}>Scan QR</button><button disabled={busy || isOffline || Boolean(exporting)} onClick={() => openEditor(table.type, table, 'manual')}>Enter Code</button></>}<button disabled={busy || isOffline || Boolean(exporting)} onClick={() => openEditor(table.type, table)}>Edit</button>{table.qrId && <button className="tqr-danger" disabled={busy || isOffline || Boolean(exporting)} onClick={() => { setFormError(''); setRemoving(table); }}>Remove QR</button>}</div>
+      </article>)}
+    </div>
+    {!visible.length && <div className="tqr-empty"><FiGrid /><h2>{fetching ? 'Loading tables and rooms…' : tables.length ? 'No matching tables or rooms' : 'Your first QR starts here'}</h2><p>{tables.length ? 'Try another name or filter.' : 'Add a table or room, choose its QR code and download a print-ready card.'}</p></div>}
+    {draft && <QrDialog title={draft.original ? `Edit ${tableLabel(draft.table)}` : `Add ${draft.type === 'room' ? 'Room' : 'Table'}`} busy={busy} onClose={() => setDraft(null)}>
+      <form onSubmit={save}>
+        <label>Type<select value={draft.type} disabled={busy || draft.original || Boolean(frozen)} onChange={event => updateDraft({ type: event.target.value })}><option value="table">Table</option><option value="room">Room</option></select></label>
+        <label>Name / Number<input autoFocus maxLength={80} value={draft.name} disabled={busy || Boolean(frozen)} placeholder={draft.type === 'room' ? '101' : '01'} onChange={event => updateDraft({ name: event.target.value })} required /></label>
+        {draft.original && <p className="tqr-hint">Name changes depend on server support. QR changes keep this table or room and its existing orders.</p>}
+        <fieldset disabled={busy || Boolean(qrFrozen)}><legend>QR code</legend><div className="tqr-methods">{draft.original && <button type="button" aria-pressed={draft.method === 'keep'} onClick={() => updateDraft({ method: 'keep', code: '' })}>Keep current</button>}<button type="button" aria-pressed={draft.method === 'auto'} onClick={() => updateDraft({ method: 'auto', code: '' })}>Auto Generate</button><button type="button" aria-pressed={draft.method === 'manual'} onClick={() => updateDraft({ method: 'manual', code: '' })}>Enter Code</button><button type="button" onClick={() => { updateDraft({ method: 'manual' }); setScanning(true); }}>Scan QR</button></div></fieldset>
+        {draft.method === 'manual' && <label>QR Code / Code<input value={draft.code} disabled={busy || Boolean(qrFrozen)} placeholder="Enter a code or paste a QR link" onChange={event => updateDraft({ code: event.target.value })} required /></label>}
+        {draft.method === 'auto' && <p className="tqr-note">{draft.code ? `Generated code: ${draft.code}` : 'A unique QR code will be generated and assigned when you save.'}</p>}
+        {draft.table?.qrId && draft.method !== 'keep' && <p className="tqr-note">Replacing this QR stops its old printed code from opening this table or room. Print the new code after saving.</p>}
+        {(frozen || draft.registered) && <p className="tqr-note">Your progress is saved on the server. Retry to finish assigning the QR without creating another table or room.</p>}
+        {isOffline && <p className="tqr-note">Connect to the internet to save. This change has not been queued.</p>}
+        {formError && <p className="tqr-error" role="alert">{formError}</p>}
+        <footer><button type="button" disabled={busy} onClick={() => setDraft(null)}>Close</button><button className="tqr-primary" type="submit" disabled={busy || isOffline || Boolean(exporting)}>{busy ? 'Saving…' : formError ? 'Retry Save' : 'Save'}</button></footer>
+      </form>
+    </QrDialog>}
+    {scanning && draft && <Suspense fallback={<QrDialog title="Opening camera" onClose={() => setScanning(false)}><p role="status">Loading scanner…</p></QrDialog>}><QrScannerDialog onClose={() => setScanning(false)} onConfirm={code => { updateDraft({ method: 'manual', code, codeNormalized: true }); setScanning(false); }} /></Suspense>}
+    {preview && <QrDialog title={tableLabel(preview)} onClose={() => setPreview(null)}><div className="tqr-full-preview"><QRCodeSVG value={tableQrUrl(preview.qrId)} size={300} marginSize={4} level="M" /><strong>Scan to View Menu</strong><p className="tqr-code">{preview.qrId}</p></div><footer><a href={tableQrUrl(preview.qrId)} target="_blank" rel="noreferrer">Open Menu</a><button className="tqr-primary" disabled={Boolean(exporting)} onClick={() => download([preview], true)}>Download QR</button></footer></QrDialog>}
+    {removing && <QrDialog title="Remove QR assignment" busy={busy} onClose={() => setRemoving(null)}><p>Remove the QR from <strong>{tableLabel(removing)}</strong>? Its printed code will no longer open this table or room. The table or room and its orders stay saved.</p>{formError && <p className="tqr-error" role="alert">{formError}</p>}<footer><button disabled={busy} onClick={() => setRemoving(null)}>Cancel</button><button className="tqr-danger" disabled={busy || isOffline || Boolean(exporting)} onClick={remove}>{busy ? 'Removing…' : 'Confirm Remove QR'}</button></footer></QrDialog>}
+  </section>;
 }

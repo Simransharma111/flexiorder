@@ -43,7 +43,7 @@ test("owner primary tabs are one tap away on narrow screens and retain the deskt
 test("More keeps secondary tools reachable and correctly marks their active group", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await openOwner(page);
-  for (const destination of ["Settings", "Themes", "Analytics", "Staff", "QR Tables", "QR Inventory", "About Us"]) {
+  for (const destination of ["Settings", "Themes", "Analytics", "Staff", "Tables & Rooms", "About Us"]) {
     await primaryNav(page).getByRole("button", { name: "More" }).click();
     await moreMenu(page).getByRole("button", { name: destination, exact: true }).click();
     await expect(moreMenu(page)).toHaveCount(0);

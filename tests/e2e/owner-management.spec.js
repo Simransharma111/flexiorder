@@ -311,7 +311,7 @@ test("Simple app level hides optional owner controls immediately", async ({ page
   }
   await expect(page.getByRole("button", { name: "Staff", exact: true })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Analytics", exact: true })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "QR Tables", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Tables & Rooms", exact: true })).toBeVisible();
 });
 
 test("God Mode defaults off and owner-saved values survive reload", async ({ page }) => {

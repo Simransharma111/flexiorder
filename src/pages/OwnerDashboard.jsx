@@ -7,7 +7,6 @@ import {
 
 import {
   FiBarChart2,
-  FiBox,
   FiPackage,
   FiDroplet,
   FiSettings,
@@ -37,7 +36,6 @@ import TableQRManager from "../components/TableQRManager";
 import AnalyticsDashboard from "../components/AnalyticsDashboard";
 import StaffManager from "../components/StaffManager";
 import OwnerHotelSettings from "./OwnerHotelSettings";
-import QRInventoryPage from "./QRInventoryPage";
 
 import HOTEL_THEMES from "../constants/hotelThemes";
 import { mergeOrders, orderBelongsToHotel, reconcileAuthoritativeOrders } from "../utils/orderModel";
@@ -98,7 +96,7 @@ startsMore:true
 
 {
 key:"tables",
-label:"QR Tables",
+label:"Tables & Rooms",
 icon:FiTable,
 feature:"qrTables"
 },
@@ -108,13 +106,6 @@ key:"analytics",
 label:"Analytics",
 icon:FiBarChart2,
 feature:"analytics"
-},
-
-{
-key:"inventory",
-label:"QR Inventory",
-icon:FiBox,
-feature:"qrInventory"
 }
 
 ];
@@ -855,12 +846,7 @@ activeTab==="settings" &&
 
 }
 
-{
-activeTab==="inventory" &&
 
-<QRInventoryPage />
-
-}
 
 
 
