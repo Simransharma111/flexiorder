@@ -126,8 +126,8 @@ export const buildMenuPrintModel = ({
       name: cleanText(dish.name) || "Unnamed dish",
       description: cleanText(dish.description),
       image: cleanText(dish.image),
-      dietary: ["veg", "vegetarian"].includes(foodType) ? "Veg" :
-        ["nonveg", "nonvegetarian"].includes(foodType) ? "Non-veg" : "",
+      dietary: ["nonveg", "nonvegetarian"].includes(foodType) ? "Non-veg" :
+        ["egg", "eggetarian"].includes(foodType) ? "Egg" : "",
       price: pricing.finalPrice,
       basePrice: pricing.basePrice,
       hasDiscount: pricing.hasDiscount,

@@ -108,3 +108,16 @@ it("does not let a hidden dish change the visible menu subcategory order", () =>
  ]});
  expect(model.sections[0].dishes.map(d=>d.id)).toEqual(["cold","hot"]);
 });
+
+
+it("prints only non-veg and egg labels without changing saved food types", () => {
+  const foodTypes = ["veg", "Vegetarian", "non-veg", "non vegetarian", "Egg", "eggetarian", ""];
+  const dishes = foodTypes.map((foodType, index) => ({
+    _id: String(index), name: `Dish ${index}`, foodType, price: 100,
+  }));
+  const before = structuredClone(dishes);
+  const model = buildMenuPrintModel({ dishes });
+  expect(model.sections.flatMap(section => section.dishes.map(dish => dish.dietary)))
+    .toEqual(["", "", "Non-veg", "Non-veg", "Egg", "Egg", ""]);
+  expect(dishes).toEqual(before);
+});

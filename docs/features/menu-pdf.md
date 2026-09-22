@@ -11,3 +11,5 @@ Rows pair a strong dish name with a right-aligned price inside a warm shaded pan
 Every page has a visible FlexiOrder emblem/wordmark and page number. Footer snapshot timestamps, raw QR URLs and duplicate contact details have been removed. Contacts remain in the first header and cover; metadata too long to fit safely is preserved in a paginated Restaurant details section. The PDF still uses raster artwork for device-native multilingual rendering; text is not selectable and font coverage depends on the device.
 
 Validation: model normalization and measured pagination regression tests cover all four supported paper/layout combinations, long names and descriptions, large prices, oversized single combo strings, complete print notes, and unavailable photos. Real-browser visual and download checks complement these geometry tests.
+
+PDF dietary labels show only Non-veg or Egg from the saved food type. Vegetarian dishes have no repeated label or reserved label row. The Non-veg and egg labels option controls both labels. Saved dish classifications are unchanged.

@@ -274,7 +274,7 @@ const rowGeometry = (ctx, dish, model, width, d, images) => {
   }));
   const append = (text, color = "#58554d", weight = 450) => bands.push(...lines(text, inner - imageWidth, .72, weight, color)
     .map((left) => ({ left, height: left.height })));
-  if (model.settings.includeDietary && dish.dietary) append(dish.dietary, dish.dietary === "Veg" ? "#24693d" : "#993c2b", 650);
+  if (model.settings.includeDietary && dish.dietary) append(dish.dietary, dish.dietary === "Egg" ? "#805313" : "#993c2b", 650);
   if (model.settings.includeDescriptions && dish.description) append(dish.description);
   if (dish.combo) {
     if (dish.combo.included.length) append(`Included: ${dish.combo.included.join(", ")}`);
