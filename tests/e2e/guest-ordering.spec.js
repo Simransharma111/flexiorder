@@ -359,3 +359,63 @@ test.describe("customer QR ordering", () => {
     await expect(page.getByRole("button", { name: "Add" })).toHaveCount(0);
   });
 });
+
+test('a cached menu appears before a slow network reply but stays view-only until confirmed', async ({ page }) => {
+  await mockGuestMenu(page);
+  await page.addInitScript(({ hotel, table, dishes }) => {
+    localStorage.setItem('guestMenu_qr-123', JSON.stringify({ hotel, table, dishes }));
+  }, { hotel, table, dishes: [{ _id: 'cached-dish', name: 'Cached lunch', price: 100, isAvailable: true }] });
+  let release; const gate = new Promise(resolve => { release = resolve; });
+  await page.route('**/qr/menu/qr-123', async route => {
+    await gate;
+    await fulfillJson(route, { hotel, table, dishes: [{ _id: 'fresh-dish', name: 'Fresh lunch', price: 120, isAvailable: true }] });
+  });
+  await page.goto('/qr/qr-123');
+  await expect(page.getByText('Cached lunch', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Add Cached lunch', exact: true })).toHaveCount(0);
+  await expect(page.getByText('Loading menu...', { exact: true })).toHaveCount(0);
+  release();
+  await expect(page.getByRole('button', { name: 'Add Fresh lunch', exact: true })).toBeVisible();
+});
+
+test('a stalled menu request times out with retry instead of an endless loading screen', async ({ page }) => {
+  await mockGuestMenu(page);
+  await page.clock.install();
+  let received = false;
+  let release; const gate = new Promise(resolve => { release = resolve; });
+  await page.route('**/qr/menu/qr-123', async route => {
+    received = true; await gate;
+    await fulfillJson(route, { hotel, table, dishes: [] }).catch(() => {});
+  });
+  await page.goto('/qr/qr-123');
+  await expect.poll(() => received).toBe(true);
+  await page.clock.runFor(21000);
+  await expect(page.getByText('The menu is taking longer than expected. Please retry.', { exact: true })).toBeVisible({ timeout: 25000 });
+  await expect(page.getByText('Loading menu...', { exact: true })).toHaveCount(0);
+  release();
+});
+
+test('a full browser cache does not discard a successfully loaded menu', async ({ page }) => {
+  await mockGuestMenu(page);
+  await page.addInitScript(() => {
+    const write = Storage.prototype.setItem;
+    Storage.prototype.setItem = function(key, value) {
+      if (key.startsWith('guestMenu_')) throw new DOMException('Storage full', 'QuotaExceededError');
+      return write.call(this, key, value);
+    };
+  });
+  await page.goto('/qr/qr-123');
+  await expect(page.getByRole('button', { name: 'Add Paneer Tikka', exact: true })).toBeVisible();
+  await expect(page.getByText('Menu unavailable', { exact: true })).toHaveCount(0);
+});
+
+test('an authoritative invalid QR response does not revive its old cached menu', async ({ page }) => {
+  await mockGuestMenu(page);
+  await page.addInitScript(({ hotel, table }) => {
+    localStorage.setItem('guestMenu_qr-123', JSON.stringify({ hotel, table, dishes: [{ _id: 'cached-dish', name: 'Old menu', price: 100 }] }));
+  }, { hotel, table });
+  await page.route('**/qr/menu/qr-123', route => fulfillJson(route, { message: 'This QR code is not assigned to any table or room' }, 404));
+  await page.goto('/qr/qr-123');
+  await expect(page.getByRole('heading', { name: 'Menu unavailable', exact: true })).toBeVisible();
+  await expect(page.getByText('Old menu', { exact: true })).toHaveCount(0);
+});

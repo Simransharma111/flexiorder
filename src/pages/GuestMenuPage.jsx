@@ -70,6 +70,7 @@ const { isOnline } = useConnectivity();
 const [hotel,setHotel]=useState(null);
 const [orderingConfirmed,setOrderingConfirmed]=useState(false);
 const menuRequestRevision=useRef(0);
+const menuFetchInFlight=useRef(null);
 const categoryCatalogRef=useRef(new Map());
 
 const hotelId = hotel?._id || hotel?.id;
@@ -173,23 +174,44 @@ const [comboDish, setComboDish] = useState(null);
 
 const fetchMenu=useCallback(async({ silent = false } = {})=>{
 
+// Polling and socket reconnects share the current request instead of
+// superseding a slow first load every 30 seconds.
+if (menuFetchInFlight.current?.qrId === qrId) return;
+const requestToken = { qrId };
+menuFetchInFlight.current = requestToken;
 const cacheKey = `guestMenu_${qrId}`;
+const saveCache = value => {
+  try { localStorage.setItem(cacheKey, JSON.stringify(value)); }
+  catch { /* A full/blocked cache must not discard a successful live menu. */ }
+};
 const requestRevision = ++menuRequestRevision.current;
 
 try{
 
-if (!silent) setLoading(true);
-
-setError("");
+if (!silent) {
+  setLoading(true);
+  setError("");
+  try {
+    const cached = JSON.parse(localStorage.getItem(cacheKey) || "null");
+    if (cached?.hotel && Array.isArray(cached?.dishes)) {
+      setHotel(cached.hotel);
+      setTable(cached.table || null);
+      setDishes(normalizeMenuResponse(cached.dishes) || []);
+      setOrderingConfirmed(false);
+      setLoading(false);
+    }
+  } catch { /* Fresh data still loads if caching is unavailable. */ }
+}
 
 
 const res=await api.get(
 `/qr/menu/${encodeURIComponent(qrId)}`,
-{skipAuth:true}
+{skipAuth:true, timeout:20000}
 );
 
 
 if (requestRevision === menuRequestRevision.current) {
+setError("");
 const freshHotel = res.data?.hotel || null;
 const rawDishes = res.data?.dishes || [];
 
@@ -210,9 +232,9 @@ rawDishes,
 catalogRes.data
 ));
 setDishes(enriched);
-localStorage.setItem(cacheKey, JSON.stringify({
+saveCache({
   hotel: freshHotel, table: res.data?.table || null, dishes: enriched,
-}));
+});
 }).catch(catalogError => {
 console.log("CATEGORY CATALOG ERROR", catalogError);
 });
@@ -229,14 +251,11 @@ setOrderingConfirmed(Boolean(
 ));
 setTable(res.data?.table || null);
 setDishes(freshDishes);
-localStorage.setItem(
-cacheKey,
-JSON.stringify({
+saveCache({
 hotel: res.data?.hotel || null,
 table: res.data?.table || null,
 dishes: freshDishes,
-})
-);
+});
 }
 
 
@@ -250,11 +269,12 @@ err
 );
 
 if (requestRevision !== menuRequestRevision.current) return;
+setOrderingConfirmed(false);
 
 try {
 const cached = JSON.parse(localStorage.getItem(cacheKey) || "null");
 
-if (cached?.dishes) {
+if ((!err.response || err.response.status >= 500) && Array.isArray(cached?.dishes)) {
 if (requestRevision === menuRequestRevision.current) {
 setHotel(cached.hotel || null);
 setOrderingConfirmed(false);
@@ -269,7 +289,7 @@ console.warn("CACHED MENU ERROR", cacheError);
 }
 
 setError(
-err?.response?.data?.message ||
+(err?.code === "ECONNABORTED" ? "The menu is taking longer than expected. Please retry." : err?.response?.data?.message) ||
 "Unable to load menu"
 );
 
@@ -277,7 +297,8 @@ err?.response?.data?.message ||
 }
 finally{
 
-if (!silent && requestRevision === menuRequestRevision.current) setLoading(false);
+if (menuFetchInFlight.current === requestToken) menuFetchInFlight.current = null;
+if (requestRevision === menuRequestRevision.current) setLoading(false);
 
 }
 
