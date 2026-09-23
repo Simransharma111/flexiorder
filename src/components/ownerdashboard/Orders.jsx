@@ -32,6 +32,9 @@ import { flushSync } from "react-dom";
 import { buildOrderReceipt } from "../../utils/orderReceipt";
 
 export default function Orders({
+  initialView = "active",
+  onViewChange,
+  preserveView = false,
   orders = [],
   refresh,
   onOrdersChange,
@@ -41,7 +44,7 @@ export default function Orders({
 }) {
   const { syncKitchenNow } = useSync();
   const { isOnline } = useConnectivity();
-  const [activeView, setActiveView] = useState("active");
+  const [activeView, setActiveView] = useState(initialView);
   const [search, setSearch] = useState("");
   const [historyActionOrder, setHistoryActionOrder] = useState(null);
   const [historyActionOpenedAt, setHistoryActionOpenedAt] = useState(0);
@@ -87,11 +90,11 @@ export default function Orders({
   const prevPendingCountRef = useRef(0);
   useEffect(() => {
     const pendingCount = localOrders.filter(o => o.status === "pending").length;
-    if (pendingCount > prevPendingCountRef.current) {
+    if (!preserveView && pendingCount > prevPendingCountRef.current) {
       setActiveView("active");
     }
     prevPendingCountRef.current = pendingCount;
-  }, [localOrders]);
+  }, [localOrders, preserveView]);
 
   const publishOrders = useCallback((updater) => {
     setLocalOrders((current) => {
@@ -308,8 +311,8 @@ export default function Orders({
     <section className="ops-waiter-orders">
       <div className="ops-orders-toolbar">
         <div className="ops-orders-switch" role="tablist" aria-label="Order views">
-          <button type="button" role="tab" aria-selected={activeView === "active"} className={activeView === "active" ? "is-active" : ""} onClick={() => setActiveView("active")}>Active</button>
-          <button type="button" role="tab" aria-selected={activeView === "history"} className={activeView === "history" ? "is-active" : ""} onClick={() => setActiveView("history")}>History</button>
+          <button type="button" role="tab" aria-selected={activeView === "active"} className={activeView === "active" ? "is-active" : ""} onClick={() => { setActiveView("active"); onViewChange?.("active"); }}>Active</button>
+          <button type="button" role="tab" aria-selected={activeView === "history"} className={activeView === "history" ? "is-active" : ""} onClick={() => { setActiveView("history"); onViewChange?.("history"); }}>History</button>
         </div>
         {allowBulkDelivery && activeView === "active" && !bulkSnapshotIds && (
           <button

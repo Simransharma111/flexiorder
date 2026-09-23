@@ -38,7 +38,7 @@ import StaffManager from "../components/StaffManager";
 import OwnerHotelSettings from "./OwnerHotelSettings";
 
 import HOTEL_THEMES from "../constants/hotelThemes";
-import { mergeOrders, orderBelongsToHotel, reconcileAuthoritativeOrders } from "../utils/orderModel";
+import { matchesOrderId, mergeOrders, orderBelongsToHotel, reconcileAuthoritativeOrders } from "../utils/orderModel";
 import { getPendingKitchenUpdates } from "../utils/offlineKitchenUpdates";
 import { clearAuthSession, getStoredAuthToken } from "../utils/session";
 import { getHotelThemeStyle } from "../utils/hotelTheme";
@@ -54,7 +54,7 @@ const NAV_ITEMS = [
 
 {
 key:"home",
-label:"Today",
+label:"Home",
 icon:FiBarChart2,
 feature:"today"
 },
@@ -129,6 +129,22 @@ try{const cached=JSON.parse(localStorage.getItem(getScopedStorageKey(ORDERS_CACH
 
 const [activeTab,setActiveTab]=useState("home");
 
+const [ordersView,setOrdersView]=useState("active");
+const [historyOrders,setHistoryOrders]=useState([]);
+const [historyLoading,setHistoryLoading]=useState(false);
+const [historyError,setHistoryError]=useState("");
+const [settingsSection,setSettingsSection]=useState(null);
+const [orderingBusy,setOrderingBusy]=useState(false);
+const [orderingReady,setOrderingReady]=useState(false);
+const [orderingError,setOrderingError]=useState("");
+const orderingInFlight=useRef(false);
+const hotelRevision=useRef(0);
+const lastOrderingEvent=useRef(null);
+const hotelRead=useRef(0);
+const historyRead=useRef(0);
+const latestHotelTime=useRef(0);
+const alive=useRef(true);
+useEffect(() => { alive.current=true; return () => { alive.current=false; }; }, []);
 const [sidebarOpen,setSidebarOpen]=useState(false);
 const drawerRef = useRef(null);
 
@@ -174,15 +190,22 @@ FETCH HOTEL
 */
 
 const fetchHotel=async()=>{
-
+const token=getStoredAuthToken();
+const revision=hotelRevision.current;
+const read=++hotelRead.current;
 try{
 
 const res=await api.get(
 "/hotel/me"
 );
 
+if (!alive.current || token !== getStoredAuthToken() || revision !== hotelRevision.current || read !== hotelRead.current || orderingInFlight.current) return;
 const nextHotel=hydrateHotelFeatures(res.data?.hotel || res.data);
+setOrderingReady(typeof nextHotel?.orderingEnabled === "boolean");
 rememberRestaurantId(nextHotel);
+const timestamp=Date.parse(nextHotel?.updatedAt) || 0;
+if (timestamp && timestamp < latestHotelTime.current) return;
+latestHotelTime.current=Math.max(latestHotelTime.current, timestamp);
 setHotel(nextHotel);
 localStorage.setItem(getScopedStorageKey(HOTEL_CACHE_KEY),JSON.stringify(nextHotel));
 
@@ -190,6 +213,7 @@ localStorage.setItem(getScopedStorageKey(HOTEL_CACHE_KEY),JSON.stringify(nextHot
 }
 catch(error){
 
+if (!alive.current || token !== getStoredAuthToken() || revision !== hotelRevision.current || orderingInFlight.current) return;
 console.log(
 "Hotel error",
 error
@@ -352,6 +376,13 @@ useEffect(() => {
 
   const joinSettings = () => socket.emit("joinHotelSettings", String(ownerHotelId));
   const handleSettingsUpdate = (payload) => {
+    if (String(payload?.hotelId || payload?.hotel?._id || payload?.hotel?.id || payload?._id || payload?.id || "") !== String(ownerHotelId)) return;
+    const timestamp=Date.parse(payload?.updatedAt || payload?.hotel?.updatedAt) || 0;
+    if (timestamp && timestamp < latestHotelTime.current) return;
+    latestHotelTime.current=Math.max(latestHotelTime.current, timestamp);
+    hotelRevision.current++;
+    const ordering = payload?.orderingEnabled ?? payload?.hotel?.orderingEnabled;
+    if (typeof ordering === "boolean") lastOrderingEvent.current = { revision: hotelRevision.current, value: ordering };
     setHotel((current) => applyHotelSettingsUpdate(current, payload));
   };
 
@@ -500,28 +531,65 @@ orders
 
 
 
+const fetchHistory=async()=>{
+  const read=++historyRead.current;
+  const token=getStoredAuthToken();
+  setHistoryLoading(true); setHistoryError("");
+  try {
+    const res=await api.get("/orders", { timeout: 20000 });
+    if (!alive.current || token !== getStoredAuthToken() || read !== historyRead.current) return;
+    const rows=res.data?.orders || res.data;
+    if (!Array.isArray(rows)) throw new Error("Could not read order history.");
+    setHistoryOrders(rows);
+  } catch (error) {
+    if (alive.current && token === getStoredAuthToken() && read === historyRead.current) setHistoryError(error.response?.data?.message || "Could not load complete history. Check your connection and retry.");
+  } finally { if (alive.current && token === getStoredAuthToken() && read === historyRead.current) setHistoryLoading(false); }
+};
 const changeTab=(tab)=>{
-
-
-setActiveTab(tab);
-
-setSidebarOpen(false);
-
-
-if(
-tab==="orders"
-){
-
-setNewOrderCount(0);
-
-}
-
-
+  setActiveTab(tab); setSidebarOpen(false);
+  if(tab === "orders") { setOrdersView("active"); setNewOrderCount(0); }
+  if(tab === "settings") setSettingsSection(null);
+};
+const openHistory=()=>{
+  setOrdersView("history"); setActiveTab("orders"); setSidebarOpen(false);
+  void fetchHistory();
+};
+const toggleOrdering=async()=>{
+  if (!orderingReady || orderingInFlight.current || !navigator.onLine) {
+    if (!navigator.onLine) setOrderingError("Connect to the internet to change customer ordering.");
+    return;
+  }
+  const token=getStoredAuthToken();
+  const hotelId=String(hotel?._id || hotel?.id);
+  const value=hotel.orderingEnabled === false;
+  orderingInFlight.current=true; hotelRevision.current++;
+  setOrderingBusy(true); setOrderingError("");
+  const valid=()=>alive.current && token === getStoredAuthToken();
+  try {
+    await api.patch("/hotel/profile", { orderingEnabled:value }, { timeout: 15000 });
+    if (!valid()) return;
+    const revision=hotelRevision.current;
+    const result=await api.get("/hotel/me", { timeout: 15000 });
+    if (!valid()) return;
+    const confirmed=result.data?.hotel || result.data;
+    if (lastOrderingEvent.current?.revision > revision && lastOrderingEvent.current.value !== confirmed?.orderingEnabled) throw new Error("Ordering changed on another device. Refresh to check its current status.");
+    if (String(confirmed?._id || confirmed?.id) !== hotelId || typeof confirmed.orderingEnabled !== "boolean") throw new Error("The server did not confirm ordering status. Refresh before trying again.");
+    const timestamp=Date.parse(confirmed.updatedAt) || 0;
+    if (timestamp && timestamp < latestHotelTime.current) throw new Error("A newer ordering status was received. Refresh to confirm it.");
+    latestHotelTime.current=Math.max(latestHotelTime.current, timestamp);
+    setHotel(current => ({ ...current, orderingEnabled:confirmed.orderingEnabled, updatedAt:confirmed.updatedAt || current?.updatedAt }));
+    if (confirmed.orderingEnabled !== value) throw new Error("The server kept a different ordering status. Please review and retry.");
+  } catch(error) {
+    if (valid()) setOrderingError(error.response?.data?.message || error.message || "Could not change ordering. Please retry.");
+  } finally {
+    orderingInFlight.current=false;
+    if (valid()) setOrderingBusy(false);
+  }
 };
 
 const featureSettings = getFeatureSettings(hotel);
 const navItems = NAV_ITEMS.filter((item) =>
-  featureEnabled(featureSettings.appLevel, item.feature)
+  item.key === "analytics" || featureEnabled(featureSettings.appLevel, item.feature)
 );
 
 
@@ -530,6 +598,7 @@ const navItems = NAV_ITEMS.filter((item) =>
 
 
 const refresh=()=>{
+if (activeTab === "orders" && ordersView === "history") void fetchHistory();
 
 setRefreshKey(
 v=>v+1
@@ -672,6 +741,8 @@ className="owner-main"
 
 
 <Header
+onMore={() => setSidebarOpen(true)}
+moreOpen={sidebarOpen}
 
 hotel={hotel}
 
@@ -708,6 +779,9 @@ className="owner-content"
 activeTab==="home" &&
 
 <DashboardHome
+onOrderingToggle={toggleOrdering} orderingBusy={orderingBusy} orderingReady={orderingReady} orderingError={orderingError}
+onEditBranding={() => { setSettingsSection("branding"); setActiveTab("settings"); }}
+onHistory={openHistory}
 allowedTabs={navItems.map(item => item.key)}
 
 stats={stats}
@@ -732,15 +806,30 @@ accentColor={accentColor}
 {
 activeTab==="orders" &&
 
+<>
+{ordersView === "history" && historyLoading && <p role="status">Loading complete order history…</p>}
+{ordersView === "history" && historyError && <div role="alert">{historyError} <button type="button" onClick={fetchHistory}>Retry history</button></div>}
 <Orders
+key={ordersView}
+initialView={ordersView}
+preserveView
+onViewChange={view => { setOrdersView(view); if (view === "history") void fetchHistory(); }}
+orders={ordersView === "history" ? mergeOrders(historyOrders, orders) : orders}
 
-orders={orders}
-
-refresh={fetchOrders}
+refresh={ordersView === "history" ? fetchHistory : fetchOrders}
 
 onOrdersChange={(next)=>{
-setOrders(next);
-localStorage.setItem(getScopedStorageKey(ORDERS_CACHE_KEY),JSON.stringify(next));
+// Keep complete historical snapshots separate from the dashboard's working set.
+// Corrections to known orders and newly reopened work still reach the active board.
+if (ordersView === "history") setHistoryOrders(next);
+const working = ordersView === "history" ? mergeOrders(orders, next.filter(order =>
+  !["delivered", "cancelled"].includes(order.status) || orders.some(current =>
+    matchesOrderId(current, order._id) || matchesOrderId(current, order.clientOrderId)
+  )
+)) : next;
+setOrders(working);
+try { localStorage.setItem(getScopedStorageKey(ORDERS_CACHE_KEY), JSON.stringify(working)); }
+catch { /* Keep accepted updates visible when device storage is full. */ }
 }}
 
 loading={loadingOrders}
@@ -752,7 +841,7 @@ hotel={hotel}
 primaryColor={primaryColor}
 
 />
-
+</>
 }
 
 
@@ -842,7 +931,7 @@ activeTab==="about" &&
 {
 activeTab==="settings" &&
 
-<OwnerHotelSettings onHotelChange={setHotel}/>
+<OwnerHotelSettings initialSection={settingsSection} onHotelChange={setHotel}/>
 
 }
 

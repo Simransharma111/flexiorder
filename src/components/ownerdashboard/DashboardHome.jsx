@@ -1,6 +1,7 @@
 import { FiAlertCircle, FiCheckCircle, FiClock, FiCreditCard, FiShoppingBag, FiGlobe, FiMapPin } from "react-icons/fi";
 
 export default function DashboardHome({
+  onOrderingToggle, orderingBusy, orderingError, orderingReady, onEditBranding, onHistory,
   stats,
   hotel,
   setActiveTab,
@@ -65,11 +66,13 @@ export default function DashboardHome({
             )}
           </div>
           <div className="owner-hero-status">
-            {hotel?.orderingEnabled !== false ? (
-              <span className="status-pill is-active">Ordering Enabled</span>
-            ) : (
-              <span className="status-pill is-paused">Ordering Paused</span>
-            )}
+            <button type="button" className="owner-branding-button" onClick={onEditBranding}>Edit Branding</button>
+            <button type="button" className={`status-pill ${hotel?.orderingEnabled === false ? "is-paused" : "is-active"}`}
+              title="Controls guest QR ordering. Staff orders remain available." disabled={orderingBusy || !orderingReady} onClick={onOrderingToggle}
+              aria-label={hotel?.orderingEnabled === false ? "Ordering Paused — resume customer ordering" : "Ordering Active — pause customer ordering"}>
+              {orderingBusy ? "Saving…" : !orderingReady ? "Checking ordering…" : hotel?.orderingEnabled === false ? "Ordering Paused" : "Ordering Active"}
+            </button>
+            {orderingError && <p role="alert">{orderingError}</p>}
           </div>
         </div>
       </div>
@@ -91,6 +94,7 @@ export default function DashboardHome({
       </div>
 
       <div className="owner-daily-actions">{allowedTabs.includes("orders") && <button type="button" className="owner-accent-bg" onClick={() => setActiveTab?.("orders")}>View orders</button>}{allowedTabs.includes("menu") && <button type="button" onClick={() => setActiveTab?.("menu")}>Manage menu</button>}</div>
+      <button type="button" className="owner-history-shortcut" onClick={onHistory}><strong>Order History</strong><span>View all previous orders</span></button>
       <div className="owner-metrics">
         {metrics.map((item) => {
           const Icon = item.icon;

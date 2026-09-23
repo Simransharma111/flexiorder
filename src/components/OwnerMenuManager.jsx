@@ -1,3 +1,4 @@
+import LiveMenuLink from "./menu/LiveMenuLink";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import api from "../api/axios";
 import { sortDishesForDisplay } from "../utils/menuOrdering";
@@ -668,6 +669,7 @@ const resolvedFields = {
         </div>
 
         <div className="flex flex-wrap gap-2">
+          <LiveMenuLink />
           <button
             type="button"
             onClick={openAddForm}

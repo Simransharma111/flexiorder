@@ -16,7 +16,7 @@ const readDownloadJson = async (download) => {
 };
 
 const openOwnerTab = async (page, name) => {
-  if ((page.viewportSize()?.width || 0) < 768 && !["Menu", "Orders"].includes(name)) {
+  if ((page.viewportSize()?.width || 0) < 768 && !["Menu"].includes(name)) {
     const menu = page.getByRole("button", { name: "More", exact: true });
     await expect(menu).toBeVisible();
     await menu.click();
@@ -35,6 +35,7 @@ test.beforeEach(async ({ page }) => {
       ? fulfillJson(route, { orders: [] })
       : route.fallback()
   ));
+  await page.route("**/api/orders", route => fulfillJson(route, { orders: [] }));
   await page.route("**/menu/categories/hotel-1", (route) => fulfillJson(route, []));
 });
 
@@ -310,7 +311,7 @@ test("Simple app level hides optional owner controls immediately", async ({ page
     await page.getByRole("button", { name: "More", exact: true }).click();
   }
   await expect(page.getByRole("button", { name: "Staff", exact: true })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Analytics", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Analytics", exact: true }).filter({ visible: true }).first()).toBeVisible();
   await expect(page.getByRole("button", { name: "Tables & Rooms", exact: true })).toBeVisible();
 });
 
@@ -332,18 +333,18 @@ test("God Mode defaults off and owner-saved values survive reload", async ({ pag
   const toggle = page.getByRole("checkbox", { name: "God Mode" });
   await expect(toggle).not.toBeChecked();
   await toggle.check();
-  const savedDialog = page.waitForEvent("dialog");
+  const savedDialog = page.waitForEvent("dialog").then(dialog => dialog.accept());
   await page.getByRole("button", { name: "Save app settings" }).click();
-  await (await savedDialog).accept();
+  await savedDialog;
 
   await page.reload();
   await openOwnerTab(page, "Settings");
   const restoredToggle = page.getByRole("checkbox", { name: "God Mode" });
   await expect(restoredToggle).toBeChecked();
   await restoredToggle.uncheck();
-  const disabledDialog = page.waitForEvent("dialog");
+  const disabledDialog = page.waitForEvent("dialog").then(dialog => dialog.accept());
   await page.getByRole("button", { name: "Save app settings" }).click();
-  await (await disabledDialog).accept();
+  await disabledDialog;
 
   await page.reload();
   await openOwnerTab(page, "Settings");

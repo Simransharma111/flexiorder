@@ -39,8 +39,8 @@ export function validateAssignment(code, tables, tableId, codeNormalized = false
   return value;
 }
 
-export const readTables = async api => {
-  const response = await api.get('/table');
+export const readTables = async (api, config) => {
+  const response = await api.get('/table', config);
   if (!Array.isArray(response.data?.tables)) throw new Error('The table list could not be read. Refresh and try again.');
   return response.data.tables;
 };

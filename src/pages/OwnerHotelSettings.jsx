@@ -68,13 +68,22 @@ const confirmsSettings = (hotel, submitted) => (
 
 
 
-export default function OwnerHotelSettings({ onHotelChange }){
+export default function OwnerHotelSettings({ onHotelChange, initialSection }){
 
 const navigate=useNavigate();
+const brandingRef=useRef(null);
+const brandingOpened=useRef(false);
 
 
 const [hotel,setHotel]=useState(null);
 
+useEffect(() => {
+  if (hotel && initialSection === "branding" && !brandingOpened.current) {
+    brandingOpened.current = true;
+    brandingRef.current?.scrollIntoView({ block: "start" });
+    brandingRef.current?.focus({ preventScroll: true });
+  }
+}, [hotel, initialSection]);
 const [loading,setLoading]=useState(false);
 const [orderingLoading,setOrderingLoading]=useState(false);
 const orderingRequestRevision=useRef(0);
@@ -648,7 +657,7 @@ space-y-8
 
 
 
-<section className="
+<section ref={brandingRef} tabIndex={-1} aria-label="Edit restaurant branding" className="
 bg-white/10
 border
 border-white/20

@@ -1045,3 +1045,42 @@ test("cached dishes retain filter recovery after a failed refresh", async ({ pag
   await page.getByRole('button', { name: 'Clear dish filters' }).click();
   await expect(page.getByRole('button', { name: 'Add Paneer Tikka' })).toBeVisible();
 });
+
+test("waiter takeaway stays tableless through offline retry, saved history and receipt", async ({ page, context }) => {
+  await installSession(page, "staff");
+  await mockStaffWorkspace(page);
+  const submitted = [];
+  let saved;
+  await page.route("**/api/orders", route => {
+    const body = route.request().postDataJSON();
+    submitted.push(body);
+    saved = kitchenOrder({ _id: "saved-takeaway", clientOrderId: body.clientOrderId, orderType: body.orderType, tableId: body.tableId, status: "delivered", totalAmount: 283.5 });
+    return fulfillJson(route, { success: true, order: saved }, 201);
+  });
+  await page.goto("/owner/order");
+  await page.getByRole("tab", { name: "Take Order" }).click();
+  await expect(page.getByRole("button", { name: "Place Order", exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "Takeaway order", exact: true }).click();
+  await page.getByRole("button", { name: "Add Paneer Tikka" }).click();
+  await context.setOffline(true);
+  await page.getByRole("button", { name: "Place Order", exact: true }).click();
+  const queued = await page.evaluate(() => {
+    const key = Object.keys(localStorage).find(key => key.startsWith("flexiorder_pending_staff_orders:"));
+    return JSON.parse(localStorage.getItem(key) || "[]");
+  });
+  expect(queued).toHaveLength(1);
+  expect(queued[0].payload).toMatchObject({ tableId: null, orderType: "takeaway" });
+  expect(queued[0].payload.clientOrderId).toBeTruthy();
+  await context.setOffline(false);
+  await expect.poll(() => submitted.length).toBe(1);
+  expect(submitted[0]).toMatchObject({ tableId: null, orderType: "takeaway", clientOrderId: queued[0].payload.clientOrderId });
+  await page.route("**/kitchen/orders", route => fulfillJson(route, { orders: [saved] }));
+  await page.reload();
+  await page.getByRole("tab", { name: "History", exact: true }).click();
+  await page.getByRole("button", { name: "More options for Takeaway" }).click();
+  await page.getByRole("button", { name: "View full details" }).click();
+  const details = page.getByRole("dialog", { name: "Order details for Takeaway" });
+  await expect(details).toBeVisible();
+  await expect(details.getByRole("button", { name: "Download PDF" })).toBeVisible();
+  await expect(details).toContainText("283.50");
+});

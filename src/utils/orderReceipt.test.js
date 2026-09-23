@@ -8,6 +8,12 @@ import {
 } from "./orderReceipt";
 
 describe("order receipt", () => {
+  it("labels a tableless takeaway receipt and preserves its billed total", () => {
+    const receipt = buildOrderReceipt({ _id: "takeaway", orderType: "takeaway", tableId: null, roomNumber: null, status: "delivered", totalAmount: 283.5, items: [{ name: "Paneer", quantity: 1, price: 270 }] });
+    expect(receipt.order.location).toBe("Takeaway");
+    expect(receipt.financials.total).toBe(283.5);
+    expect(receipt.financials.totalIsServerSnapshot).toBe(true);
+  });
   it("normalizes supported Indian and explicit international contacts", () => {
     expect(normalizeReceiptContact("98765 43210")).toBe("+919876543210");
     expect(normalizeReceiptContact("91-98765-43210")).toBe("+919876543210");

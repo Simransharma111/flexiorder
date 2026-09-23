@@ -2379,3 +2379,12 @@ img {
 .ops-tools-sheet p { padding: 8px 0 16px; }
 .owner-today button:focus-visible, .owner-menu-tools summary:focus-visible, .staff-order-flow button:focus-visible, .ops-waiter-workspace button:focus-visible { outline: 3px solid var(--primary); outline-offset: 3px; }
 @media (min-width: 768px) { .owner-menu-tools { width: auto; min-width: 160px; } .owner-menu-tools__actions { max-width: 440px; } }
+
+.owner-hero-status { display:flex; flex-wrap:wrap; align-items:center; gap:8px; }
+.owner-hero-status button, .owner-live-menu-button { min-height:44px; padding:10px 14px; border:1px solid var(--theme-border-strong, #d1d5db); border-radius:12px; font-weight:650; }
+.owner-hero-status button:disabled { opacity:.65; cursor:wait; }
+.owner-hero-status p { flex-basis:100%; font-size:14px; }
+.owner-history-shortcut { display:flex; flex-direction:column; text-align:left; gap:4px; margin:0 0 16px; padding:16px; border:1px solid var(--theme-border-strong, #d1d5db); border-radius:12px; }
+.owner-history-shortcut span { font-size:14px; }
+.owner-live-menu-links { display:grid; gap:12px; margin-top:16px; }
+.owner-live-menu-links a { padding:14px; border:1px solid #cbd5e1; border-radius:10px; color:#1d4ed8; }
