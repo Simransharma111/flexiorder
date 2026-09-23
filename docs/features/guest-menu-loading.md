@@ -18,16 +18,16 @@ A separate diagnostic request had approximately 15 seconds of local DNS resoluti
 
 ## Focused frontend changes
 
-- Share one in-flight menu request per current QR across polling/reconnect triggers; prevent a slow initial load from being superseded repeatedly.
+- Cancel route-owned requests on cleanup/StrictMode replay. Share one in-flight menu request per current QR across polling/reconnect triggers; prevent a slow initial load from being superseded repeatedly.
 - Clear the loading state for the current completion, including background recovery. Bound menu requests to20 seconds and show an explicit retry message on timeout.
-- Display a saved menu immediately as view-only while requesting current data. Ordering requires a fresh authoritative hotel response; cached data never enables ordering by itself.
+- Display a saved menu immediately as view-only while requesting current data. Ordering requires a fresh authoritative hotel response; cached data never enables ordering by itself. Settings broadcasts cannot validate a cached QR or invalidate its pending authoritative check.
 - Isolate cache-write failures so storage cannot discard a successful live response.
 - Do not fall back to stale cache after an authoritative 4xx QR rejection; offline/transport/server failures retain view-only fallback.
 - Add native browser lazy loading and asynchronous decoding to dish images. No image URL redesign, backend/schema change, or speculative query/index changes.
 
 ## Verification
 
-`npm run check` passed: lint,258 unit tests and production build. All38 guest browser cases passed across the main run and the corrected timeout-test rerun (36+2). The initial timeout test incorrectly used Playwright's5-second assertion deadline for a native20-second XHR timeout; its assertion now allows25 seconds. Product code was unchanged for that rerun.
+`npm run check` passed: lint,258 unit tests and production build. All40 guest browser cases passed in the final complete run. A development-browser smoke test confirmed initial loading also works with React StrictMode. Independent review verified request cleanup and the cached-QR authorization guard.
 
 Regression coverage includes immediate cached visibility with ordering disabled, stalled requests exiting the spinner, cache quota failures preserving fresh menus, and invalid QR responses not reviving old menus. Existing checkout, price/GST, ordering-pause, offline and guest-menu tests pass.
 

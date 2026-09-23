@@ -419,3 +419,32 @@ test('an authoritative invalid QR response does not revive its old cached menu',
   await expect(page.getByRole('heading', { name: 'Menu unavailable', exact: true })).toBeVisible();
   await expect(page.getByText('Old menu', { exact: true })).toHaveCount(0);
 });
+
+test('hotel settings cannot validate a cached QR or suppress its rejection', async ({ page }) => {
+  await mockGuestMenu(page);
+  await page.addInitScript(({ hotel, table }) => {
+    localStorage.setItem('guestMenu_qr-123', JSON.stringify({ hotel, table, dishes: [{ _id: 'cached-dish', name: 'Cached lunch', price: 100, isAvailable: true }] }));
+  }, { hotel, table });
+  let joined = false;
+  await page.routeWebSocket('**/*', socket => {
+    socket.send('0' + JSON.stringify({ sid: 'test-engine', upgrades: [], pingInterval: 25000, pingTimeout: 20000 }));
+    socket.onMessage(message => {
+      if (message === '40') socket.send('40' + JSON.stringify({ sid: 'test-socket' }));
+      if (String(message).includes('joinHotelSettings')) {
+        joined = true;
+        socket.send('42' + JSON.stringify(['hotelSettingsUpdated', { hotelId: hotel._id, hotel: { ...hotel, orderingEnabled: true } }]));
+      }
+    });
+  });
+  let release; const gate = new Promise(resolve => { release = resolve; });
+  await page.route('**/qr/menu/qr-123', async route => {
+    await gate;
+    return fulfillJson(route, { message: 'This QR code is not assigned to any table or room' }, 404);
+  });
+  await page.goto('/qr/qr-123');
+  await expect(page.getByText('Cached lunch', { exact: true })).toBeVisible();
+  await expect.poll(() => joined).toBe(true);
+  await expect(page.getByRole('button', { name: 'Add Cached lunch', exact: true })).toHaveCount(0);
+  release();
+  await expect(page.getByRole('heading', { name: 'Menu unavailable', exact: true })).toBeVisible();
+});
