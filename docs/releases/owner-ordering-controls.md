@@ -9,7 +9,10 @@ Changes:
 - View Live Menu uses the current assigned Table/Room QR URL. It links to the real guest experience; unpublished editor data is not used. Missing assignments and load errors have explicit recovery.
 - The waiter already submits orderType:takeaway and tableId:null; fixture-backed browser regression coverage now follows its offline retry ID through saved history/receipt. Shared receipts retain authoritative server amounts.
 
-Required server release:
+Frontend-only scope confirmed by owner:
+The backend candidate is excluded from this release. Home controls, branding access, navigation, complete history and live menu links reuse the existing APIs and can ship independently. The saved orderingEnabled setting blocks ordering through the updated guest interface and its checkout preflight; existing backend polling handles propagation. This is not server-side enforcement against direct API submissions. Genuine tableless takeaway remains unresolved and is not included as a working feature in this frontend release.
+
+Backend limitation (reference only, not a release action):
 The current remote backend01c73f5 unconditionally rejects missing tableId, its order schema lacks takeaway, and createOrder does not enforce customer pause. The isolated flexibackend-owner-ordering candidate supplies those changes. A frontend deployment alone cannot fix tableless takeaway or guarantee server-side guest blocking. It must not substitute a fake table.
 
 Verification:
