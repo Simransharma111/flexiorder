@@ -1,3 +1,4 @@
+import { enableTakeawayLocation, findTakeawayLocation, isTakeawayLocation, sortServiceLocations } from "../utils/serviceLocations";
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { QRCodeSVG } from 'qrcode.react';
@@ -34,7 +35,9 @@ function ScopedTableQRManager() {
   const scope = getScopedStorageKey('flexiorder_table_qr');
   const session = `${scope}:${localStorage.getItem('token') || ''}`;
   const [data, setData] = useState(() => ({ scope, tables: cachedTables(scope), stale: true }));
-  const tables = data.scope === scope ? data.tables : [];
+  const allTables = data.scope === scope ? data.tables : [];
+  const tables = sortServiceLocations(allTables.filter(table => !isTakeawayLocation(table) || table.qrId));
+  const takeawayLocation = findTakeawayLocation(allTables);
   const [fetching, setFetching] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -63,7 +66,7 @@ function ScopedTableQRManager() {
     setData({ scope, tables: values, stale });
     setPreview(current => current ? values.find(t => t._id === current._id && t.qrId) || null : null);
     try { localStorage.setItem(scope, JSON.stringify(values)); } catch { /* Reads still work when storage is full. */ }
-  }, [scope, validSession]);
+  }, [scope, validSession, setPreview]);
   const refresh = useCallback(async () => {
     if (isOffline || writing.current || !validSession()) return;
     const request = ++generation.current;
@@ -112,6 +115,15 @@ function ScopedTableQRManager() {
       try { localStorage.setItem(scope, JSON.stringify(values)); } catch { /* Best-effort cache. */ }
       return { scope, tables: values, stale: current.stale };
     });
+  };
+  const enableTakeaway = async () => {
+    if (writing.current || isOffline || !validSession()) return;
+    writing.current = true; generation.current++; setFetching(false); setBusy(true); setError('');
+    try {
+      const table = await enableTakeawayLocation(api, validSession);
+      if (validSession()) { upsert(table); setNotice('Takeaway is ready. Waiters can choose Takeaway order without selecting a table.'); }
+    } catch (failure) { if (validSession()) setError(messageFor(failure)); }
+    finally { writing.current = false; if (validSession()) setBusy(false); }
   };
   const save = async event => {
     event.preventDefault();
@@ -183,6 +195,11 @@ function ScopedTableQRManager() {
     {(isOffline || data.stale) && <p className="tqr-note" role="status">{isOffline ? 'You are offline. Saved QR codes can still be viewed and downloaded. Connect to make changes.' : 'Showing saved assignments until the latest list loads. Printed codes may have changed on another device.'}</p>}
     {error && <p className="tqr-error" role="alert">{error}</p>}
     {notice && <p className="tqr-success" role="status">{notice}</p>}
+    <section className="tqr-note" aria-label="Takeaway setup">
+      <strong>{takeawayLocation ? 'Takeaway orders enabled' : 'Takeaway orders'}</strong>
+      <p>{takeawayLocation ? 'Waiters can choose Takeaway directly. No table selection or QR is needed.' : 'Enable once for this restaurant so waiters can take takeaway orders without choosing a dining table.'}</p>
+      {!takeawayLocation && <button className="tqr-primary" disabled={busy || fetching || isOffline || Boolean(exporting)} onClick={enableTakeaway}>{busy ? 'Setting up…' : 'Enable takeaway orders'}</button>}
+    </section>
     <div className="tqr-toolbar">
       <div className="tqr-filters" aria-label="Filter locations">{[['all', 'All'], ['table', 'Tables'], ['room', 'Rooms']].map(([value, label]) => <button key={value} aria-pressed={filter === value} onClick={() => setFilter(value)}>{label} <span>{value === 'all' ? tables.length : tables.filter(t => t.type === value).length}</span></button>)}</div>
       <label className="tqr-search"><span className="sr-only">Search tables, rooms or codes</span><input placeholder="Search name or code" value={search} onChange={event => setSearch(event.target.value)} /></label>

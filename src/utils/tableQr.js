@@ -1,3 +1,4 @@
+import { isTakeawayNumber } from "./serviceLocations";
 import { getPublicAppUrl } from '../config/env';
 import { normalizeEntityId } from './storageScope';
 
@@ -27,6 +28,7 @@ export function normalizeQrCode(input, { raw = false } = {}) {
 
 export function validateLocation(name, type, tables, exceptId) {
   const value = String(name || '').trim();
+  if (type === 'table' && isTakeawayNumber(value) && !exceptId) throw new Error('Use Enable takeaway orders to set up the Takeaway location without a QR.');
   if (!['table', 'room'].includes(type) || !value || value.length > 80 || hasControlCharacters(value)) throw new Error('Enter a table or room name of 1–80 characters.');
   if (tables.some(t => t._id !== exceptId && t.type === type && String(t.tableNumber).trim().toLowerCase() === value.toLowerCase())) throw new Error('That table or room name already exists. Choose another name.');
   return value;

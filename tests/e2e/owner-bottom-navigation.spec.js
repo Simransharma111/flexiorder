@@ -17,7 +17,7 @@ test("owner primary tabs are one tap away on narrow screens and retain the deskt
   await page.setViewportSize({ width: 360, height: 740 });
   await openOwner(page);
   const nav = primaryNav(page);
-  await expect(nav.getByRole("button")).toHaveText(["Home", "Menu", "Analytics", "QR", "Theme"]);
+  await expect(nav.getByRole("button")).toHaveText(["Home", "Menu", "Analytics", "QR", "Theme", "More"]);
   await expect(page.getByRole("button", { name: "Open owner menu" })).toHaveCount(0);
   for (const [tab, title] of [["Menu", "Menu"], ["Analytics", "Analytics"], ["QR", "Tables & Rooms"], ["Theme", "Themes"], ["Home", "Home"]]) {
     const button = nav.getByRole("button", { name: tab, exact: true });

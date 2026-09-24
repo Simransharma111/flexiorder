@@ -1046,15 +1046,16 @@ test("cached dishes retain filter recovery after a failed refresh", async ({ pag
   await expect(page.getByRole('button', { name: 'Add Paneer Tikka' })).toBeVisible();
 });
 
-test("waiter takeaway stays tableless through offline retry, saved history and receipt", async ({ page, context }) => {
+test("waiter takeaway uses its service location through offline retry, history and receipt", async ({ page, context }) => {
   await installSession(page, "staff");
   await mockStaffWorkspace(page);
+  await page.route("**/table", route => fulfillJson(route, { tables: [{ _id: "takeaway-location", type: "table", tableNumber: "Takeaway", qrId: null }] }));
   const submitted = [];
   let saved;
   await page.route("**/api/orders", route => {
     const body = route.request().postDataJSON();
     submitted.push(body);
-    saved = kitchenOrder({ _id: "saved-takeaway", clientOrderId: body.clientOrderId, orderType: body.orderType, tableId: body.tableId, status: "delivered", totalAmount: 283.5 });
+    saved = kitchenOrder({ _id: "saved-takeaway", clientOrderId: body.clientOrderId, orderType: body.orderType, tableId: body.tableId, locationType: "table", locationNumber: "Takeaway", roomNumber: "Takeaway", status: "delivered", totalAmount: 283.5 });
     return fulfillJson(route, { success: true, order: saved }, 201);
   });
   await page.goto("/owner/order");
@@ -1069,11 +1070,11 @@ test("waiter takeaway stays tableless through offline retry, saved history and r
     return JSON.parse(localStorage.getItem(key) || "[]");
   });
   expect(queued).toHaveLength(1);
-  expect(queued[0].payload).toMatchObject({ tableId: null, orderType: "takeaway" });
+  expect(queued[0].payload).toMatchObject({ tableId: "takeaway-location", orderType: "now" });
   expect(queued[0].payload.clientOrderId).toBeTruthy();
   await context.setOffline(false);
   await expect.poll(() => submitted.length).toBe(1);
-  expect(submitted[0]).toMatchObject({ tableId: null, orderType: "takeaway", clientOrderId: queued[0].payload.clientOrderId });
+  expect(submitted[0]).toMatchObject({ tableId: "takeaway-location", orderType: "now", clientOrderId: queued[0].payload.clientOrderId });
   await page.route("**/kitchen/orders", route => fulfillJson(route, { orders: [saved] }));
   await page.reload();
   await page.getByRole("tab", { name: "History", exact: true }).click();

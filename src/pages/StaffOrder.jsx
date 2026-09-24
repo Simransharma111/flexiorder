@@ -1,3 +1,5 @@
+import { tableLabel } from "../utils/tableQr";
+import { findTakeawayLocation, isTakeawayLocation, sortServiceLocations } from "../utils/serviceLocations";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FiArrowLeft, FiMinus, FiPlus, FiSearch, FiShoppingBag, FiX } from "react-icons/fi";
 import api from "../api/axios";
@@ -25,10 +27,6 @@ import { SYNC_STATE_EVENT } from "../utils/syncQueues";
 import SubcategoryChooser from "../components/menu/SubcategoryChooser";
 import useDialogFocus from "../hooks/useDialogFocus";
 import ComboSelector from "../components/guestmenu/ComboSelector";
-
-const tableLabel = (table) => table?.type === "room"
-  ? `Room ${table.tableNumber || table.locationNumber}`
-  : `Table ${table.tableNumber || table.locationNumber}`;
 
 const comboSignature = (selections = []) => selections
   .map((selection) => ({
@@ -206,9 +204,10 @@ export default function StaffOrder({ hotel, onOrderCreated, active = true, visib
     [menu]
   );
 
+  const diningTables = tables.filter(table => !isTakeawayLocation(table));
   const visibleTables = useMemo(() => {
     const term = tableSearch.trim().toLowerCase();
-    return tables.filter((table) => !term || tableLabel(table).toLowerCase().includes(term));
+    return sortServiceLocations(tables.filter((table) => !isTakeawayLocation(table) && (!term || tableLabel(table).toLowerCase().includes(term))));
   }, [tableSearch, tables]);
 
   // Unique subcategories for the selected category
@@ -330,12 +329,17 @@ export default function StaffOrder({ hotel, onOrderCreated, active = true, visib
       setError("Add at least one dish.");
       return;
     }
+    const orderLocation = orderType === "takeaway" ? findTakeawayLocation(tables) : selectedTable;
+    if (!orderLocation) {
+      setError("Ask the owner to enable takeaway orders in Tables & Rooms, then refresh the locations.");
+      return;
+    }
     const clientOrderId = globalThis.crypto?.randomUUID?.() ||
       `order-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     const payload = {
       clientOrderId,
-      tableId: orderType === "takeaway" ? null : selectedTable._id,
-      orderType,
+      tableId: orderLocation._id,
+      orderType: orderType === "takeaway" ? "now" : orderType,
       guestName: guestName.trim() || "Guest",
       guestContact: guestContact.trim() || null,
       items: cart.map((item) => ({
@@ -351,9 +355,9 @@ export default function StaffOrder({ hotel, onOrderCreated, active = true, visib
       status: "pending",
       createdAt: new Date().toISOString(),
       orderType,
-      tableId: selectedTable,
-      locationType: selectedTable?.type,
-      locationNumber: selectedTable?.tableNumber || selectedTable?.locationNumber,
+      tableId: orderLocation,
+      locationType: orderLocation.type,
+      locationNumber: orderLocation.tableNumber || orderLocation.locationNumber,
       guestName: payload.guestName,
       items: cart.map((item) => ({ ...item })),
       pendingSync: !isOnline,
@@ -434,33 +438,40 @@ export default function StaffOrder({ hotel, onOrderCreated, active = true, visib
         </div>
       )}
       {message && <div className="ops-inline-success" role="status">{message}<button type="button" aria-label="Dismiss message" onClick={() => setMessage("")}><FiX /></button></div>}
-      {error && <div className="ops-inline-error" role="alert">{error}<button type="button" aria-label="Dismiss error" onClick={() => setError("")}><FiX /></button></div>}
+      {error && <div className="ops-inline-error" role="alert">{error}{error.includes("refresh the locations") && <button type="button" onClick={fetchTables}>Refresh locations</button>}<button type="button" aria-label="Dismiss error" onClick={() => setError("")}><FiX /></button></div>}
 
       {!selectedTable && orderType !== "takeaway" ? (
         <div className="staff-location-step">
           <div className="staff-step-heading"><span>Step 1 of 2</span><h2 ref={locationHeadingRef} tabIndex={-1}>Choose a table or room</h2><p>Select where you’re taking this order.</p></div>
-          {tables.length > 0 && (
+          {diningTables.length > 0 && (
             <label className="ops-search"><FiSearch /><input value={tableSearch} onChange={(event) => setTableSearch(event.target.value)} aria-label="Search table or room" placeholder="Search table or room" /></label>
           )}
-          <div className="staff-location-grid">
-            {visibleTables.map((table) => (
-              <button key={table._id} type="button" className="staff-location-tile" onClick={() => chooseLocation(table)}>
-                <strong>{tableLabel(table)}</strong>
-                {table.activeOrderCount > 0 && <span>{table.activeOrderCount} active</span>}
-              </button>
-            ))}
-          </div>
-          {tablesLoading && !tables.length && <p role="status">Loading tables and rooms…</p>}
-          {!tablesLoading && !tableError && !tables.length && <p className="ops-empty-row">No tables or rooms are set up yet. Ask the restaurant owner to add them.</p>}
-          {tables.length > 0 && !visibleTables.length && <div className="ops-empty-row"><p>No matching tables or rooms.</p><button type="button" onClick={() => setTableSearch("")}>Clear location search</button></div>}
+          {['table', 'room'].map(type => {
+            const locations = visibleTables.filter(table => table.type === type);
+            return locations.length > 0 && <section key={type} aria-label={type === 'room' ? 'Rooms' : 'Tables'}>
+              <h3 className="font-semibold my-3">{type === 'room' ? 'Rooms' : 'Tables'}</h3>
+              <div className="staff-location-grid">{locations.map(table => (
+                <button key={table._id} type="button" className="staff-location-tile" onClick={() => chooseLocation(table)}>
+                  <strong>{tableLabel(table)}</strong>
+                  {table.activeOrderCount > 0 && <span>{table.activeOrderCount} active</span>}
+                </button>
+              ))}</div>
+            </section>;
+          })}
+          {tablesLoading && !diningTables.length && <p role="status">Loading tables and rooms…</p>}
+          {!tablesLoading && !tableError && !diningTables.length && <p className="ops-empty-row">No tables or rooms are set up yet. Ask the restaurant owner to add them.</p>}
+          {diningTables.length > 0 && !visibleTables.length && <div className="ops-empty-row"><p>No matching tables or rooms.</p><button type="button" onClick={() => setTableSearch("")}>Clear location search</button></div>}
           {tableError && (
             <div className="ops-inline-error staff-location-error" role="alert">
-              <span>{tables.length ? "Showing saved tables and rooms. " : ""}{tableError}</span>
+              <span>{diningTables.length ? "Showing saved tables and rooms. " : ""}{tableError}</span>
               <button type="button" onClick={fetchTables}>Retry</button>
             </div>
           )}
           {hotel?.takeawayEnabled !== false && (
-            <button type="button" className="staff-takeaway-link" onClick={() => setOrderType("takeaway")}>Takeaway order</button>
+            <button type="button" className="staff-takeaway-link" disabled={tablesLoading && !findTakeawayLocation(tables)} onClick={() => {
+              if (!findTakeawayLocation(tables)) { setError("Ask the owner to enable takeaway orders in Tables & Rooms, then refresh the locations."); return; }
+              setSelectedTable(null); setError(""); setOrderType("takeaway");
+            }}>Takeaway order</button>
           )}
         </div>
       ) : (

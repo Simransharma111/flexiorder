@@ -2388,3 +2388,8 @@ img {
 .owner-history-shortcut span { font-size:14px; }
 .owner-live-menu-links { display:grid; gap:12px; margin-top:16px; }
 .owner-live-menu-links a { padding:14px; border:1px solid #cbd5e1; border-radius:10px; color:#1d4ed8; }
+
+@media (max-width: 767px) {
+  .owner-bottom-nav { gap: 1px; }
+  .owner-bottom-nav button { font-size: 10px; }
+}

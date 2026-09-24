@@ -741,8 +741,6 @@ className="owner-main"
 
 
 <Header
-onMore={() => setSidebarOpen(true)}
-moreOpen={sidebarOpen}
 
 hotel={hotel}
 

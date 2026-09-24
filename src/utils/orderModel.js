@@ -1,3 +1,4 @@
+import { isTakeawayNumber } from "./serviceLocations";
 const STATUS_RANK = {
   pending: 0,
   accepted: 1,
@@ -116,6 +117,7 @@ export const orderLocation = (order) => {
   const locationType = String(
     order?.locationType || table?.locationType || table?.type || "table"
   ).toLowerCase();
+  if (locationType === "table" && isTakeawayNumber(number)) return "Takeaway";
   return locationType === "room" ? `Room ${number}` : `Table ${number}`;
 };
 
