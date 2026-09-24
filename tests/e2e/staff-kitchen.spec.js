@@ -675,12 +675,20 @@ test("delivered history shares one paperless receipt truthfully and retains PDF 
   await details.getByRole("button", { name: "Share receipt" }).click();
   await expect(details.getByText("+919876543210", { exact: true })).toBeVisible();
   await details.getByRole("button", { name: "Confirm and open share" }).click();
-  await expect(details.getByText("Share opened. Confirm delivery in the app you selected.")).toBeVisible();
+  await expect(details.getByText("Share sheet opened. Confirm the destination in the app you choose.")).toBeVisible();
   const shared = await page.evaluate(() => window.__receiptShare);
   expect(shared.fileNames).toEqual(["order-receipt-R-8001.pdf"]);
   expect(shared.text).toContain("Paneer Tikka");
   expect(shared.text).not.toContain("Sent");
 
+  await page.evaluate(() => { window.__receiptShare = null; });
+  await details.getByRole("button", { name: "Download PDF" }).click();
+  await expect.poll(() => page.evaluate(() => window.__receiptShare?.fileNames)).toEqual(["order-receipt-R-8001.pdf"]);
+  await expect(details.getByText("Share sheet opened. Confirm the destination in the app you choose.")).toBeVisible();
+
+  await page.evaluate(() => {
+    Object.defineProperty(navigator, "canShare", { configurable: true, value: () => false });
+  });
   const downloadPromise = page.waitForEvent("download");
   await details.getByRole("button", { name: "Download PDF" }).click();
   const download = await downloadPromise;
@@ -714,13 +722,15 @@ test("receipt sharing reports cancellation and unsupported platforms without cla
   await details.getByRole("button", { name: "Share receipt" }).click();
   await expect(details.getByText("+442079460958", { exact: true })).toBeVisible();
   await details.getByRole("button", { name: "Confirm and open share" }).click();
-  await expect(details.getByText("Share cancelled. Nothing was marked as sent.")).toBeVisible();
+  await expect(details.getByText("Sharing cancelled. No file was sent.")).toBeVisible();
 
   await page.evaluate(() => {
     Object.defineProperty(navigator, "canShare", { configurable: true, value: () => false });
   });
+  const downloadPromise = page.waitForEvent("download");
   await details.getByRole("button", { name: "Confirm and open share" }).click();
-  await expect(details.getByText("File sharing is unavailable here. Use Download PDF or Print.")).toBeVisible();
+  expect((await downloadPromise).suggestedFilename()).toMatch(/^order-receipt-.*\.pdf$/);
+  await expect(details.getByText("Download started. Check your browser downloads.")).toBeVisible();
   await details.getByRole("button", { name: "Print" }).click();
   await expect(details.getByText("Print view opened.")).toBeVisible();
 });

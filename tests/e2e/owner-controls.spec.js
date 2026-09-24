@@ -1,6 +1,8 @@
 import { expect, test } from '@playwright/test';
 import { fulfillJson, hotel, installSession, kitchenOrder, mockStaffWorkspace } from './helpers';
 
+test.beforeEach(async ({ page }) => { page.on("dialog", dialog => dialog.accept()); });
+
 async function owner(page) {
   await installSession(page, 'owner');
   await mockStaffWorkspace(page);

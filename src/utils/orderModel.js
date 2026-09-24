@@ -1,4 +1,4 @@
-import { isTakeawayNumber } from "./serviceLocations";
+import { compareServiceLocations, isTakeawayNumber } from "./serviceLocations";
 const STATUS_RANK = {
   pending: 0,
   accepted: 1,
@@ -277,7 +277,7 @@ export const groupOrdersByLocation = (orders = []) => {
     group.items.push(...(Array.isArray(order.items) ? order.items : []));
     groups.set(key, group);
   });
-  return [...groups.values()];
+  return [...groups.values()].sort((a, b) => compareServiceLocations(a.location, b.location));
 };
 
 export const isDelayedOrder = (order, thresholdMinutes = 15) =>

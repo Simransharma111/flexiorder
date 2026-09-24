@@ -1,3 +1,5 @@
+import MenuResetSection from "../components/settings/MenuResetSection";
+import { confirmOrderingPause } from "../utils/orderingConfirmation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "../api/axios";
@@ -214,6 +216,7 @@ const updateStaffCapability=(capability,value)=>{
 
 const updateOrderingEnabled=async(value)=>{
   if (!hotel || orderingLoading || loading || typeof value !== "boolean") return;
+  if (!value && !confirmOrderingPause()) return;
   const previousHotel = hotel;
   const requestRevision = ++orderingRequestRevision.current;
   updateField("orderingEnabled", value);
@@ -946,6 +949,8 @@ p-6
     </div>
   )}
 </section>
+
+<MenuResetSection hotel={hotel} />
 
 {/* ── Single save button covers Hotel Info + Customer Menu + GST ── */}
 <div className="flex justify-end">

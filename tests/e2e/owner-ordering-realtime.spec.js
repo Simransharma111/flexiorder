@@ -1,6 +1,8 @@
 import { test, expect } from '@playwright/test';
 import { fulfillJson, hotel, installSession, mockStaffWorkspace } from './helpers';
 
+test.beforeEach(async ({ page }) => { page.on("dialog", dialog => dialog.accept()); });
+
 for (const conflicting of [false, true]) {
   test(`Home pause ${conflicting ? 'retains a newer conflicting settings event' : 'accepts its own realtime confirmation without a false error'}`, async ({ page }) => {
     await installSession(page, 'owner');

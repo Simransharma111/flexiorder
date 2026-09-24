@@ -1,3 +1,4 @@
+import { downloadFile, fileExportMessage } from "../utils/fileDownload";
 import LiveMenuLink from "./menu/LiveMenuLink";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import api from "../api/axios";
@@ -482,7 +483,7 @@ const resolvedFields = {
     }
   };
 
-  const exportMenu = () => {
+  const exportMenu = async () => {
     if (!dishes.length) return;
 
     try {
@@ -491,15 +492,8 @@ const resolvedFields = {
         [serialized],
         { type: "application/json" }
       );
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-
-      link.href = url;
-      link.download = "flexiorder-menu.json";
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(url);
+      const result = await downloadFile(blob, "flexiorder-menu.json");
+      setFeedback(fileExportMessage(result));
       setLoadError("");
     } catch (err) {
       setLoadError(err?.message || "The menu could not be exported.");
@@ -715,13 +709,20 @@ const resolvedFields = {
                 />
               </label>
 
-              <a
-                href="/examples/flexiorder-menu-demo.json"
-                download="flexiorder-menu-demo.json"
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    const response = await fetch("/examples/flexiorder-menu-demo.json");
+                    if (!response.ok) throw new Error("Could not load the demo file.");
+                    const result = await downloadFile(await response.blob(), "flexiorder-menu-demo.json");
+                    setFeedback(fileExportMessage(result));
+                  } catch (error) { setLoadError(error.message || "Could not export the demo file."); }
+                }}
                 className="flex items-center justify-center rounded-xl border border-gray-200 bg-white px-3 py-3 text-sm font-semibold text-gray-700 transition hover:bg-gray-50"
               >
                 Demo file
-              </a>
+              </button>
 
               <button
                 type="button"

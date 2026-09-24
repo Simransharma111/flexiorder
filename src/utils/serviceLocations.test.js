@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { enableTakeawayLocation, findTakeawayLocation, prepareLegacyTakeawayPayload, sortServiceLocations } from './serviceLocations';
+import { enableTakeawayLocation, findTakeawayLocation, prepareLegacyTakeawayPayload, sortServiceLocations, compareServiceLocations } from './serviceLocations';
 import { orderLocation, groupOrdersByLocation } from './orderModel';
 import { buildOrderReceipt } from './orderReceipt';
 const counter = { _id: 'counter', tableNumber: 'Takeaway', type: 'table', qrId: null };
@@ -50,5 +50,34 @@ describe('existing backend takeaway compatibility', () => {
     expect(buildOrderReceipt(JSON.parse(JSON.stringify(orders[0]))).order.location).toBe('Takeaway');
     expect(orderLocation({table:counter})).toBe('Takeaway');
     expect(orderLocation({locationType:'room',locationNumber:'Takeaway'})).toBe('Room Takeaway');
+  });
+});
+
+describe('location ordering across operational displays', () => {
+  it('uses natural names, location aliases, tables before rooms, and takeaway last', () => {
+    const rows = [
+      { _id: 'away', type: 'table', tableNumber: 'Takeaway' },
+      { _id: 'room', locationType: 'room', roomNumber: '2' },
+      { _id: 'ten', type: 'table', tableNumber: 'Patio 10' },
+      { _id: 'two', type: 'table', tableNumber: 'patio 2' },
+      { _id: 'zero', type: 'table', locationNumber: 0 },
+      { _id: 'missing', type: 'table' },
+    ];
+    expect(sortServiceLocations(rows).map(row => row._id)).toEqual(['zero', 'two', 'ten', 'missing', 'room', 'away']);
+    expect(compareServiceLocations('Table 02', 'Table 2')).toBe(0);
+  });
+  it('orders groups naturally while retaining each ticket, lane boundary and takeaway chronology', () => {
+    const orders = [
+      { _id: 'ten', locationNumber: '10', status: 'pending' },
+      { _id: 'away1', orderType: 'takeaway', status: 'pending' },
+      { _id: 'room', locationType: 'room', locationNumber: '2', status: 'pending' },
+      { _id: 'two1', locationNumber: '2', status: 'pending' },
+      { _id: 'two2', locationNumber: '2', status: 'pending' },
+      { _id: 'away2', orderType: 'takeaway', status: 'pending' },
+      { _id: 'ready', locationNumber: '2', status: 'ready' },
+    ];
+    expect(groupOrdersByLocation(orders).map(group => group.orders.map(order => order._id)))
+      .toEqual([['two1', 'two2'], ['ready'], ['ten'], ['room'], ['away1'], ['away2']]);
+    expect(orders[0]._id).toBe('ten');
   });
 });

@@ -1,3 +1,4 @@
+import { confirmOrderingPause } from "../utils/orderingConfirmation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { FiLogOut, FiMoreVertical, FiPower, FiRefreshCw, FiX } from "react-icons/fi";
 import { useNavigate } from "react-router-dom";
@@ -168,9 +169,7 @@ export default function StaffWorkspace() {
   const toggleOrdering = async () => {
     if (!hotel || updatingOrdering) return;
     const nextValue = hotel.orderingEnabled === false;
-    if (!window.confirm(nextValue
-      ? "Allow customers to place new orders now?"
-      : "Pause customer ordering? Customers can still view the menu.")) return;
+    if (nextValue ? !window.confirm("Allow customers to place new orders now?") : !confirmOrderingPause()) return;
     const previousHotel = hotel;
     const requestRevision = ++orderingRequestRevision.current;
     const optimisticHotel = { ...hotel, orderingEnabled: nextValue };

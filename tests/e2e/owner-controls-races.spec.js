@@ -1,6 +1,8 @@
 import { test, expect } from '@playwright/test';
 import { fulfillJson, hotel, installSession, mockStaffWorkspace } from './helpers';
 
+test.beforeEach(async ({ page }) => { page.on("dialog", dialog => dialog.accept()); });
+
 test('a stale dashboard refresh cannot undo a confirmed Home pause', async ({ page }) => {
   await installSession(page, 'owner');
   await mockStaffWorkspace(page);

@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useState, useMemo } from "react";
 import { FiDownload, FiRefreshCw, FiTrendingUp, FiShoppingBag, FiCreditCard, FiClock, FiCheckCircle, FiSearch } from "react-icons/fi";
 import api from "../api/axios";
-import { Share } from "@capacitor/share";
-import { downloadFile, isNativeApp, writeTempShareFile } from "../utils/fileDownload";
+import { downloadFile, fileExportMessage } from "../utils/fileDownload";
 import {
   analyticsComparison,
   buildAnalyticsChartData,
@@ -110,8 +109,7 @@ export default function AnalyticsDashboard({ hotel = {}, orders = [], advancedEn
   );
 
   // Build a branded Excel workbook for exactly the period the owner selected
-  // (today / month / quarter / custom). On the device it saves into
-  // Downloads/FlexiOrder and immediately opens the native share sheet.
+  // (today / month / quarter / custom), then offer sharing or download.
   const exportExcel = async () => {
     if (exporting) return;
     setExporting(true);
@@ -129,21 +127,8 @@ export default function AnalyticsDashboard({ hotel = {}, orders = [], advancedEn
         rangeLabel: range?.label || "",
       });
       const filename = reportFilename(hotel, range);
-      if (isNativeApp()) {
-        const saved = await downloadFile(blob, filename);
-        let shareNote = "";
-        try {
-          const uri = await writeTempShareFile(blob, filename);
-          await Share.share({ title: `${hotel?.name || "Restaurant"} report`, url: uri, dialogTitle: "Share the report" });
-          shareNote = " · sharing sheet opened";
-        } catch {
-          shareNote = "";
-        }
-        setExportStatus(`Saved to ${saved.label || "Downloads/FlexiOrder"}${shareNote}.`);
-      } else {
-        await downloadFile(blob, filename);
-        setExportStatus("Report downloaded.");
-      }
+      const result = await downloadFile(blob, filename, { title: `${hotel?.name || "Restaurant"} report` });
+      setExportStatus(fileExportMessage(result));
     } catch (requestError) {
       console.error(requestError);
       setExportStatus("Report could not be created. Try again when the connection is stable.");

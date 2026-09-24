@@ -25,7 +25,7 @@ test("owner creates a local menu PDF preview and downloads its exact selected me
   const download = page.waitForEvent("download");
   await page.getByRole("button", { name: "Download PDF" }).click();
   expect((await download).suggestedFilename()).toBe("flexi-test-kitchen-menu.pdf");
-  await expect(page.getByText("PDF downloaded.")).toBeVisible();
+  await expect(page.getByText("Download started. Check your browser downloads.")).toBeVisible();
 });
 
 test("PDF creator closes with Escape and does not expose hidden dishes", async ({ page }) => {
@@ -55,7 +55,7 @@ test("owner previews an A5 booklet cover and complete print-only note", async ({
   await expect(page.getByText(/Page 2 of [2-9]/)).toBeVisible();
 });
 
-test("Android owner saves the generated PDF through the native file helper", async ({ page }) => {
+test("Android owner opens the generated PDF in native sharing", async ({ page }) => {
   await installNativeBridge(page);
   await page.goto("/owner/dashboard");
   await page.getByRole("button", { name: "Menu", exact: true }).click();
@@ -67,9 +67,9 @@ test("Android owner saves the generated PDF through the native file helper", asy
   await expect.poll(() => page.evaluate(() => window.__nativeCalls.filter((call) =>
     call.plugin === "Filesystem" && call.method === "writeFile")))
     .toContainEqual(expect.objectContaining({
-      options: expect.objectContaining({ path: expect.stringMatching(/^Download\/FlexiOrder\/.*-menu\.pdf$/) }),
+      options: expect.objectContaining({ path: expect.stringMatching(/-menu\.pdf$/), directory: "CACHE" }),
     }));
-  await expect(page.getByText(/Saved to Downloads\/FlexiOrder/)).toBeVisible();
+  await expect(page.getByText(/Share sheet opened/)).toBeVisible();
   await page.getByRole("button", { name: "Save / share" }).click();
   await expect.poll(() => page.evaluate(() => window.__nativeCalls.some((call) =>
     call.plugin === "Share" && call.method === "share"))).toBe(true);

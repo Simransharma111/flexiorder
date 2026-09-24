@@ -1,3 +1,4 @@
+import { Share } from "@capacitor/share";
 import { Capacitor } from "@capacitor/core";
 import { Filesystem, Directory } from "@capacitor/filesystem";
 
@@ -75,12 +76,41 @@ export const triggerBrowserDownload = (blob, filename) => {
   window.setTimeout(() => URL.revokeObjectURL(url), 30000);
 };
 
-// Unified: native saves into Downloads/FlexiOrder, web uses the browser.
-export const downloadFile = async (blob, filename) => {
-  if (isNativeApp()) {
-    const saved = await saveFileToDownloads(blob, filename);
-    return { native: true, uri: saved.uri, label: saved.label };
+export const isShareCancelled = error => error?.name === "AbortError" ||
+  /\b(cancelled|canceled|dismissed)\b/i.test(error?.message || "");
+
+export const fileExportMessage = result => result.status === "cancelled"
+  ? "Sharing cancelled. No file was sent."
+  : result.status === "shared"
+    ? "Share sheet opened. Confirm the destination in the app you choose."
+    : "Download started. Check your browser downloads.";
+
+// Native sharing uses cache-backed URIs without broad storage permissions.
+// Browsers without file sharing (or transient activation) retain downloads.
+export const downloadFile = async (blob, filename, options = {}) => {
+  const native = isNativeApp();
+  if (native) {
+    const uri = await writeTempShareFile(blob, filename);
+    if (!uri) throw new Error("Could not prepare the file for sharing.");
+    try {
+      await Share.share({ title: options.title || filename, text: options.text,
+        files: [uri], dialogTitle: options.dialogTitle || "Save or share file" });
+      return { native, status: "shared", uri, label: null };
+    } catch (error) {
+      if (isShareCancelled(error)) return { native, status: "cancelled", uri: null, label: null };
+      throw error;
+    }
+  }
+  const file = typeof File === "function" ? new File([blob], filename, { type: blob.type }) : null;
+  try {
+    if (file && typeof navigator.share === "function" &&
+        typeof navigator.canShare === "function" && navigator.canShare({ files: [file] })) {
+      await navigator.share({ files: [file], title: options.title || filename, ...(options.text ? { text: options.text } : {}) });
+      return { native, status: "shared", uri: null, label: null };
+    }
+  } catch (error) {
+    if (isShareCancelled(error)) return { native, status: "cancelled", uri: null, label: null };
   }
   triggerBrowserDownload(blob, filename);
-  return { native: false, uri: null, label: null };
+  return { native, status: "downloaded", uri: null, label: null };
 };

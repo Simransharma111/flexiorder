@@ -149,6 +149,7 @@ test("owner pauses and resumes customer ordering from Settings", async ({ page }
   await page.goto("/owner/dashboard");
   await openOwnerTab(page, "Settings");
   const orderingToggle = page.getByRole("checkbox", { name: "Customer ordering enabled" });
+  page.once("dialog", dialog => dialog.accept());
   await orderingToggle.uncheck();
   await expect(orderingToggle).not.toBeChecked();
 
@@ -492,13 +493,11 @@ test("demo menu import survives reload, reimports as skips, and re-exports equiv
 
   await page.goto("/owner/dashboard");
   await openOwnerTab(page, "Menu");
-  await expect(page.getByRole("link", { name: "Demo file" })).toHaveAttribute(
-    "href",
-    "/examples/flexiorder-menu-demo.json"
-  );
-  const demoDownloadPromise = page.waitForEvent("download");
-  await page.getByRole("link", { name: "Demo file" }).click();
-  expect(await readDownloadJson(await demoDownloadPromise)).toEqual(demo);
+  const demoDownloadEvent = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Demo file", exact: true }).click();
+  const demoDownload = await demoDownloadEvent;
+  expect(demoDownload.suggestedFilename()).toBe("flexiorder-menu-demo.json");
+  expect(await readDownloadJson(demoDownload)).toEqual(demo);
   await page.locator('input[type="file"][accept*="json"]').setInputFiles(demoMenuFile);
   await expect(page.getByRole("status")).toContainText("3 dishes imported. 0 skipped.");
   await expect(page.getByText("Demo Paneer Tikka", { exact: true }).filter({ visible: true })).toHaveCount(1);

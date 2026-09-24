@@ -1,3 +1,4 @@
+import { sortServiceLocations } from "../utils/serviceLocations";
 import {
   useEffect,
   useState,
@@ -339,7 +340,7 @@ export default function Homepage() {
                   Choose Table
                 </option>
 
-                {tables.map((table) => (
+                {sortServiceLocations(tables).map((table) => (
 
                   <option
                     key={table._id}

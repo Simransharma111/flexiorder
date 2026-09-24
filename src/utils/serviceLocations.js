@@ -6,11 +6,29 @@ export const findTakeawayLocation = locations => [...locations]
   .filter(location => isTakeawayLocation(location) && !location.qrId && location._id)
   .sort((a, b) => String(a._id).localeCompare(String(b._id)))[0] || null;
 const collator = new Intl.Collator('en', { numeric: true, sensitivity: 'base' });
-export const sortServiceLocations = locations => [...locations].sort((a, b) => {
-  const type = (a.type === 'room' ? 1 : 0) - (b.type === 'room' ? 1 : 0);
-  const number = location => String(location.tableNumber ?? location.locationNumber ?? '').trim().replace(/^(?:table|room)\s+/i, '');
-  return type || collator.compare(number(a), number(b)) || String(a._id).localeCompare(String(b._id));
-});
+const locationParts = location => {
+  if (typeof location === 'string') {
+    const match = location.trim().match(/^(table|room)\s+(.*)$/i);
+    return match ? { type: match[1].toLowerCase(), tableNumber: match[2] } : { type: 'other', tableNumber: location };
+  }
+  return location || {};
+};
+export const compareServiceLocations = (left, right) => {
+  const a = locationParts(left);
+  const b = locationParts(right);
+  const type = location => {
+    if (isTakeawayLocation(location) || location.type === 'other') return 2;
+    return (location.type || location.locationType) === 'room' ? 1 : 0;
+  };
+  const number = location => String(location.tableNumber ?? location.locationNumber ?? location.roomNumber ?? '').trim().replace(/^(?:table|room)\s+/i, '');
+  const missing = value => !value || value === '-';
+  const aNumber = number(a);
+  const bNumber = number(b);
+  // Preserve input chronology when tickets share the same location.
+  return type(a) - type(b) || Number(missing(aNumber)) - Number(missing(bNumber)) || collator.compare(aNumber, bNumber);
+};
+export const sortServiceLocations = locations => [...locations].sort((a, b) =>
+  compareServiceLocations(a, b) || String(a._id || '').localeCompare(String(b._id || '')));
 const locationsFrom = response => {
   const rows = response.data?.tables || response.data;
   if (!Array.isArray(rows)) throw new Error('Could not read the location list. Refresh and try again.');

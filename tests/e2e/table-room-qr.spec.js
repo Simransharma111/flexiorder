@@ -170,11 +170,12 @@ test('offline retains saved previews and exports while writes are disabled', asy
   await context.setOffline(false); await expect(page.getByRole('button', { name: 'Add Table', exact: true })).toBeEnabled();
 });
 
-test('native QR downloads use the existing filesystem adapter', async ({ page }) => {
+test('native QR downloads open sharing with the generated file', async ({ page }) => {
   await installNativeBridge(page); await setup(page, [assigned('table', 1)]);
   await cardFor(page, 'Table 1').getByRole('button', { name: 'Download QR', exact: true }).click();
-  await expect(page.getByText(/Saved to Downloads\/FlexiOrder/)).toBeVisible();
-  expect(await page.evaluate(() => window.__nativeCalls.some(c => c.plugin === 'Filesystem' && c.method === 'writeFile' && c.options.path.includes('Table 1-QR.png')))).toBe(true);
+  await expect(page.getByText(/Share sheet opened/)).toBeVisible();
+  expect(await page.evaluate(() => window.__nativeCalls.some(c => c.plugin === 'Filesystem' && c.method === 'writeFile' && c.options.directory === 'CACHE' && c.options.path.includes('Table 1-QR.png')))).toBe(true);
+  expect(await page.evaluate(() => window.__nativeCalls.some(c => c.plugin === 'Share' && c.method === 'share' && c.options.files[0].includes('Table 1-QR.png')))).toBe(true);
 });
 
 test('encoded existing public QR route still fetches its exact code', async ({ page }) => {

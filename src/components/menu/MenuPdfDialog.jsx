@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Share } from "@capacitor/share";
 import { FiChevronLeft, FiChevronRight, FiDownload, FiRefreshCw, FiShare2, FiX } from "react-icons/fi";
 import useDialogFocus from "../../hooks/useDialogFocus";
-import { downloadFile, isNativeApp, writeTempShareFile } from "../../utils/fileDownload";
+import { downloadFile, fileExportMessage } from "../../utils/fileDownload";
 import { buildCategoryList, categoryKey, dishCategoryName } from "../../utils/menuCategories";
 import { buildMenuPrintModel, defaultMenuPrintSelection, menuPrintDishId } from "../../utils/menuPrintModel";
 import { createMenuPrintPdf, menuPrintFilename } from "../../utils/menuPrintPdf";
@@ -140,27 +139,13 @@ export default function MenuPdfDialog({ open, onClose, restaurant, dishes, categ
   const download = async () => {
     if (!result) return;
     try {
-      const saved = await downloadFile(result.blob, menuPrintFilename(result.snapshot));
-      setMessage(saved.native ? `Saved to ${saved.label}.` : "PDF downloaded.");
-    } catch { setMessage("Could not save the PDF. The preview is still available; try again."); }
+      const saved = await downloadFile(result.blob, menuPrintFilename(result.snapshot), {
+        title: `${result.snapshot.restaurant.name} menu`,
+      });
+      setMessage(fileExportMessage(saved));
+    } catch { setMessage("Could not save or share the PDF. The preview is still available; try again."); }
   };
-  const share = async () => {
-    if (!result) return;
-    try {
-      const filename = menuPrintFilename(result.snapshot);
-      if (isNativeApp()) {
-        const uri = await writeTempShareFile(result.blob, filename);
-        await Share.share({ title: `${result.snapshot.restaurant.name} menu`, text: "Menu PDF", url: uri, dialogTitle: "Save or share menu PDF" });
-      } else {
-        const file = new File([result.blob], filename, { type: "application/pdf" });
-        if (!navigator.share || (navigator.canShare && !navigator.canShare({ files: [file] }))) throw new Error("Sharing is unavailable in this browser. Use Download PDF.");
-        await navigator.share({ title: `${result.snapshot.restaurant.name} menu`, files: [file] });
-      }
-      setMessage("Share sheet opened. Confirm the destination in the app you choose.");
-    } catch (error) {
-      setMessage(error?.name === "AbortError" ? "Sharing was cancelled. The preview remains ready." : error?.message || "Could not open sharing. Use Download PDF instead.");
-    }
-  };
+  const share = download;
 
   if (!open) return null;
   return <div className="menu-pdf-dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) close(); }}>

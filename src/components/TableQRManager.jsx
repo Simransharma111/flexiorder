@@ -1,3 +1,4 @@
+import { fileExportMessage } from "../utils/fileDownload";
 import { enableTakeawayLocation, findTakeawayLocation, isTakeawayLocation, sortServiceLocations } from "../utils/serviceLocations";
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
@@ -171,7 +172,7 @@ function ScopedTableQRManager() {
     try {
       const exporter = await import('../utils/tableQrExport');
       const result = individual ? await exporter.downloadTableQr(items[0], validSession) : await exporter.downloadTableQrPdf(items, (done, total) => { if (validSession()) setExporting(`Preparing QR ${done} of ${total}…`); }, validSession);
-      if (validSession()) setNotice(result?.native ? `Saved to ${result.label}` : 'QR download ready. Check your downloads.');
+      if (validSession()) setNotice(fileExportMessage(result));
     } catch (failure) { if (validSession()) setError(messageFor(failure)); }
     finally { exportingRef.current = false; if (validSession()) setExporting(''); }
   };

@@ -8,7 +8,7 @@ import {
   receiptShareText,
 } from "../../utils/orderReceipt";
 import { Share } from "@capacitor/share";
-import { downloadFile, isNativeApp, writeTempShareFile } from "../../utils/fileDownload";
+import { downloadFile, fileExportMessage, isNativeApp, isShareCancelled, writeTempShareFile } from "../../utils/fileDownload";
 
 export default function OrderReceiptActions({ order, hotel }) {
   const receipt = useMemo(() => buildOrderReceipt(order, hotel), [hotel, order]);
@@ -28,13 +28,8 @@ export default function OrderReceiptActions({ order, hotel }) {
     try {
       const blob = createOrderReceiptPdfBlob(receipt);
       const filename = receiptFilename(receipt);
-      if (isNativeApp()) {
-        const saved = await downloadFile(blob, filename);
-        setMessage(`Saved to ${saved.label || `Downloads/FlexiOrder/${filename}`}.`);
-      } else {
-        await downloadFile(blob, filename);
-        setMessage("Receipt downloaded.");
-      }
+      const result = await downloadFile(blob, filename);
+      setMessage(fileExportMessage(result));
     } catch {
       setMessage("Could not create or save the PDF. Try Print instead.");
     } finally {
@@ -60,7 +55,7 @@ export default function OrderReceiptActions({ order, hotel }) {
         });
         setMessage("PDF opened. Pick Print or any app to share it.");
       } catch (error) {
-        setMessage(error?.name === "AbortError"
+        setMessage(isShareCancelled(error)
           ? "Sheet dismissed. Nothing was printed."
           : "Could not open the PDF sheet. Try Download to save it first.");
       } finally {
@@ -86,22 +81,14 @@ export default function OrderReceiptActions({ order, hotel }) {
     setMessage("");
     try {
       const blob = createOrderReceiptPdfBlob(receipt);
-      const file = new File([blob], receiptFilename(receipt), { type: "application/pdf" });
-      const payload = {
+      const result = await downloadFile(blob, receiptFilename(receipt), {
         title: `${receipt.restaurant.name} order receipt`,
         text: receiptShareText(receipt),
-        files: [file],
-      };
-      if (typeof navigator.share !== "function" ||
-          (typeof navigator.canShare === "function" && !navigator.canShare({ files: [file] }))) {
-        setMessage("File sharing is unavailable here. Use Download PDF or Print.");
-        return;
-      }
-      await navigator.share(payload);
-      setMessage("Share opened. Confirm delivery in the app you selected.");
-      setConfirming(false);
+      });
+      setMessage(fileExportMessage(result));
+      if (result.status !== "cancelled") setConfirming(false);
     } catch (error) {
-      setMessage(error?.name === "AbortError"
+      setMessage(isShareCancelled(error)
         ? "Share cancelled. Nothing was marked as sent."
         : "Could not open sharing. Use Download PDF or Print.");
     } finally {

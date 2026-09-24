@@ -1,3 +1,4 @@
+import { confirmOrderingPause } from "../utils/orderingConfirmation";
 import {
   useEffect,
   useMemo,
@@ -562,6 +563,7 @@ const toggleOrdering=async()=>{
   const token=getStoredAuthToken();
   const hotelId=String(hotel?._id || hotel?.id);
   const value=hotel.orderingEnabled === false;
+  if (!value && !confirmOrderingPause()) return;
   orderingInFlight.current=true; hotelRevision.current++;
   setOrderingBusy(true); setOrderingError("");
   const valid=()=>alive.current && token === getStoredAuthToken();
