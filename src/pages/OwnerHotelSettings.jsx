@@ -52,6 +52,8 @@ const getSettingsPayload = (hotel) => {
   }
 
   return {
+    name: String(hotel.name || "").trim(),
+    phone: String(hotel.phone || "").trim(),
     menuMode: hotel.menuMode,
     gstEnabled: hotel.gstEnabled,
     gstPercentage,
@@ -64,7 +66,9 @@ const confirmsSettings = (hotel, submitted) => (
   hasOwn(hotel, "gstPercentage") &&
   hotel.menuMode === submitted.menuMode &&
   hotel.gstEnabled === submitted.gstEnabled &&
-  hotel.gstPercentage === submitted.gstPercentage
+  hotel.gstPercentage === submitted.gstPercentage &&
+  String(hotel.name || "").trim() === submitted.name &&
+  String(hotel.phone || "").trim() === submitted.phone
 );
 
 
@@ -290,11 +294,9 @@ const saveRequestRevision = settingsRevision.current;
 const res = await api.patch(
   "/hotel/profile",
   {
-    name: hotel.name,
     tagline: hotel.tagline,
     description: hotel.description,
     address: hotel.address,
-    phone: hotel.phone,
     email: hotel.email,
     website: hotel.website,
     instagram: hotel.instagram,
@@ -341,7 +343,11 @@ if (!confirmsSettings(confirmedResponse, submittedSettings)) {
         updatedAt: confirmedHotelRef.current?.updatedAt || responseHotel.updatedAt,
       };
   }
-  throw new Error("The restaurant did not confirm the saved menu and GST settings.");
+  const contactMismatch = String(confirmedResponse?.name || "").trim() !== submittedSettings.name ||
+    String(confirmedResponse?.phone || "").trim() !== submittedSettings.phone;
+  throw new Error(contactMismatch
+    ? "The restaurant did not confirm the saved name and contact phone. Refresh and try again."
+    : "The restaurant did not confirm the saved menu and GST settings.");
 }
 const data = normalizeHotelSettings(hydrateHotelFeatures(confirmedResponse));
 const concurrentConfirmed = confirmedHotelRef.current;
@@ -678,6 +684,7 @@ mb-5
 Hotel Information
 
 </h2>
+<p className="mb-4 text-sm">Save Settings to publish this restaurant name and contact phone to the customer menu and administrator view. These details are separate from your owner account name and sign-in details.</p>
 
 
 
@@ -687,6 +694,7 @@ Hotel Information
 value={hotel.name || ""}
 onChange={e=>updateField("name", e.target.value)}
 placeholder="Hotel name"
+aria-label="Restaurant name"
 className="p-3 rounded-xl text-black"
 />
 <input
@@ -758,6 +766,7 @@ e.target.value
 }
 
 placeholder="Phone"
+aria-label="Restaurant contact phone"
 
 className="
 p-3

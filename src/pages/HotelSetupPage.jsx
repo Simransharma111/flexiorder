@@ -20,7 +20,7 @@ export default function HotelSetupPage() {
     description: "",
     type: "hotel",
     address: "",
-    phone: "",
+    phone: user?.setupContactPhone || user?.phone || "",
     email: user?.email || "",
     website: "",
     instagram: "",
@@ -314,6 +314,7 @@ export default function HotelSetupPage() {
           ...(user || {}),
           ...updatedUser,
           hotelId: updatedUser.hotelId,
+          setupContactPhone: undefined,
           accountStatus:
             updatedUser.accountStatus || "active",
         },
@@ -430,6 +431,7 @@ export default function HotelSetupPage() {
             <h2 className="text-xl font-bold mb-5">
               Basic Information
             </h2>
+            <p className="mb-4 text-sm">These are your restaurant’s public details. The restaurant name can be different from your personal owner name.</p>
 
             <div className="grid md:grid-cols-2 gap-4">
 
@@ -444,6 +446,7 @@ export default function HotelSetupPage() {
                   value={formData.name}
                   onChange={handleChange}
                   placeholder="Enter hotel name"
+                  aria-label="Restaurant name"
                   required
                   disabled={loading}
                   className={inputClass}
@@ -502,7 +505,7 @@ export default function HotelSetupPage() {
 
               <div>
                 <label className="block text-sm mb-2">
-                  Phone *
+                  Restaurant contact phone *
                 </label>
 
                 <input
@@ -511,10 +514,14 @@ export default function HotelSetupPage() {
                   value={formData.phone}
                   onChange={handleChange}
                   placeholder="Phone number"
+                  aria-label="Restaurant contact phone"
+                  autoComplete="tel"
+                  inputMode="tel"
                   required
                   disabled={loading}
                   className={inputClass}
                 />
+                <p className="mt-2 text-xs">Prefilled from registration when available. You can use a different restaurant number; this does not change your owner account.</p>
               </div>
 
             </div>

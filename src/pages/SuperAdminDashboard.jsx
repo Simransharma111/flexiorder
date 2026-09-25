@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import useRefreshOnResume from "../hooks/useRefreshOnResume";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   FaHotel,
   FaTrash,
@@ -24,6 +25,7 @@ const labelClass = "mb-1.5 block text-sm font-bold text-ink";
 
 export default function SuperAdminDashboard() {
   const navigate = useNavigate();
+  const refreshSequence = useRef(0);
 
   // =====================================================
   // STATE
@@ -56,12 +58,14 @@ export default function SuperAdminDashboard() {
   // FETCH HOTELS
   // =====================================================
 
-  const fetchHotels = async () => {
+  const fetchHotels = useCallback(async () => {
+    const sequence = ++refreshSequence.current;
     try {
       setLoading(true);
       setError("");
 
       const res = await api.get("/admin/hotels");
+      if (sequence !== refreshSequence.current) return;
 
       /*
        * Backend response:
@@ -90,6 +94,7 @@ export default function SuperAdminDashboard() {
         );
       }
     } catch (err) {
+      if (sequence !== refreshSequence.current) return;
       console.error(
         "FETCH HOTELS ERROR:",
         err
@@ -103,9 +108,11 @@ export default function SuperAdminDashboard() {
 
       setHotels([]);
     } finally {
-      setLoading(false);
+      if (sequence === refreshSequence.current) setLoading(false);
     }
-  };
+  }, []);
+
+  useRefreshOnResume(fetchHotels);
 
   // =====================================================
   // INITIAL LOAD
@@ -113,7 +120,8 @@ export default function SuperAdminDashboard() {
 
   useEffect(() => {
     fetchHotels();
-  }, []);
+    return () => { refreshSequence.current += 1; };
+  }, [fetchHotels]);
 
   // =====================================================
   // FORM CHANGE
@@ -362,7 +370,7 @@ export default function SuperAdminDashboard() {
 
     const confirmed =
       window.confirm(
-        "PERMANENTLY DELETE this hotel and its owner?\n\nThis action cannot be undone."
+        "Before deleting: sign in as this restaurant’s owner and remove every staff account from Staff. The current server does NOT delete staff automatically; leftover accounts need backend support after the owner is deleted.\n\nHave you removed all staff and want to PERMANENTLY DELETE this hotel and its owner? This cannot be undone."
       );
 
     if (!confirmed) {
@@ -376,6 +384,8 @@ export default function SuperAdminDashboard() {
         `/admin/hotels/${id}`
       );
 
+      refreshSequence.current += 1;
+      setLoading(false);
       setHotels((prev) =>
         prev.filter(
           (hotel) =>
@@ -385,7 +395,7 @@ export default function SuperAdminDashboard() {
 
       setNotice({
         type: "success",
-        text: "Hotel and owner deleted successfully.",
+        text: "Hotel and owner deleted. Staff deletion was not performed by this action; any remaining accounts require backend support.",
       });
     } catch (err) {
       console.error(
@@ -788,8 +798,8 @@ export default function SuperAdminDashboard() {
                           <FaPhone className="shrink-0 text-ink-disabled" aria-hidden="true" />
 
                           <span>
-                            {hotel.phone ||
-                              "No phone"}
+                            Restaurant contact: {hotel.phone ||
+                              "Not provided"}
                           </span>
 
                         </p>

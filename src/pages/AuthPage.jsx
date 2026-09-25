@@ -381,7 +381,10 @@ export default function AuthPage({ mode = "login" }) {
         } catch { toast("Signed in, but this login could not be saved. You can try again next time."); }
       }
       setFormData(current => ({ ...current, password: "", confirmPassword: "" }));
-      const sessionSaved = login(user, token);
+      const sessionUser = isRegister
+        ? { ...user, setupContactPhone: formData.phone.trim() }
+        : user;
+      const sessionSaved = login(sessionUser, token);
 
       if (!sessionSaved) {
         throw new Error(
@@ -706,6 +709,8 @@ export default function AuthPage({ mode = "login" }) {
                 </p>
               )}
 
+              {isRegister && <p className="text-sm text-ink-secondary">Enter your personal name for the owner account. Next, you’ll name your restaurant. We’ll carry this phone number into restaurant setup so you don’t need to type it again.</p>}
+
               {/* OWNER DETAILS */}
 
               {isRegister && (
@@ -714,6 +719,7 @@ export default function AuthPage({ mode = "login" }) {
                     name="name"
                     type="text"
                     placeholder="Owner Name"
+                    aria-label="Your name (owner account)"
                     value={formData.name}
                     onChange={handleChange}
                     autoComplete="name"
@@ -725,6 +731,7 @@ export default function AuthPage({ mode = "login" }) {
                     name="phone"
                     type="tel"
                     placeholder="Phone Number"
+                    aria-label="Contact phone (used for restaurant setup)"
                     value={formData.phone}
                     onChange={handleChange}
                     autoComplete="tel"
