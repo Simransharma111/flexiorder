@@ -1,5 +1,6 @@
 import { confirmOrderingPause } from "../utils/orderingConfirmation";
 import {
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -532,20 +533,22 @@ orders
 
 
 
-const fetchHistory=async()=>{
+const fetchHistory=useCallback(async()=>{
   const read=++historyRead.current;
   const token=getStoredAuthToken();
   setHistoryLoading(true); setHistoryError("");
   try {
-    const res=await api.get("/orders", { timeout: 20000 });
+    const res=await api.get("/orders", { timeout: 20000, params: { limit: 500 } });
     if (!alive.current || token !== getStoredAuthToken() || read !== historyRead.current) return;
     const rows=res.data?.orders || res.data;
     if (!Array.isArray(rows)) throw new Error("Could not read order history.");
-    setHistoryOrders(rows);
+    setHistoryOrders(current => mergeOrders(current, rows));
   } catch (error) {
     if (alive.current && token === getStoredAuthToken() && read === historyRead.current) setHistoryError(error.response?.data?.message || "Could not load complete history. Check your connection and retry.");
   } finally { if (alive.current && token === getStoredAuthToken() && read === historyRead.current) setHistoryLoading(false); }
-};
+}, []);
+useEffect(() => { if (activeTab === "analytics") void fetchHistory(); }, [activeTab, fetchHistory]);
+useRefreshOnResume(() => { if (activeTab === "analytics") return fetchHistory(); });
 const changeTab=(tab)=>{
   setActiveTab(tab); setSidebarOpen(false);
   if(tab === "orders") { setOrdersView("active"); setNewOrderCount(0); }
@@ -600,7 +603,7 @@ const navItems = NAV_ITEMS.filter((item) =>
 
 
 const refresh=()=>{
-if (activeTab === "orders" && ordersView === "history") void fetchHistory();
+if (activeTab === "analytics" || (activeTab === "orders" && ordersView === "history")) void fetchHistory();
 
 setRefreshKey(
 v=>v+1
@@ -901,7 +904,11 @@ setRefreshKey={setRefreshKey}
 {
 activeTab==="analytics" &&
 
-<AnalyticsDashboard hotel={hotel} orders={orders} advancedEnabled={featureEnabled(featureSettings.appLevel, "analyticsExport")}/>
+<>
+{historyLoading && <p role="status">Loading saved bills…</p>}
+{historyError && <div role="alert">{historyError} <button type="button" onClick={fetchHistory}>Retry bills</button></div>}
+<AnalyticsDashboard hotel={hotel} orders={mergeOrders(historyOrders, orders)} advancedEnabled={featureEnabled(featureSettings.appLevel, "analyticsExport")}/>
+</>
 
 }
 

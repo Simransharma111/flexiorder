@@ -1,3 +1,4 @@
+import { preserveCustomerName } from "../utils/orderCustomer";
 import { tableLabel } from "../utils/tableQr";
 import { findTakeawayLocation, isTakeawayLocation, sortServiceLocations } from "../utils/serviceLocations";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -378,7 +379,7 @@ export default function StaffOrder({ hotel, onOrderCreated, active = true, visib
       }
       const response = await api.post("/orders", payload);
       const created = response.data?.order || response.data;
-      onOrderCreated?.(created?._id ? created : { ...localShape, _id: `local-${Date.now()}` });
+      onOrderCreated?.(created?._id ? preserveCustomerName(created, payload) : { ...localShape, _id: `local-${Date.now()}` });
       setMessage("Order sent to kitchen.");
       resetOrder();
     } catch (placeError) {

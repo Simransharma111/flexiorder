@@ -1,3 +1,4 @@
+import { preserveCustomerName } from "./orderCustomer";
 export const guestActiveOrdersKey = (qrId) => `activeOrders_${qrId}`;
 
 const HANDOFF_TTL_MS = 5 * 60 * 1000;
@@ -73,7 +74,7 @@ const mergeMatchedOrder = (serverOrder, localOrder) => {
   const localRank = STATUS_RANK[localOrder?.status] ?? -1;
   return {
     ...localOrder,
-    ...serverOrder,
+    ...preserveCustomerName(serverOrder, localOrder),
     _id: serverOrder?._id || localOrder?._id,
     clientOrderId: serverOrder?.clientOrderId || localOrder?.clientOrderId,
     status: serverRank < localRank ? localOrder.status : serverOrder.status,
@@ -88,7 +89,7 @@ const uniqueServerOrders = (orders) => {
   orders.forEach((order) => {
     const index = unique.findIndex((candidate) => sameGuestOrder(candidate, order));
     if (index === -1) unique.push(order);
-    else unique[index] = { ...unique[index], ...order };
+    else unique[index] = { ...unique[index], ...preserveCustomerName(order, unique[index]) };
   });
   return unique;
 };

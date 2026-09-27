@@ -31,7 +31,12 @@ export default function StaffWorkspace() {
   const navigate = useNavigate();
   const { status: connectionStatus, label: connectionLabel } = useConnectivity();
   const [hotel, setHotel] = useState(null);
-  const [orders, setOrders] = useState([]);
+  const [orders, setOrders] = useState(() => {
+    try {
+      const cached = JSON.parse(localStorage.getItem(getScopedStorageKey(ORDERS_CACHE_KEY)) || "[]");
+      return Array.isArray(cached) ? cached : [];
+    } catch { return []; }
+  });
   const [activeTab, setActiveTab] = useState("orders");
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);

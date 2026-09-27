@@ -1,3 +1,4 @@
+import { preserveCustomerName } from "../utils/orderCustomer";
 import {
   FiArrowLeft,
   FiMinus,
@@ -446,7 +447,7 @@ export default function CartPage() {
         status: "pending",
         createdAt: new Date().toISOString(),
         ...orderData,
-        ...createdOrder,
+        ...preserveCustomerName(createdOrder, orderData),
         _id: createdOrder?._id || clientOrderId,
         clientOrderId: createdOrder?.clientOrderId || clientOrderId,
         items: mergeGuestOrderItems(createdOrder?.items, submittedItems),

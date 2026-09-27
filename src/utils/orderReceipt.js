@@ -1,3 +1,4 @@
+import { customerName } from "./orderCustomer";
 import { renderReceiptPdf } from "./receiptPdfLayout";
 import { readRestaurantBilling } from "./restaurantBilling";
 import { orderLocation } from "./orderModel";
@@ -129,7 +130,7 @@ export const buildOrderReceipt = (order, hotel = {}) => {
       reference,
       date: receiptDate(order),
       location: orderLocation(order),
-      guestName: order?.guestName || order?.customerName || "",
+      guestName: customerName(order),
       contact: rawContact,
       normalizedContact: normalizeReceiptContact(rawContact),
       paymentMethod: order?.paymentMethod || order?.payment?.method || "",
@@ -164,6 +165,7 @@ export const receiptShareText = (receipt) => [
   `${receipt.restaurant.name} — Order receipt`,
   ...(receipt.restaurant.gstin ? [`GSTIN: ${receipt.restaurant.gstin}`] : []),
   `Order ${receipt.order.reference}`,
+  ...(receipt.order.guestName ? [`Customer: ${receipt.order.guestName}`] : []),
   `${receipt.order.location} · ${dateTime(receipt.order.date)}`,
   ...receipt.items.map((item) => `${item.quantity} x ${item.name}`),
   `Total: ${money(receipt.financials.total)}`,

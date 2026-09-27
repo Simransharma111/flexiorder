@@ -1,3 +1,4 @@
+import { customerName } from "../../utils/orderCustomer";
 import { useEffect, useRef } from "react";
 import { FiClock, FiMoreVertical } from "react-icons/fi";
 import { orderLocation } from "../../utils/orderModel";
@@ -92,6 +93,8 @@ aria-label={`${location} order — tap for details`}
 
 >
 
+
+{customerName(order) && <p className="mb-2 break-words text-sm font-bold">{customerName(order)}</p>}
 
 {/* LINE 1 */}
 

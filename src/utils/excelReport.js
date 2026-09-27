@@ -1,3 +1,4 @@
+import { customerName } from "./orderCustomer";
 import ExcelJS from "exceljs";
 import { analyticsComparison } from "./analyticsRanges";
 
@@ -126,11 +127,11 @@ export async function buildAnalyticsReportBlob({
 
   ws.columns = [
     { width: 16 }, { width: 12 }, { width: 9 }, { width: 16 }, { width: 26 },
-    { width: 38 }, { width: 7 }, { width: 12 }, { width: 10 }, { width: 10 }, { width: 12 }, { width: 13 }, { width: 12 },
+    { width: 38 }, { width: 7 }, { width: 12 }, { width: 10 }, { width: 10 }, { width: 12 }, { width: 13 }, { width: 12 }, { width: 26 },
   ];
 
   // brand block ───────────────────────────────────────────────────────────
-  ws.mergeCells("A1:M1");
+  ws.mergeCells("A1:N1");
   const brand = ws.getCell("A1");
   brand.value = hotel?.name || hotel?.hotelName || "Restaurant";
   brand.font = { size: 20, bold: true, color: { argb: WHITE } };
@@ -138,19 +139,19 @@ export async function buildAnalyticsReportBlob({
   brand.alignment = { vertical: "middle", horizontal: "center" };
   ws.getRow(1).height = 34;
 
-  ws.mergeCells("A2:M2");
+  ws.mergeCells("A2:N2");
   const brandMeta = ws.getCell("A2");
   brandMeta.value = [hotel?.address || hotel?.location, hotel?.phone || hotel?.contact, hotel?.email].filter(Boolean).join("  ·  ");
   brandMeta.font = { size: 10, color: { argb: MUTED }, italic: true };
   brandMeta.alignment = { vertical: "middle", horizontal: "center" };
 
-  ws.mergeCells("A3:M3");
+  ws.mergeCells("A3:N3");
   const title = ws.getCell("A3");
   title.value = "Sales Analytics Report";
   title.font = { size: 14, bold: true, color: { argb: INK } };
   title.alignment = { vertical: "middle", horizontal: "center" };
 
-  ws.mergeCells("A4:M4");
+  ws.mergeCells("A4:N4");
   const period = ws.getCell("A4");
   period.value = `Period: ${rangeLabel || "Selected range"}   ·   Generated: ${new Date().toLocaleString("en-IN")}   ·   Powered by FlexiOrder`;
   period.font = { size: 10, color: { argb: MUTED } };
@@ -159,11 +160,11 @@ export async function buildAnalyticsReportBlob({
   let r = 6;
 
   // summary ───────────────────────────────────────────────────────────────
-  ws.mergeCells(`A${r}:M${r}`);
+  ws.mergeCells(`A${r}:N${r}`);
   ws.getCell(`A${r}`).value = "Summary — what happened in this period";
   ws.getCell(`A${r}`).font = { size: 12, bold: true, color: { argb: INK } };
   r += 1;
-  ws.mergeCells(`A${r}:M${r}`);
+  ws.mergeCells(`A${r}:N${r}`);
   ws.getCell(`A${r}`).value = "Money earned, how many orders, and how this compares with the period just before.";
   ws.getCell(`A${r}`).font = { size: 9, italic: true, color: { argb: MUTED } };
   r += 1;
@@ -183,7 +184,7 @@ export async function buildAnalyticsReportBlob({
     row.getCell(3).font = { size: 11, color: { argb: INK } };
     row.getCell(3).alignment = { horizontal: "right" };
     if (label !== "Orders placed" && label !== "Orders delivered" && label !== "Orders still open") row.getCell(3).numFmt = MONEY_FMT;
-    ws.mergeCells(`E${r}:M${r}`);
+    ws.mergeCells(`E${r}:N${r}`);
     row.getCell(5).value = note;
     row.getCell(5).font = { size: 9, italic: true, color: { argb: MUTED } };
     if (r % 2 === 0) row.eachCell((cell) => { cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: ZEBRA } }; });
@@ -203,11 +204,11 @@ export async function buildAnalyticsReportBlob({
 
   // diagram ───────────────────────────────────────────────────────────────
   const chart = drawRevenueBars(chartData, accent);
-  ws.mergeCells(`A${r}:M${r}`);
+  ws.mergeCells(`A${r}:N${r}`);
   ws.getCell(`A${r}`).value = "Revenue trend — diagram for the selected period";
   ws.getCell(`A${r}`).font = { size: 12, bold: true, color: { argb: INK } };
   r += 1;
-  ws.mergeCells(`A${r}:M${r}`);
+  ws.mergeCells(`A${r}:N${r}`);
   ws.getCell(`A${r}`).value = chart
     ? "Each bar is one day (or week for long ranges). Taller bar = more money earned."
     : "No revenue recorded in this period yet — the diagram appears once orders are billed.";
@@ -226,7 +227,7 @@ export async function buildAnalyticsReportBlob({
 
   // top dishes ────────────────────────────────────────────────────────────
   if (popularDishes.length) {
-    ws.mergeCells(`A${r}:M${r}`);
+    ws.mergeCells(`A${r}:N${r}`);
     ws.getCell(`A${r}`).value = "Best sellers — dishes guests ordered most";
     ws.getCell(`A${r}`).font = { size: 12, bold: true, color: { argb: INK } };
     r += 1;
@@ -250,16 +251,16 @@ export async function buildAnalyticsReportBlob({
   }
 
   // order detail ──────────────────────────────────────────────────────────
-  ws.mergeCells(`A${r}:M${r}`);
+  ws.mergeCells(`A${r}:N${r}`);
   ws.getCell(`A${r}`).value = `Every order in ${rangeLabel ? `"${rangeLabel}"` : "the selected period"} (${orders.length} rows)`;
   ws.getCell(`A${r}`).font = { size: 12, bold: true, color: { argb: INK } };
   r += 1;
-  ws.mergeCells(`A${r}:M${r}`);
-  ws.getCell(`A${r}`).value = "Columns: order number, when, where the guest sat, contact, items, amounts, and final status.";
+  ws.mergeCells(`A${r}:N${r}`);
+  ws.getCell(`A${r}`).value = "Columns: order number, when, where the guest sat, contact, customer name, items, amounts, and final status.";
   ws.getCell(`A${r}`).font = { size: 9, italic: true, color: { argb: MUTED } };
   r += 1;
 
-  const headers = ["Order #", "Date", "Time", "Table / Spot", "Guest contact", "Items", "Qty", "Subtotal", "Discount", "GST", "Total", "Status", "Payment"];
+  const headers = ["Order #", "Date", "Time", "Table / Spot", "Guest contact", "Items", "Qty", "Subtotal", "Discount", "GST", "Total", "Status", "Payment", "Customer name"];
   const hrow = ws.getRow(r);
   headers.forEach((h, i) => { hrow.getCell(i + 1).value = h; });
   styleHeaderRow(hrow, accent);
@@ -285,11 +286,13 @@ export async function buildAnalyticsReportBlob({
       money(order?.totalAmount ?? order?.total),
       order?.status || "",
       (order?.paymentMethod || order?.payment?.method || "").toUpperCase() || "—",
+      customerName(order) || "—",
     ];
     values.forEach((v, i) => { row.getCell(i + 1).value = v; });
     [8, 9, 10, 11].forEach((c) => { row.getCell(c).numFmt = MONEY_FMT; row.getCell(c).alignment = { horizontal: "right" }; });
     row.getCell(7).alignment = { horizontal: "center" };
     row.getCell(6).alignment = { wrapText: true, vertical: "top" };
+    row.getCell(14).alignment = { wrapText: true, vertical: "top" };
     row.eachCell(cellBorders);
     if (idx % 2 === 1) row.eachCell((cell) => { cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: ZEBRA } }; });
     row.height = Math.min(48, 14 + Math.ceil(String(values[5]).length / 60) * 10);

@@ -1,3 +1,4 @@
+import { preserveCustomerName } from "./orderCustomer";
 import { prepareLegacyTakeawayPayload } from "./serviceLocations";
 import { getRestaurantId, getScopedStorageKey } from "./storageScope";
 import {
@@ -48,7 +49,7 @@ const runStaffSync = async (api, { force = false } = {}) => {
       const order = response.data?.order || response.data;
       if (!order?._id) throw new Error("The server did not confirm the order.");
       syncedOrders.push({
-        ...order,
+        ...preserveCustomerName(order, queued.payload),
         clientOrderId: queued.clientOrderId,
         pendingSync: false,
       });
@@ -76,7 +77,7 @@ const runStaffSync = async (api, { force = false } = {}) => {
         : null;
       if (existingOrder?._id) {
         syncedOrders.push({
-          ...existingOrder,
+          ...preserveCustomerName(existingOrder, queued.payload),
           clientOrderId: queued.clientOrderId,
           pendingSync: false,
         });
