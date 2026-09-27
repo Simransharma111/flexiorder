@@ -1,3 +1,4 @@
+import BillingSettings from "../components/settings/BillingSettings";
 import MenuResetSection from "../components/settings/MenuResetSection";
 import { confirmOrderingPause } from "../utils/orderingConfirmation";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -958,6 +959,8 @@ p-6
     </div>
   )}
 </section>
+
+<BillingSettings hotel={hotel} />
 
 <MenuResetSection hotel={hotel} />
 

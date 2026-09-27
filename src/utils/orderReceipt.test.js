@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   buildOrderReceipt,
   normalizeReceiptContact,
@@ -123,5 +123,29 @@ describe("order receipt", () => {
     expect(receiptPrintHtml(second)).toContain("Hakka Noodles");
     expect(receiptPrintHtml(second)).not.toContain("Paneer Tikka");
     expect(receiptFilename(first)).toBe("order-receipt-first-order.pdf");
+  });
+});
+
+
+describe("restaurant GSTIN on receipts", () => {
+  afterEach(() => vi.unstubAllGlobals());
+  it("uses only the explicit restaurant's saved GSTIN in print and share output", () => {
+    vi.stubGlobal("localStorage", { getItem: key => key === "flexiorder_restaurant_billing:hotel-a" ? JSON.stringify({ gstin: "27ABCDE1234F1Z5" }) : null });
+    const order = { _id: "test", items: [], totalAmount: 100 };
+    const a = buildOrderReceipt(order, { _id: "hotel-a", name: "A & B" });
+    const b = buildOrderReceipt(order, { _id: "hotel-b" });
+    expect(a.restaurant.gstin).toBe("27ABCDE1234F1Z5");
+    expect(receiptPrintHtml(a)).toContain("GSTIN: 27ABCDE1234F1Z5");
+    expect(receiptPrintHtml(a)).toContain("A &amp; B");
+    expect(receiptShareText(a)).toContain("GSTIN: 27ABCDE1234F1Z5");
+    expect(receiptPrintHtml(b)).not.toContain("GSTIN:");
+    expect(buildOrderReceipt(order).restaurant.gstin).toBe("");
+    expect(a.financials.total).toBe(100);
+  });
+  it("returns an actionable warning instead of crashing on corrupt receipt storage", () => {
+    vi.stubGlobal("localStorage", { getItem: () => "broken" });
+    const receipt = buildOrderReceipt({ totalAmount: 100 }, { _id: "hotel-a" });
+    expect(receipt.restaurant.gstin).toBe("");
+    expect(receipt.restaurant.billingWarning).toContain("could not be read");
   });
 });

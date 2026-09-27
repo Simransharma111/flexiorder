@@ -11,7 +11,13 @@ import { Share } from "@capacitor/share";
 import { downloadFile, fileExportMessage, isNativeApp, isShareCancelled, writeTempShareFile } from "../../utils/fileDownload";
 
 export default function OrderReceiptActions({ order, hotel }) {
-  const receipt = useMemo(() => buildOrderReceipt(order, hotel), [hotel, order]);
+  const [billingRevision, setBillingRevision] = useState(0);
+  useEffect(() => {
+    const refresh = () => setBillingRevision(value => value + 1);
+    window.addEventListener("storage", refresh);
+    return () => window.removeEventListener("storage", refresh);
+  }, []);
+  const receipt = useMemo(() => buildOrderReceipt(order, hotel), [hotel, order, billingRevision]);
   const [confirming, setConfirming] = useState(false);
   const [working, setWorking] = useState(false);
   const [message, setMessage] = useState("");
@@ -22,7 +28,7 @@ export default function OrderReceiptActions({ order, hotel }) {
   }, [confirming]);
 
   const download = async () => {
-    if (working) return;
+    if (working || receipt.restaurant.billingWarning) return;
     setWorking(true);
     setMessage("");
     try {
@@ -38,7 +44,7 @@ export default function OrderReceiptActions({ order, hotel }) {
   };
 
   const print = async () => {
-    if (working) return;
+    if (working || receipt.restaurant.billingWarning) return;
     // In the app shell, open the PDF through the native share/print sheet:
     // backable, shareable, and prints via the device's print service.
     if (isNativeApp()) {
@@ -76,7 +82,7 @@ export default function OrderReceiptActions({ order, hotel }) {
   };
 
   const share = async () => {
-    if (working || !receipt.order.normalizedContact) return;
+    if (working || receipt.restaurant.billingWarning || !receipt.order.normalizedContact) return;
     setWorking(true);
     setMessage("");
     try {
@@ -101,16 +107,17 @@ export default function OrderReceiptActions({ order, hotel }) {
       <div className="ops-receipt-actions__head">
         <div><h3>Paperless receipt</h3><p>Order receipt only · nothing is sent automatically</p></div>
       </div>
+      {receipt.restaurant.billingWarning && <p role="alert">{receipt.restaurant.billingWarning}</p>}
       <div className="ops-receipt-actions__buttons">
         {receipt.order.normalizedContact && (
-          <button type="button" onClick={() => { setConfirming(true); setMessage(""); }} disabled={working}>
+          <button type="button" onClick={() => { setConfirming(true); setMessage(""); }} disabled={working || Boolean(receipt.restaurant.billingWarning)}>
             <FiShare2 aria-hidden="true" /> Share receipt
           </button>
         )}
-        <button type="button" onClick={download} disabled={working}>
+        <button type="button" onClick={download} disabled={working || Boolean(receipt.restaurant.billingWarning)}>
           <FiDownload aria-hidden="true" /> Download PDF
         </button>
-        <button type="button" onClick={print} disabled={working}>
+        <button type="button" onClick={print} disabled={working || Boolean(receipt.restaurant.billingWarning)}>
           <FiPrinter aria-hidden="true" /> Print
         </button>
       </div>
@@ -122,10 +129,10 @@ export default function OrderReceiptActions({ order, hotel }) {
           <p>Open the device share sheet for <strong>{receipt.order.normalizedContact}</strong>?</p>
           <small>The platform cannot guarantee or report which person receives the file.</small>
           <div>
-            <button ref={confirmRef} type="button" onClick={share} disabled={working}>
+            <button ref={confirmRef} type="button" onClick={share} disabled={working || Boolean(receipt.restaurant.billingWarning)}>
               {working ? "Opening…" : "Confirm and open share"}
             </button>
-            <button type="button" onClick={() => setConfirming(false)} disabled={working}>Cancel</button>
+            <button type="button" onClick={() => setConfirming(false)} disabled={working || Boolean(receipt.restaurant.billingWarning)}>Cancel</button>
           </div>
         </div>
       )}
