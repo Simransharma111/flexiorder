@@ -149,3 +149,30 @@ describe("restaurant GSTIN on receipts", () => {
     expect(receipt.restaurant.billingWarning).toContain("could not be read");
   });
 });
+
+describe('GST bill reconciliation', () => {
+  it('shows GST separately without adding it twice to the saved total', () => {
+    const receipt=buildOrderReceipt({subtotal:100,gstAmount:5,gstRate:5,totalAmount:105});
+    expect(receipt.financials).toMatchObject({gstAmount:5,total:105,taxMismatch:false,note:''});
+    expect(receiptShareText(receipt)).toContain('GST (5%): INR 5.00');
+    expect(receiptShareText(receipt)).toContain('Total: INR 105.00');
+    expect(receiptPrintHtml(receipt)).toContain('GST (5%)');
+  });
+  it('flags legacy GST excluded from the total without silently changing saved charges', () => {
+    const receipt=buildOrderReceipt({subtotal:100,gstAmount:5,totalAmount:100});
+    expect(receipt.financials).toMatchObject({gstAmount:5,total:100,taxMismatch:true});
+    expect(receiptShareText(receipt)).toContain('do not match the saved total');
+    expect(receiptPrintHtml(receipt)).toContain('do not match the saved total');
+  });
+  it('does not add current restaurant GST to historical zero-tax orders', () => {
+    const receipt=buildOrderReceipt({subtotal:100,gstAmount:0,totalAmount:100},{gstEnabled:true,gstPercentage:18});
+    expect(receipt.financials).toMatchObject({gstAmount:0,total:100,taxMismatch:false});
+    expect(receiptShareText(receipt)).not.toContain('GST:');
+  });
+  it('preserves mixed-rate saved tax without inventing a uniform rate', () => {
+    const receipt=buildOrderReceipt({subtotal:350,gstAmount:29,totalAmount:379});
+    expect(receipt.financials.taxMismatch).toBe(false);
+    expect(receiptShareText(receipt)).toContain('GST: INR 29.00');
+    expect(receiptShareText(receipt)).not.toContain('GST (');
+  });
+});

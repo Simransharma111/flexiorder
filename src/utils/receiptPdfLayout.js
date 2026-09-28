@@ -106,7 +106,7 @@ export function renderReceiptPdf(receipt, { money, dateTime }) {
   y += 22;
   const totals = [[receipt.financials.subtotalLabel, money(receipt.financials.subtotal)]];
   if (receipt.financials.discount > 0) totals.push(["Discount recorded", `-${money(receipt.financials.discount)}`]);
-  if (receipt.financials.gstAmount > 0) totals.push([receipt.financials.gstRate ? `GST (${receipt.financials.gstRate}%)` : "GST recorded", money(receipt.financials.gstAmount)]);
+  if (receipt.financials.gstAmount > 0) totals.push([receipt.financials.gstRate ? `GST (${receipt.financials.gstRate}%)` : "GST", money(receipt.financials.gstAmount)]);
   // Keep the subtotal, recorded adjustments and total together.
   ensure(totals.length * 55 + 125);
   for (const [label, value] of totals) {

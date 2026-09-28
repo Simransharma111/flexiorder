@@ -92,6 +92,16 @@ const normalizeFinancials = (order, items) => {
         ? subtotal + gstAmount
         : null);
   const hasAmbiguousLegacySubtotal = discount > 0 && subtotalKind === "unknown";
+  const expectedTotals = subtotal === null ? [] : subtotalKind === "gross"
+    ? [subtotal - discount + gstAmount]
+    : subtotalKind === "net" ? [subtotal + gstAmount]
+      : [subtotal + gstAmount, subtotal - discount + gstAmount];
+  const taxMismatch = gstAmount > 0 && explicitTotal !== null && expectedTotals.length > 0 &&
+    !expectedTotals.some(expected => closeEnough(expected, explicitTotal));
+  const taxNote = taxMismatch
+    ? "The saved GST and subtotal do not match the saved total. Confirm this bill with the restaurant; the recorded amount has not been changed."
+    : "";
+
 
   return {
     subtotal,
@@ -99,13 +109,14 @@ const normalizeFinancials = (order, items) => {
     discount,
     gstRate,
     gstAmount,
+    taxMismatch,
     total,
     totalIsServerSnapshot: explicitTotal !== null,
-    note: hasAmbiguousLegacySubtotal
+    note: taxNote || (hasAmbiguousLegacySubtotal
       ? explicitTotal !== null
         ? "Legacy subtotal meaning is unavailable; the recorded total is shown without recalculating the discount."
         : "Legacy subtotal meaning is unavailable, so a total was not recalculated. Confirm the amount from the server record."
-      : "",
+      : ""),
   };
 };
 
@@ -167,7 +178,11 @@ export const receiptShareText = (receipt) => [
   ...(receipt.order.guestName ? [`Customer: ${receipt.order.guestName}`] : []),
   `${receipt.order.location} · ${dateTime(receipt.order.date)}`,
   ...receipt.items.map((item) => `${item.quantity} x ${item.name}`),
+  `${receipt.financials.subtotalLabel}: ${money(receipt.financials.subtotal)}`,
+  ...(receipt.financials.discount > 0 ? [`Discount recorded: ${money(receipt.financials.discount)}`] : []),
+  ...(receipt.financials.gstAmount > 0 ? [`GST${receipt.financials.gstRate ? ` (${receipt.financials.gstRate}%)` : ""}: ${money(receipt.financials.gstAmount)}`] : []),
   `Total: ${money(receipt.financials.total)}`,
+  ...(receipt.financials.note ? [receipt.financials.note] : []),
 ].join("\n");
 
 export const createOrderReceiptPdf = (receipt) => renderReceiptPdf(receipt, { money, dateTime });
@@ -190,7 +205,7 @@ export const receiptPrintHtml = (receipt) => {
     : "";
   const gstLabel = receipt.financials.gstRate
     ? `GST (${escapeHtml(receipt.financials.gstRate)}%)`
-    : "GST recorded";
+    : "GST";
 
   return `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(receiptFilename(receipt))}</title><style>
 @page{size:A4;margin:18mm}*{box-sizing:border-box}body{font-family:Arial,"Noto Sans",sans-serif;max-width:760px;margin:32px auto;color:#172c2a;font-size:14px;line-height:1.5}header{border-top:4px solid #176756;padding-top:18px}.eyebrow{color:#176756;font-size:11px;letter-spacing:2px;font-weight:bold}h1{font-size:32px;margin:10px 0;overflow-wrap:anywhere}.contact{color:#61716c;margin:8px 0;overflow-wrap:anywhere}.meta{border-top:1px solid #dce5e0;margin:22px 0;padding-top:16px;overflow-wrap:anywhere}table{width:100%;table-layout:fixed;border-collapse:collapse}thead{display:table-header-group}th{text-align:left;background:#edf4f0;color:#176756;font-size:11px;padding:12px 8px}td{padding:13px 8px;border-bottom:1px solid #dce5e0;vertical-align:top;overflow-wrap:anywhere}th:not(:first-child),td:not(:first-child){text-align:right}tr{break-inside:avoid}.totals{margin:24px 0;break-inside:avoid}.totals div{display:flex;justify-content:space-between;gap:24px;padding:7px 12px}.total{background:#172c2a;color:white;font-size:20px;font-weight:bold;margin-top:10px;padding:16px 12px!important}.muted{color:#61716c;font-size:12px}.notes{white-space:pre-wrap;overflow-wrap:anywhere}footer{border-top:1px solid #dce5e0;padding-top:16px;margin-top:28px;break-inside:avoid}@media print{body{margin:0}button{display:none}th,.total{print-color-adjust:exact;-webkit-print-color-adjust:exact}}
