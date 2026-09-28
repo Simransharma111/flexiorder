@@ -1,3 +1,4 @@
+import { orderNumber } from "../../utils/orderNumber";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FiSearch, FiShoppingBag } from "react-icons/fi";
 import KitchenBoard from "../kitchen/KitchenBoard";
@@ -282,6 +283,7 @@ export default function Orders({
     return historyOrders.filter((order) => [
       order._id,
       order.clientOrderId,
+      orderNumber(order),
       customerName(order),
       orderLocation(order),
     ].some((value) => String(value || "").toLowerCase().includes(term)));

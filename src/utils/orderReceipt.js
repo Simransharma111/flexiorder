@@ -1,3 +1,4 @@
+import { orderNumber } from "./orderNumber";
 import { customerName } from "./orderCustomer";
 import { renderReceiptPdf } from "./receiptPdfLayout";
 import { readRestaurantBilling } from "./restaurantBilling";
@@ -115,7 +116,7 @@ export const buildOrderReceipt = (order, hotel = {}) => {
   try { billing = readRestaurantBilling(hotel); }
   catch { billingWarning = "The saved restaurant GSTIN could not be read. Open Settings and save receipt details again before exporting."; }
   const rawContact = order?.guestContact || order?.guestPhone || order?.contact || order?.phone || "";
-  const reference = String(order?.orderNumber || order?._id || order?.clientOrderId || "Order");
+  const reference = orderNumber(order);
   return {
     title: "Order receipt",
     restaurant: {
@@ -133,8 +134,6 @@ export const buildOrderReceipt = (order, hotel = {}) => {
       guestName: customerName(order),
       contact: rawContact,
       normalizedContact: normalizeReceiptContact(rawContact),
-      paymentMethod: order?.paymentMethod || order?.payment?.method || "",
-      paymentStatus: order?.paymentStatus || order?.payment?.status || "",
       instructions: order?.note || order?.notes || order?.specialInstructions || order?.instructions || "",
     },
     items,
@@ -189,17 +188,11 @@ export const receiptPrintHtml = (receipt) => {
   const guest = receipt.order.guestName
     ? `<br><b>Guest:</b> ${escapeHtml(receipt.order.guestName)}`
     : "";
-  const payment = receipt.order.paymentMethod || receipt.order.paymentStatus
-    ? `<br><b>Payment:</b> ${escapeHtml([
-      receipt.order.paymentMethod,
-      receipt.order.paymentStatus,
-    ].filter(Boolean).join(" · "))}`
-    : "";
   const gstLabel = receipt.financials.gstRate
     ? `GST (${escapeHtml(receipt.financials.gstRate)}%)`
     : "GST recorded";
 
   return `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(receiptFilename(receipt))}</title><style>
 @page{size:A4;margin:18mm}*{box-sizing:border-box}body{font-family:Arial,"Noto Sans",sans-serif;max-width:760px;margin:32px auto;color:#172c2a;font-size:14px;line-height:1.5}header{border-top:4px solid #176756;padding-top:18px}.eyebrow{color:#176756;font-size:11px;letter-spacing:2px;font-weight:bold}h1{font-size:32px;margin:10px 0;overflow-wrap:anywhere}.contact{color:#61716c;margin:8px 0;overflow-wrap:anywhere}.meta{border-top:1px solid #dce5e0;margin:22px 0;padding-top:16px;overflow-wrap:anywhere}table{width:100%;table-layout:fixed;border-collapse:collapse}thead{display:table-header-group}th{text-align:left;background:#edf4f0;color:#176756;font-size:11px;padding:12px 8px}td{padding:13px 8px;border-bottom:1px solid #dce5e0;vertical-align:top;overflow-wrap:anywhere}th:not(:first-child),td:not(:first-child){text-align:right}tr{break-inside:avoid}.totals{margin:24px 0;break-inside:avoid}.totals div{display:flex;justify-content:space-between;gap:24px;padding:7px 12px}.total{background:#172c2a;color:white;font-size:20px;font-weight:bold;margin-top:10px;padding:16px 12px!important}.muted{color:#61716c;font-size:12px}.notes{white-space:pre-wrap;overflow-wrap:anywhere}footer{border-top:1px solid #dce5e0;padding-top:16px;margin-top:28px;break-inside:avoid}@media print{body{margin:0}button{display:none}th,.total{print-color-adjust:exact;-webkit-print-color-adjust:exact}}
-</style></head><body><header><div class="eyebrow">ORDER RECEIPT</div><h1>${escapeHtml(receipt.restaurant.name)}</h1>${restaurantContact ? `<p class="contact">${restaurantContact}</p>` : ""}</header><p class="meta"><b>Order:</b> ${escapeHtml(receipt.order.reference)}<br><b>Date:</b> ${escapeHtml(dateTime(receipt.order.date))}<br><b>Location:</b> ${escapeHtml(receipt.order.location)}${guest}${payment}</p><table><colgroup><col style="width:49%"><col style="width:9%"><col style="width:20%"><col style="width:22%"></colgroup><thead><tr><th>ITEM</th><th>QTY</th><th>RATE (INR)</th><th>AMOUNT (INR)</th></tr></thead><tbody>${receipt.items.map((item) => `<tr><td>${escapeHtml(item.name)}</td><td>${escapeHtml(item.quantity)}</td><td>${escapeHtml(money(item.unitPrice).replace(/^INR /, ""))}</td><td>${escapeHtml(money(item.lineTotal).replace(/^INR /, ""))}</td></tr>`).join("")}</tbody></table><div class="totals"><div><span>${escapeHtml(receipt.financials.subtotalLabel)}</span><b>${escapeHtml(money(receipt.financials.subtotal))}</b></div>${receipt.financials.discount > 0 ? `<div><span>Discount recorded</span><b>−${escapeHtml(money(receipt.financials.discount))}</b></div>` : ""}${receipt.financials.gstAmount > 0 ? `<div><span>${gstLabel}</span><b>${escapeHtml(money(receipt.financials.gstAmount))}</b></div>` : ""}<div class="total"><span>TOTAL</span><span>${escapeHtml(money(receipt.financials.total))}</span></div></div>${receipt.financials.note ? `<p class="muted">${escapeHtml(receipt.financials.note)}</p>` : ""}${receipt.order.instructions ? `<h3>Order notes</h3><p class="notes">${escapeHtml(receipt.order.instructions)}</p>` : ""}<footer><b>Thank you for dining with us.</b><p class="muted">Order receipt, not a GST tax invoice. Amounts reflect the saved order.</p><span class="muted">Prepared with FlexiOrder</span></footer><script>window.addEventListener('load',()=>window.print());</script></body></html>`;
+</style></head><body><header><div class="eyebrow">ORDER RECEIPT</div><h1>${escapeHtml(receipt.restaurant.name)}</h1>${restaurantContact ? `<p class="contact">${restaurantContact}</p>` : ""}</header><p class="meta"><b>Order:</b> ${escapeHtml(receipt.order.reference)}<br><b>Date:</b> ${escapeHtml(dateTime(receipt.order.date))}<br><b>Location:</b> ${escapeHtml(receipt.order.location)}${guest}</p><table><colgroup><col style="width:49%"><col style="width:9%"><col style="width:20%"><col style="width:22%"></colgroup><thead><tr><th>ITEM</th><th>QTY</th><th>RATE (INR)</th><th>AMOUNT (INR)</th></tr></thead><tbody>${receipt.items.map((item) => `<tr><td>${escapeHtml(item.name)}</td><td>${escapeHtml(item.quantity)}</td><td>${escapeHtml(money(item.unitPrice).replace(/^INR /, ""))}</td><td>${escapeHtml(money(item.lineTotal).replace(/^INR /, ""))}</td></tr>`).join("")}</tbody></table><div class="totals"><div><span>${escapeHtml(receipt.financials.subtotalLabel)}</span><b>${escapeHtml(money(receipt.financials.subtotal))}</b></div>${receipt.financials.discount > 0 ? `<div><span>Discount recorded</span><b>−${escapeHtml(money(receipt.financials.discount))}</b></div>` : ""}${receipt.financials.gstAmount > 0 ? `<div><span>${gstLabel}</span><b>${escapeHtml(money(receipt.financials.gstAmount))}</b></div>` : ""}<div class="total"><span>TOTAL</span><span>${escapeHtml(money(receipt.financials.total))}</span></div></div>${receipt.financials.note ? `<p class="muted">${escapeHtml(receipt.financials.note)}</p>` : ""}${receipt.order.instructions ? `<h3>Order notes</h3><p class="notes">${escapeHtml(receipt.order.instructions)}</p>` : ""}<footer><b>Thank you for dining with us.</b><p class="muted">Order receipt, not a GST tax invoice. Amounts reflect the saved order.</p><span class="muted">Prepared with FlexiOrder</span></footer><script>window.addEventListener('load',()=>window.print());</script></body></html>`;
 };

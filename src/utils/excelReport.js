@@ -1,3 +1,4 @@
+import { orderNumber } from "./orderNumber";
 import { customerName } from "./orderCustomer";
 import ExcelJS from "exceljs";
 import { analyticsComparison } from "./analyticsRanges";
@@ -273,7 +274,7 @@ export async function buildAnalyticsReportBlob({
     const qty = items.reduce((s, it) => s + (Number(it?.quantity) || 1), 0);
     const row = ws.getRow(r);
     const values = [
-      String(order?.orderNumber || order?._id || order?.clientOrderId || "").slice(0, 18),
+      orderNumber(order),
       placed.toLocaleDateString("en-IN"),
       placed.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }),
       order?.table?.name || order?.tableName || order?.location || order?.spot || "—",

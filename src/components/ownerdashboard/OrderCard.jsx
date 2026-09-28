@@ -1,3 +1,4 @@
+import { orderNumber } from "../../utils/orderNumber";
 import { customerName } from "../../utils/orderCustomer";
 import { useEffect, useRef } from "react";
 import { FiClock, FiMoreVertical } from "react-icons/fi";
@@ -125,7 +126,7 @@ text-sm
 "
 >
 
-#{order._id?.slice(-5)}
+#{orderNumber(order)}
 
 </span>
 

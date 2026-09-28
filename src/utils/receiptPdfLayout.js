@@ -78,9 +78,7 @@ export function renderReceiptPdf(receipt, { money, dateTime }) {
   text(`Order  ${receipt.order.reference}`, { size: 27, bold: true, gap: 4 });
   text(`${dateTime(receipt.order.date)}  |  ${receipt.order.location}`, { size: 25, color: muted, gap: 4 });
   if (receipt.order.guestName) text(`Guest  ${receipt.order.guestName}`, { size: 25, gap: 4 });
-  if (receipt.order.paymentMethod || receipt.order.paymentStatus) {
-    text(`Payment  ${[receipt.order.paymentMethod, receipt.order.paymentStatus].filter(Boolean).join(" / ")}`, { size: 25, gap: 4 });
-  }
+
   y += 22; tableHead();
   for (const item of receipt.items) {
     font(27);

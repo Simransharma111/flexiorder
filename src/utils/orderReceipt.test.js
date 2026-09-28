@@ -122,7 +122,7 @@ describe("order receipt", () => {
     expect(receiptShareText(first)).not.toContain("Hakka Noodles");
     expect(receiptPrintHtml(second)).toContain("Hakka Noodles");
     expect(receiptPrintHtml(second)).not.toContain("Paneer Tikka");
-    expect(receiptFilename(first)).toBe("order-receipt-first-order.pdf");
+    expect(receiptFilename(first)).toMatch(/^order-receipt-FO-\d{8}\.pdf$/);
   });
 });
 

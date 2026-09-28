@@ -1,3 +1,4 @@
+import { orderNumber } from "./orderNumber";
 import { customerName } from "./orderCustomer";
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -136,6 +137,7 @@ export const orderMatchesAnalyticsSearch = (order, search) => {
 
   const table = order?.tableId || order?.table || {};
   const values = [
+    orderNumber(order),
     customerName(order),
     order?._id,
     order?.clientOrderId,

@@ -1,3 +1,4 @@
+import { orderNumber } from "../utils/orderNumber";
 import OrderHistoryDetails from "./orders/OrderHistoryDetails";
 import useDialogFocus from "../hooks/useDialogFocus";
 import { customerName } from "../utils/orderCustomer";
@@ -306,7 +307,7 @@ export default function AnalyticsDashboard({ hotel = {}, orders = [], advancedEn
         <div className="grid gap-2 max-h-96 overflow-y-auto">
           {filteredOrdersForTimeframe.map((order) => {
             const name = customerName(order);
-            const reference = String(order._id || order.clientOrderId || "").slice(-8);
+            const reference = orderNumber(order);
             return <button
               type="button"
               key={orderKey(order)}

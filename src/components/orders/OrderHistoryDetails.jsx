@@ -31,7 +31,7 @@ export default function OrderHistoryDetails({ dialogRef, order, hotel, onClose }
   return (
     <div className="ops-sheet-backdrop" onClick={onClose}>
       <section ref={dialogRef} tabIndex={-1} className="ops-history-details" role="dialog" aria-modal="true" aria-label={`Order details for ${orderLocation(order)}`} onClick={(event) => event.stopPropagation()}>
-        <header><div><h2>{orderLocation(order)}</h2><p>Order #{String(order._id || order.clientOrderId || "").slice(-8)}</p></div><button type="button" className="ops-icon-button" aria-label="Close order details" onClick={onClose}>×</button></header>
+        <header><div><h2>{orderLocation(order)}</h2><p>Order #{receipt.order.reference}</p></div><button type="button" className="ops-icon-button" aria-label="Close order details" onClick={onClose}>×</button></header>
         <dl className="ops-history-facts">
           <div><dt>Status</dt><dd>{order.status}</dd></div>
           <div><dt>Placed</dt><dd>{formatDateTime(order.createdAt || order.queuedAt)}</dd></div>
