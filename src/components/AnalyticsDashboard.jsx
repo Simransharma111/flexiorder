@@ -91,12 +91,12 @@ export default function AnalyticsDashboard({ hotel = {}, orders = [], advancedEn
 
   const previousRange = useMemo(() => previousAnalyticsRange(range), [range]);
   const filteredOrdersForTimeframe = useMemo(
-    () => filterAnalyticsOrders(orders, range, search),
-    [orders, range, search],
+    () => filterAnalyticsOrders(orders, range, search, hotel),
+    [orders, range, search, hotel],
   );
   const previousOrders = useMemo(
-    () => filterAnalyticsOrders(orders, previousRange, search),
-    [orders, previousRange, search],
+    () => filterAnalyticsOrders(orders, previousRange, search, hotel),
+    [orders, previousRange, search, hotel],
   );
   const stats = useMemo(
     () => calculateAnalyticsStats(filteredOrdersForTimeframe),
@@ -307,7 +307,7 @@ export default function AnalyticsDashboard({ hotel = {}, orders = [], advancedEn
         <div className="grid gap-2 max-h-96 overflow-y-auto">
           {filteredOrdersForTimeframe.map((order) => {
             const name = customerName(order);
-            const reference = orderNumber(order);
+            const reference = orderNumber(order, hotel);
             return <button
               type="button"
               key={orderKey(order)}

@@ -274,7 +274,7 @@ export async function buildAnalyticsReportBlob({
     const qty = items.reduce((s, it) => s + (Number(it?.quantity) || 1), 0);
     const row = ws.getRow(r);
     const values = [
-      orderNumber(order),
+      orderNumber(order, hotel),
       placed.toLocaleDateString("en-IN"),
       placed.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }),
       order?.table?.name || order?.tableName || order?.location || order?.spot || "—",

@@ -283,11 +283,11 @@ export default function Orders({
     return historyOrders.filter((order) => [
       order._id,
       order.clientOrderId,
-      orderNumber(order),
+      orderNumber(order, hotel),
       customerName(order),
       orderLocation(order),
     ].some((value) => String(value || "").toLowerCase().includes(term)));
-  }, [historyOrders, search]);
+  }, [historyOrders, search, hotel]);
 
   const changeHistoryStatus = (status, cancellationReason = null) => {
     if (!historyActionOrder) return;
@@ -377,6 +377,7 @@ export default function Orders({
           <label className="ops-search"><FiSearch /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search old orders" /></label>
           {filteredHistory.length ? filteredHistory.map((order) => (
             <OrderCard
+              hotel={hotel}
               key={orderKey(order)}
               order={order}
               onTap={(o) => setHistoryDetailOrder(o)}

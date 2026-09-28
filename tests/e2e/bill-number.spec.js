@@ -19,12 +19,12 @@ test('bill PDF shows a short reference and no payment labels', async ({ page }) 
   await page.getByRole('button', { name: 'More options for Table 8' }).click();
   await page.getByRole('button', { name: 'View full details' }).click();
   const details = page.getByRole('dialog', { name: 'Order details for Table 8' });
-  await expect(details.getByText(/^Order #FO-\d{8}$/)).toBeVisible();
+  await expect(details.getByText(/^Order #FTK-\d{8}$/)).toBeVisible();
   const download = page.waitForEvent('download');
   await details.getByRole('button', { name: 'Download PDF' }).click();
-  expect((await download).suggestedFilename()).toMatch(/^order-receipt-FO-\d{8}\.pdf$/);
+  expect((await download).suggestedFilename()).toMatch(/^order-receipt-FTK-\d{8}\.pdf$/);
   const lines = (await page.evaluate(() => window.__pdfLines)).join('\n');
-  expect(lines).toMatch(/Order\s+FO-\d{8}/);
+  expect(lines).toMatch(/Order\s+FTK-\d{8}/);
   expect(lines).not.toContain(id);
   expect(lines).not.toMatch(/Payment|pending|cash/);
   expect(lines).toContain('GST');

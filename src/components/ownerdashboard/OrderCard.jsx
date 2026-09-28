@@ -8,6 +8,7 @@ import { orderLocation } from "../../utils/orderModel";
 export default function OrderCard({
 
 order,
+hotel,
 primaryColor="#2563eb",
 onAction,
 actionLabel,
@@ -126,7 +127,7 @@ text-sm
 "
 >
 
-#{orderNumber(order)}
+#{orderNumber(order, hotel)}
 
 </span>
 

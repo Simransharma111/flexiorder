@@ -116,7 +116,7 @@ export const buildOrderReceipt = (order, hotel = {}) => {
   try { billing = readRestaurantBilling(hotel); }
   catch { billingWarning = "The saved restaurant GSTIN could not be read. Open Settings and save receipt details again before exporting."; }
   const rawContact = order?.guestContact || order?.guestPhone || order?.contact || order?.phone || "";
-  const reference = orderNumber(order);
+  const reference = orderNumber(order, hotel);
   return {
     title: "Order receipt",
     restaurant: {
@@ -143,7 +143,7 @@ export const buildOrderReceipt = (order, hotel = {}) => {
 
 export const receiptFilename = (receipt) => {
   const safeReference = String(receipt?.order?.reference || "order")
-    .replace(/[^a-z0-9_-]+/gi, "-")
+    .replace(/[^\p{L}\p{M}\p{N}_-]+/gu, "-")
     .replace(/^-+|-+$/g, "") || "order";
   return `order-receipt-${safeReference}.pdf`;
 };
