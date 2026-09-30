@@ -13,7 +13,7 @@ test('bill PDF shows a short reference and no payment labels', async ({ page }) 
     Object.defineProperty(navigator, 'canShare', { configurable: true, value: () => false });
   });
   const id = '66f73aa110b4567890123456';
-  await mockStaffWorkspace(page, [kitchenOrder({ _id: id, status: 'delivered', paymentStatus: 'pending', paymentMethod: 'cash', totalAmount: 105, gstAmount: 5 })]);
+  await mockStaffWorkspace(page, [kitchenOrder({ _id: id, status: 'delivered', paymentStatus: 'pending', paymentMethod: 'cash', subtotal: 100, totalAmount: 100, gstAmount: 5 })]);
   await page.goto('/owner/order');
   await page.getByRole('tab', { name: 'History', exact: true }).click();
   await page.getByRole('button', { name: 'More options for Table 8' }).click();
@@ -28,4 +28,6 @@ test('bill PDF shows a short reference and no payment labels', async ({ page }) 
   expect(lines).not.toContain(id);
   expect(lines).not.toMatch(/Payment|pending|cash/);
   expect(lines).toContain('GST');
+  expect(lines).toContain('INR 105.00');
+  await expect(details.getByText('₹105.00', { exact: true })).toBeVisible();
 });

@@ -158,11 +158,23 @@ describe('GST bill reconciliation', () => {
     expect(receiptShareText(receipt)).toContain('Total: INR 105.00');
     expect(receiptPrintHtml(receipt)).toContain('GST (5%)');
   });
-  it('flags legacy GST excluded from the total without silently changing saved charges', () => {
-    const receipt=buildOrderReceipt({subtotal:100,gstAmount:5,totalAmount:100});
-    expect(receipt.financials).toMatchObject({gstAmount:5,total:100,taxMismatch:true});
-    expect(receiptShareText(receipt)).toContain('do not match the saved total');
-    expect(receiptPrintHtml(receipt)).toContain('do not match the saved total');
+  it('adds saved GST to a legacy pre-tax total in the bill without changing the order', () => {
+    const order=Object.freeze({subtotal:100,gstAmount:5,totalAmount:100});
+    const receipt=buildOrderReceipt(order);
+    expect(receipt.financials).toMatchObject({gstAmount:5,total:105,recordedTotal:100,gstAddedToBill:true,taxMismatch:false,totalIsServerSnapshot:false});
+    expect(receiptShareText(receipt)).toContain('Total: INR 105.00');
+    expect(receiptPrintHtml(receipt)).toContain('INR 105.00');
+    expect(order.totalAmount).toBe(100);
+  });
+  it('leaves unrelated mismatches and ambiguous discounts for confirmation', () => {
+    expect(buildOrderReceipt({subtotal:100,gstAmount:5,totalAmount:98}).financials).toMatchObject({total:98,taxMismatch:true,gstAddedToBill:false});
+    expect(buildOrderReceipt({subtotal:100,discountAmount:10,gstAmount:5,totalAmount:100}).financials.gstAddedToBill).toBe(false);
+    expect(buildOrderReceipt({subtotal:100,gstAmount:5,totalAmount:100,taxInclusive:true}).financials.gstAddedToBill).toBe(false);
+  });
+  it('uses an explicit discounted net snapshot and rounds small GST once', () => {
+    expect(buildOrderReceipt({grossSubtotal:100,netSubtotal:90,discountAmount:10,gstAmount:4.5,totalAmount:90}).financials.total).toBe(94.5);
+    expect(buildOrderReceipt({subtotal:0.1+0.2,gstAmount:0.01,totalAmount:0.3}).financials.total).toBe(0.31);
+    expect(buildOrderReceipt({subtotal:0.3,gstAmount:0.01,totalAmount:0.31}).financials.gstAddedToBill).toBe(false);
   });
   it('does not add current restaurant GST to historical zero-tax orders', () => {
     const receipt=buildOrderReceipt({subtotal:100,gstAmount:0,totalAmount:100},{gstEnabled:true,gstPercentage:18});

@@ -84,19 +84,33 @@ const normalizeFinancials = (order, items) => {
     subtotalLabel = "Item subtotal";
   }
 
-  const total = explicitTotal ?? (subtotal === null
+  let total = explicitTotal ?? (subtotal === null
     ? null
     : subtotalKind === "gross"
       ? subtotal - discount + gstAmount
       : subtotalKind === "net" || discount === 0
         ? subtotal + gstAmount
         : null);
+  // The legacy API saved a pre-tax total alongside a separate GST amount.
+  // Correct only that exact, unambiguous receipt case; never mutate the order.
+  const taxInclusive = order?.gstInclusive === true || order?.taxInclusive === true ||
+    order?.pricesIncludeTax === true;
+  const netBeforeTax = explicitNet ?? (explicitGross !== null ? explicitGross - discount
+    : discount === 0 ? recordedSubtotal : null);
+  const cents = value => Math.round((value + Number.EPSILON) * 100);
+  const gstAddedToBill = !taxInclusive && netBeforeTax !== null && netBeforeTax >= 0 &&
+    explicitTotal !== null && gstAmount > 0 && cents(gstAmount) > 0 &&
+    cents(explicitTotal) === cents(netBeforeTax);
+  if (gstAddedToBill) {
+    total = (cents(netBeforeTax) + cents(gstAmount)) / 100;
+    if (discount === 0) subtotalLabel = "Subtotal";
+  }
   const hasAmbiguousLegacySubtotal = discount > 0 && subtotalKind === "unknown";
   const expectedTotals = subtotal === null ? [] : subtotalKind === "gross"
     ? [subtotal - discount + gstAmount]
     : subtotalKind === "net" ? [subtotal + gstAmount]
       : [subtotal + gstAmount, subtotal - discount + gstAmount];
-  const taxMismatch = gstAmount > 0 && explicitTotal !== null && expectedTotals.length > 0 &&
+  const taxMismatch = !gstAddedToBill && gstAmount > 0 && explicitTotal !== null && expectedTotals.length > 0 &&
     !expectedTotals.some(expected => closeEnough(expected, explicitTotal));
   const taxNote = taxMismatch
     ? "The saved GST and subtotal do not match the saved total. Confirm this bill with the restaurant; the recorded amount has not been changed."
@@ -110,9 +124,11 @@ const normalizeFinancials = (order, items) => {
     gstRate,
     gstAmount,
     taxMismatch,
+    gstAddedToBill,
+    recordedTotal: explicitTotal,
     total,
-    totalIsServerSnapshot: explicitTotal !== null,
-    note: taxNote || (hasAmbiguousLegacySubtotal
+    totalIsServerSnapshot: explicitTotal !== null && !gstAddedToBill,
+    note: (gstAddedToBill ? "Bill total includes the recorded GST added to the pre-tax amount." : taxNote) || (hasAmbiguousLegacySubtotal
       ? explicitTotal !== null
         ? "Legacy subtotal meaning is unavailable; the recorded total is shown without recalculating the discount."
         : "Legacy subtotal meaning is unavailable, so a total was not recalculated. Confirm the amount from the server record."
