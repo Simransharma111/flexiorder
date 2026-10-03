@@ -1,3 +1,5 @@
+import { orderNumber } from "../../utils/orderNumber";
+import { customerName } from "../../utils/orderCustomer";
 import { useEffect, useRef } from "react";
 import { FiClock, FiMoreVertical } from "react-icons/fi";
 import { orderLocation } from "../../utils/orderModel";
@@ -6,6 +8,7 @@ import { orderLocation } from "../../utils/orderModel";
 export default function OrderCard({
 
 order,
+hotel,
 primaryColor="#2563eb",
 onAction,
 actionLabel,
@@ -93,6 +96,8 @@ aria-label={`${location} order — tap for details`}
 >
 
 
+{customerName(order) && <p className="mb-2 break-words text-sm font-bold">{customerName(order)}</p>}
+
 {/* LINE 1 */}
 
 <div
@@ -122,7 +127,7 @@ text-sm
 "
 >
 
-#{order._id?.slice(-5)}
+#{orderNumber(order, hotel)}
 
 </span>
 

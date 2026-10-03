@@ -1,8 +1,10 @@
+import { orderNumber } from "../../utils/orderNumber";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FiSearch, FiShoppingBag } from "react-icons/fi";
 import KitchenBoard from "../kitchen/KitchenBoard";
 import OrderCard from "./OrderCard";
-import OrderReceiptActions from "../orders/OrderReceiptActions";
+import OrderHistoryDetails from "../orders/OrderHistoryDetails";
+import { customerName } from "../../utils/orderCustomer";
 import useDialogFocus from "../../hooks/useDialogFocus";
 import {
   getActiveOrderIds,
@@ -29,9 +31,11 @@ import { useSync } from "../../context/SyncContext";
 import { useConnectivity } from "../../context/ConnectivityContext";
 import { SYNC_STATE_EVENT } from "../../utils/syncQueues";
 import { flushSync } from "react-dom";
-import { buildOrderReceipt } from "../../utils/orderReceipt";
 
 export default function Orders({
+  initialView = "active",
+  onViewChange,
+  preserveView = false,
   orders = [],
   refresh,
   onOrdersChange,
@@ -41,7 +45,7 @@ export default function Orders({
 }) {
   const { syncKitchenNow } = useSync();
   const { isOnline } = useConnectivity();
-  const [activeView, setActiveView] = useState("active");
+  const [activeView, setActiveView] = useState(initialView);
   const [search, setSearch] = useState("");
   const [historyActionOrder, setHistoryActionOrder] = useState(null);
   const [historyActionOpenedAt, setHistoryActionOpenedAt] = useState(0);
@@ -87,11 +91,11 @@ export default function Orders({
   const prevPendingCountRef = useRef(0);
   useEffect(() => {
     const pendingCount = localOrders.filter(o => o.status === "pending").length;
-    if (pendingCount > prevPendingCountRef.current) {
+    if (!preserveView && pendingCount > prevPendingCountRef.current) {
       setActiveView("active");
     }
     prevPendingCountRef.current = pendingCount;
-  }, [localOrders]);
+  }, [localOrders, preserveView]);
 
   const publishOrders = useCallback((updater) => {
     setLocalOrders((current) => {
@@ -279,10 +283,11 @@ export default function Orders({
     return historyOrders.filter((order) => [
       order._id,
       order.clientOrderId,
-      order.guestName,
+      orderNumber(order, hotel),
+      customerName(order),
       orderLocation(order),
     ].some((value) => String(value || "").toLowerCase().includes(term)));
-  }, [historyOrders, search]);
+  }, [historyOrders, search, hotel]);
 
   const changeHistoryStatus = (status, cancellationReason = null) => {
     if (!historyActionOrder) return;
@@ -308,8 +313,8 @@ export default function Orders({
     <section className="ops-waiter-orders">
       <div className="ops-orders-toolbar">
         <div className="ops-orders-switch" role="tablist" aria-label="Order views">
-          <button type="button" role="tab" aria-selected={activeView === "active"} className={activeView === "active" ? "is-active" : ""} onClick={() => setActiveView("active")}>Active</button>
-          <button type="button" role="tab" aria-selected={activeView === "history"} className={activeView === "history" ? "is-active" : ""} onClick={() => setActiveView("history")}>History</button>
+          <button type="button" role="tab" aria-selected={activeView === "active"} className={activeView === "active" ? "is-active" : ""} onClick={() => { setActiveView("active"); onViewChange?.("active"); }}>Active</button>
+          <button type="button" role="tab" aria-selected={activeView === "history"} className={activeView === "history" ? "is-active" : ""} onClick={() => { setActiveView("history"); onViewChange?.("history"); }}>History</button>
         </div>
         {allowBulkDelivery && activeView === "active" && !bulkSnapshotIds && (
           <button
@@ -372,6 +377,7 @@ export default function Orders({
           <label className="ops-search"><FiSearch /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search old orders" /></label>
           {filteredHistory.length ? filteredHistory.map((order) => (
             <OrderCard
+              hotel={hotel}
               key={orderKey(order)}
               order={order}
               onTap={(o) => setHistoryDetailOrder(o)}
@@ -440,53 +446,5 @@ export default function Orders({
         </div>
       )}
     </section>
-  );
-}
-
-const formatMoney = (value) => Number.isFinite(Number(value))
-  && value !== null && value !== ""
-  ? `₹${Number(value).toFixed(2)}`
-  : "—";
-
-const formatDateTime = (value) => value
-  ? new Date(value).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })
-  : "—";
-
-function OrderHistoryDetails({ dialogRef, order, hotel, onClose }) {
-  const receipt = buildOrderReceipt(order, hotel);
-  const { subtotal, subtotalLabel, discount, gstRate, gstAmount, total, note: financialNote } = receipt.financials;
-  const note = order.note || order.notes || order.specialInstructions || order.instructions;
-  const cancellationReason = order.cancelReason || order.cancellationReason ||
-    (order.status === "cancelled" ? order.pauseReason : "");
-  const contact = receipt.order.contact;
-  const timeline = [
-    ["Placed", order.createdAt || order.queuedAt],
-    ["Accepted", order.acceptedAt],
-    ["Preparing", order.preparingAt],
-    ["Ready", order.readyAt],
-    ["Delivered", order.deliveredAt],
-    ["Cancelled", order.cancelledAt],
-    ["Last updated", order.updatedAt],
-  ].filter(([, value]) => value);
-
-  return (
-    <div className="ops-sheet-backdrop" onClick={onClose}>
-      <section ref={dialogRef} tabIndex={-1} className="ops-history-details" role="dialog" aria-modal="true" aria-label={`Order details for ${orderLocation(order)}`} onClick={(event) => event.stopPropagation()}>
-        <header><div><h2>{orderLocation(order)}</h2><p>Order #{String(order._id || order.clientOrderId || "").slice(-8)}</p></div><button type="button" className="ops-icon-button" aria-label="Close order details" onClick={onClose}>×</button></header>
-        <dl className="ops-history-facts">
-          <div><dt>Status</dt><dd>{order.status}</dd></div>
-          <div><dt>Placed</dt><dd>{formatDateTime(order.createdAt || order.queuedAt)}</dd></div>
-          {order.guestName && <div><dt>Customer</dt><dd>{order.guestName}</dd></div>}
-          {contact && <div><dt>Contact</dt><dd>{contact}</dd></div>}
-        </dl>
-        <section><h3>Items</h3>{receipt.items.map((item, index) => <div className="ops-history-item" key={`${item.key}-${index}`}><span>{item.quantity} × {item.name}</span><b>{formatMoney(item.lineTotal)}</b></div>)}</section>
-        {note && <section className="ops-history-note"><h3>Instructions</h3><p>{note}</p></section>}
-        {cancellationReason && <section className="ops-history-note"><h3>Cancellation reason</h3><p>{cancellationReason}</p></section>}
-        <section><h3>Amount</h3><div className="ops-history-money"><span>{subtotalLabel} <b>{formatMoney(subtotal)}</b></span>{Number(discount) > 0 && <span>Discount recorded <b>− {formatMoney(discount)}</b></span>}{Number(gstAmount) > 0 && <span>{Number(gstRate) > 0 ? `GST (${gstRate}%)` : "GST recorded"} <b>{formatMoney(gstAmount)}</b></span>}<span className="is-total">Total <b>{formatMoney(total)}</b></span></div>{financialNote && <p className="ops-history-financial-note">{financialNote}</p>}</section>
-        {order.status === "delivered" && <OrderReceiptActions order={order} hotel={hotel} />}
-        <section><h3>Timing</h3><ol className="ops-history-timeline">{timeline.map(([label, value]) => <li key={`${label}-${value}`}><span>{label}</span><time>{formatDateTime(value)}</time></li>)}</ol></section>
-        <button type="button" className="ops-sheet-cancel" onClick={onClose}>Close</button>
-      </section>
-    </div>
   );
 }

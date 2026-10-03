@@ -85,25 +85,6 @@ export default function LoginPage() {
       */
 
 
-      localStorage.setItem(
-        "token",
-        res.data.token
-      );
-
-
-      localStorage.setItem(
-        "user",
-        JSON.stringify(res.data.user)
-      );
-
-
-      localStorage.setItem(
-        "role",
-        res.data.user.role
-      );
-
-
-
       login(
         res.data.user,
         res.data.token
@@ -173,7 +154,7 @@ export default function LoginPage() {
       */
 
 
-      await initFCM(api);
+      void initFCM(api);
 
 
 

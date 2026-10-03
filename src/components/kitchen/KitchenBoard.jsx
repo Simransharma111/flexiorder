@@ -1,3 +1,4 @@
+import { compareServiceLocations } from "../../utils/serviceLocations";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FiMoreVertical } from "react-icons/fi";
 import OperationalOrderCard from "../orders/OperationalOrderCard";
@@ -45,7 +46,7 @@ export default function KitchenBoard({
       location: orderLocation(order),
       orders: [order],
       items: Array.isArray(order.items) ? order.items : [],
-    }))
+    })).sort((a, b) => compareServiceLocations(a.location, b.location))
     : groupOrdersByLocation(orders), [godModeEnabled]);
 
   const lanes = useMemo(() => ({

@@ -87,7 +87,9 @@ export default function StaffManager() {
     setFormData({ name: user.name || "", email: user.email || "", password: "", position: user.position || "Kitchen Staff" });
     setError("");
     setMessage("");
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    const ownerScroller = document.querySelector(".owner-shell > .flex");
+    const scrollTarget = ownerScroller && getComputedStyle(ownerScroller).overflowY === "auto" ? ownerScroller : window;
+    scrollTarget.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   return <section className="owner-staff">

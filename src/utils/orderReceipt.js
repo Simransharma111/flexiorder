@@ -1,4 +1,7 @@
-import { jsPDF } from "jspdf";
+import { orderNumber } from "./orderNumber";
+import { customerName } from "./orderCustomer";
+import { renderReceiptPdf } from "./receiptPdfLayout";
+import { readRestaurantBilling } from "./restaurantBilling";
 import { orderLocation } from "./orderModel";
 
 const finiteNumber = (value) => {
@@ -81,14 +84,38 @@ const normalizeFinancials = (order, items) => {
     subtotalLabel = "Item subtotal";
   }
 
-  const total = explicitTotal ?? (subtotal === null
+  let total = explicitTotal ?? (subtotal === null
     ? null
     : subtotalKind === "gross"
       ? subtotal - discount + gstAmount
       : subtotalKind === "net" || discount === 0
         ? subtotal + gstAmount
         : null);
+  // The legacy API saved a pre-tax total alongside a separate GST amount.
+  // Correct only that exact, unambiguous receipt case; never mutate the order.
+  const taxInclusive = order?.gstInclusive === true || order?.taxInclusive === true ||
+    order?.pricesIncludeTax === true;
+  const netBeforeTax = explicitNet ?? (explicitGross !== null ? explicitGross - discount
+    : discount === 0 ? recordedSubtotal : null);
+  const cents = value => Math.round((value + Number.EPSILON) * 100);
+  const gstAddedToBill = !taxInclusive && netBeforeTax !== null && netBeforeTax >= 0 &&
+    explicitTotal !== null && gstAmount > 0 && cents(gstAmount) > 0 &&
+    cents(explicitTotal) === cents(netBeforeTax);
+  if (gstAddedToBill) {
+    total = (cents(netBeforeTax) + cents(gstAmount)) / 100;
+    if (discount === 0) subtotalLabel = "Subtotal";
+  }
   const hasAmbiguousLegacySubtotal = discount > 0 && subtotalKind === "unknown";
+  const expectedTotals = subtotal === null ? [] : subtotalKind === "gross"
+    ? [subtotal - discount + gstAmount]
+    : subtotalKind === "net" ? [subtotal + gstAmount]
+      : [subtotal + gstAmount, subtotal - discount + gstAmount];
+  const taxMismatch = !gstAddedToBill && gstAmount > 0 && explicitTotal !== null && expectedTotals.length > 0 &&
+    !expectedTotals.some(expected => closeEnough(expected, explicitTotal));
+  const taxNote = taxMismatch
+    ? "The saved GST and subtotal do not match the saved total. Confirm this bill with the restaurant; the recorded amount has not been changed."
+    : "";
+
 
   return {
     subtotal,
@@ -96,20 +123,27 @@ const normalizeFinancials = (order, items) => {
     discount,
     gstRate,
     gstAmount,
+    taxMismatch,
+    gstAddedToBill,
+    recordedTotal: explicitTotal,
     total,
-    totalIsServerSnapshot: explicitTotal !== null,
-    note: hasAmbiguousLegacySubtotal
+    totalIsServerSnapshot: explicitTotal !== null && !gstAddedToBill,
+    note: (gstAddedToBill ? "Bill total includes the recorded GST added to the pre-tax amount." : taxNote) || (hasAmbiguousLegacySubtotal
       ? explicitTotal !== null
         ? "Legacy subtotal meaning is unavailable; the recorded total is shown without recalculating the discount."
         : "Legacy subtotal meaning is unavailable, so a total was not recalculated. Confirm the amount from the server record."
-      : "",
+      : ""),
   };
 };
 
 export const buildOrderReceipt = (order, hotel = {}) => {
   const items = normalizeItems(order);
+  let billing = { gstin: "" };
+  let billingWarning = "";
+  try { billing = readRestaurantBilling(hotel); }
+  catch { billingWarning = "The saved restaurant GSTIN could not be read. Open Settings and save receipt details again before exporting."; }
   const rawContact = order?.guestContact || order?.guestPhone || order?.contact || order?.phone || "";
-  const reference = String(order?.orderNumber || order?._id || order?.clientOrderId || "Order");
+  const reference = orderNumber(order, hotel);
   return {
     title: "Order receipt",
     restaurant: {
@@ -117,16 +151,16 @@ export const buildOrderReceipt = (order, hotel = {}) => {
       address: hotel?.address || hotel?.location || "",
       phone: hotel?.phone || hotel?.contact || "",
       email: hotel?.email || "",
+      gstin: billing.gstin,
+      billingWarning,
     },
     order: {
       reference,
       date: receiptDate(order),
       location: orderLocation(order),
-      guestName: order?.guestName || order?.customerName || "",
+      guestName: customerName(order),
       contact: rawContact,
       normalizedContact: normalizeReceiptContact(rawContact),
-      paymentMethod: order?.paymentMethod || order?.payment?.method || "",
-      paymentStatus: order?.paymentStatus || order?.payment?.status || "",
       instructions: order?.note || order?.notes || order?.specialInstructions || order?.instructions || "",
     },
     items,
@@ -136,7 +170,7 @@ export const buildOrderReceipt = (order, hotel = {}) => {
 
 export const receiptFilename = (receipt) => {
   const safeReference = String(receipt?.order?.reference || "order")
-    .replace(/[^a-z0-9_-]+/gi, "-")
+    .replace(/[^\p{L}\p{M}\p{N}_-]+/gu, "-")
     .replace(/^-+|-+$/g, "") || "order";
   return `order-receipt-${safeReference}.pdf`;
 };
@@ -155,115 +189,19 @@ const dateTime = (value) => {
 
 export const receiptShareText = (receipt) => [
   `${receipt.restaurant.name} — Order receipt`,
+  ...(receipt.restaurant.gstin ? [`GSTIN: ${receipt.restaurant.gstin}`] : []),
   `Order ${receipt.order.reference}`,
+  ...(receipt.order.guestName ? [`Customer: ${receipt.order.guestName}`] : []),
   `${receipt.order.location} · ${dateTime(receipt.order.date)}`,
   ...receipt.items.map((item) => `${item.quantity} x ${item.name}`),
+  `${receipt.financials.subtotalLabel}: ${money(receipt.financials.subtotal)}`,
+  ...(receipt.financials.discount > 0 ? [`Discount recorded: ${money(receipt.financials.discount)}`] : []),
+  ...(receipt.financials.gstAmount > 0 ? [`GST${receipt.financials.gstRate ? ` (${receipt.financials.gstRate}%)` : ""}: ${money(receipt.financials.gstAmount)}`] : []),
   `Total: ${money(receipt.financials.total)}`,
+  ...(receipt.financials.note ? [receipt.financials.note] : []),
 ].join("\n");
 
-export const createOrderReceiptPdf = (receipt) => {
-  const doc = new jsPDF({ unit: "mm", format: "a4" });
-  const pageWidth = 1240;
-  const pageHeight = 1754;
-  const margin = 94;
-  const printableWidth = pageWidth - margin * 2;
-  let canvas;
-  let context;
-  let y;
-  let pages = 0;
-  const startPage = () => {
-    canvas = document.createElement("canvas");
-    canvas.width = pageWidth;
-    canvas.height = pageHeight;
-    context = canvas.getContext("2d");
-    context.fillStyle = "#ffffff";
-    context.fillRect(0, 0, pageWidth, pageHeight);
-    context.fillStyle = "#17201d";
-    context.textBaseline = "top";
-    y = margin;
-  };
-  const commitPage = () => {
-    if (pages > 0) doc.addPage();
-    doc.addImage(canvas.toDataURL("image/jpeg", 0.92), "JPEG", 0, 0, 210, 297, undefined, "FAST");
-    pages += 1;
-    startPage();
-  };
-  const wrapLine = (text) => {
-    const words = String(text || "").split(/\s+/).filter(Boolean);
-    if (!words.length) return [""];
-    const lines = [];
-    let line = "";
-    words.forEach((word) => {
-      const candidate = line ? `${line} ${word}` : word;
-      if (context.measureText(candidate).width <= printableWidth) {
-        line = candidate;
-        return;
-      }
-      if (line) lines.push(line);
-      if (context.measureText(word).width <= printableWidth) {
-        line = word;
-        return;
-      }
-      let segment = "";
-      [...word].forEach((character) => {
-        if (segment && context.measureText(segment + character).width > printableWidth) {
-          lines.push(segment);
-          segment = character;
-        } else {
-          segment += character;
-        }
-      });
-      line = segment;
-    });
-    if (line) lines.push(line);
-    return lines;
-  };
-  const write = (text, { size = 10, bold = false, gap = 6 } = {}) => {
-    const fontSize = Math.max(24, size * 3);
-    const lineHeight = Math.max(fontSize * 1.35, gap * 3);
-    context.font = `${bold ? 700 : 400} ${fontSize}px Arial, "Noto Sans", sans-serif`;
-    wrapLine(text).forEach((line) => {
-      if (y + lineHeight > pageHeight - margin) commitPage();
-      context.fillText(line, margin, y);
-      y += lineHeight;
-    });
-  };
-
-  startPage();
-  write(receipt.title, { size: 18, bold: true, gap: 8 });
-  write(receipt.restaurant.name, { size: 13, bold: true });
-  [receipt.restaurant.address, receipt.restaurant.phone, receipt.restaurant.email]
-    .filter(Boolean).forEach((line) => write(line, { size: 9, gap: 5 }));
-  y += 12;
-  write(`Order: ${receipt.order.reference}`, { bold: true });
-  write(`Date: ${dateTime(receipt.order.date)}`);
-  write(`Location: ${receipt.order.location}`);
-  if (receipt.order.guestName) write(`Guest: ${receipt.order.guestName}`);
-  if (receipt.order.paymentMethod || receipt.order.paymentStatus) {
-    write(`Payment: ${[receipt.order.paymentMethod, receipt.order.paymentStatus].filter(Boolean).join(" · ")}`);
-  }
-  y += 12;
-  write("Items", { size: 12, bold: true });
-  receipt.items.forEach((item) => write(
-    `${item.quantity} x ${item.name}${item.lineTotal === null ? "" : `  ${money(item.lineTotal)}`}`
-  ));
-  if (receipt.order.instructions) {
-    y += 8;
-    write("Instructions", { size: 12, bold: true });
-    write(receipt.order.instructions);
-  }
-  y += 12;
-  write(`${receipt.financials.subtotalLabel}: ${money(receipt.financials.subtotal)}`);
-  if (receipt.financials.discount > 0) write(`Discount recorded: -${money(receipt.financials.discount)}`);
-  if (receipt.financials.gstAmount > 0) {
-    write(`${receipt.financials.gstRate ? `GST (${receipt.financials.gstRate}%)` : "GST recorded"}: ${money(receipt.financials.gstAmount)}`);
-  }
-  write(`Total: ${money(receipt.financials.total)}`, { size: 12, bold: true });
-  if (receipt.financials.note) write(receipt.financials.note, { size: 8, gap: 4 });
-  write("Generated from the delivered order record. This is an order receipt, not a GST tax invoice.", { size: 8, gap: 4 });
-  commitPage();
-  return doc;
-};
+export const createOrderReceiptPdf = (receipt) => renderReceiptPdf(receipt, { money, dateTime });
 
 export const createOrderReceiptPdfBlob = (receipt) => createOrderReceiptPdf(receipt).output("blob");
 
@@ -276,19 +214,16 @@ export const receiptPrintHtml = (receipt) => {
     receipt.restaurant.address,
     receipt.restaurant.phone,
     receipt.restaurant.email,
+    receipt.restaurant.gstin ? `GSTIN: ${receipt.restaurant.gstin}` : "",
   ].filter(Boolean).map((value) => escapeHtml(value)).join("<br>");
   const guest = receipt.order.guestName
     ? `<br><b>Guest:</b> ${escapeHtml(receipt.order.guestName)}`
     : "";
-  const payment = receipt.order.paymentMethod || receipt.order.paymentStatus
-    ? `<br><b>Payment:</b> ${escapeHtml([
-      receipt.order.paymentMethod,
-      receipt.order.paymentStatus,
-    ].filter(Boolean).join(" · "))}`
-    : "";
   const gstLabel = receipt.financials.gstRate
     ? `GST (${escapeHtml(receipt.financials.gstRate)}%)`
-    : "GST recorded";
+    : "GST";
 
-  return `<!doctype html><html><head><title>${escapeHtml(receiptFilename(receipt))}</title><style>body{font-family:Arial,sans-serif;max-width:720px;margin:24px auto;color:#17201d}h1{font-size:24px}table{width:100%;border-collapse:collapse}td{padding:8px 0;border-bottom:1px solid #ddd}td:last-child{text-align:right}.total{font-size:18px;font-weight:700}.muted{color:#55625d;font-size:12px}@media print{button{display:none}}</style></head><body><h1>Order receipt</h1><h2>${escapeHtml(receipt.restaurant.name)}</h2>${restaurantContact ? `<p>${restaurantContact}</p>` : ""}<p><b>Order:</b> ${escapeHtml(receipt.order.reference)}<br><b>Date:</b> ${escapeHtml(dateTime(receipt.order.date))}<br><b>Location:</b> ${escapeHtml(receipt.order.location)}${guest}${payment}</p><h3>Items</h3><table>${receipt.items.map((item) => `<tr><td>${escapeHtml(item.quantity)} × ${escapeHtml(item.name)}</td><td>${escapeHtml(item.lineTotal === null ? "—" : money(item.lineTotal))}</td></tr>`).join("")}</table>${receipt.order.instructions ? `<h3>Instructions</h3><p>${escapeHtml(receipt.order.instructions)}</p>` : ""}<p>${escapeHtml(receipt.financials.subtotalLabel)}: <b>${escapeHtml(money(receipt.financials.subtotal))}</b><br>${receipt.financials.discount > 0 ? `Discount recorded: <b>−${escapeHtml(money(receipt.financials.discount))}</b><br>` : ""}${receipt.financials.gstAmount > 0 ? `${gstLabel}: <b>${escapeHtml(money(receipt.financials.gstAmount))}</b><br>` : ""}<span class="total">Total: ${escapeHtml(money(receipt.financials.total))}</span></p>${receipt.financials.note ? `<p class="muted">${escapeHtml(receipt.financials.note)}</p>` : ""}<p class="muted">Generated from the delivered order record. This is an order receipt, not a GST tax invoice.</p><script>window.addEventListener('load',()=>window.print());</script></body></html>`;
+  return `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(receiptFilename(receipt))}</title><style>
+@page{size:A4;margin:18mm}*{box-sizing:border-box}body{font-family:Arial,"Noto Sans",sans-serif;max-width:760px;margin:32px auto;color:#172c2a;font-size:14px;line-height:1.5}header{border-top:4px solid #176756;padding-top:18px}.eyebrow{color:#176756;font-size:11px;letter-spacing:2px;font-weight:bold}h1{font-size:32px;margin:10px 0;overflow-wrap:anywhere}.contact{color:#61716c;margin:8px 0;overflow-wrap:anywhere}.meta{border-top:1px solid #dce5e0;margin:22px 0;padding-top:16px;overflow-wrap:anywhere}table{width:100%;table-layout:fixed;border-collapse:collapse}thead{display:table-header-group}th{text-align:left;background:#edf4f0;color:#176756;font-size:11px;padding:12px 8px}td{padding:13px 8px;border-bottom:1px solid #dce5e0;vertical-align:top;overflow-wrap:anywhere}th:not(:first-child),td:not(:first-child){text-align:right}tr{break-inside:avoid}.totals{margin:24px 0;break-inside:avoid}.totals div{display:flex;justify-content:space-between;gap:24px;padding:7px 12px}.total{background:#172c2a;color:white;font-size:20px;font-weight:bold;margin-top:10px;padding:16px 12px!important}.muted{color:#61716c;font-size:12px}.notes{white-space:pre-wrap;overflow-wrap:anywhere}footer{border-top:1px solid #dce5e0;padding-top:16px;margin-top:28px;break-inside:avoid}@media print{body{margin:0}button{display:none}th,.total{print-color-adjust:exact;-webkit-print-color-adjust:exact}}
+</style></head><body><header><div class="eyebrow">ORDER RECEIPT</div><h1>${escapeHtml(receipt.restaurant.name)}</h1>${restaurantContact ? `<p class="contact">${restaurantContact}</p>` : ""}</header><p class="meta"><b>Order:</b> ${escapeHtml(receipt.order.reference)}<br><b>Date:</b> ${escapeHtml(dateTime(receipt.order.date))}<br><b>Location:</b> ${escapeHtml(receipt.order.location)}${guest}</p><table><colgroup><col style="width:49%"><col style="width:9%"><col style="width:20%"><col style="width:22%"></colgroup><thead><tr><th>ITEM</th><th>QTY</th><th>RATE (INR)</th><th>AMOUNT (INR)</th></tr></thead><tbody>${receipt.items.map((item) => `<tr><td>${escapeHtml(item.name)}</td><td>${escapeHtml(item.quantity)}</td><td>${escapeHtml(money(item.unitPrice).replace(/^INR /, ""))}</td><td>${escapeHtml(money(item.lineTotal).replace(/^INR /, ""))}</td></tr>`).join("")}</tbody></table><div class="totals"><div><span>${escapeHtml(receipt.financials.subtotalLabel)}</span><b>${escapeHtml(money(receipt.financials.subtotal))}</b></div>${receipt.financials.discount > 0 ? `<div><span>Discount recorded</span><b>−${escapeHtml(money(receipt.financials.discount))}</b></div>` : ""}${receipt.financials.gstAmount > 0 ? `<div><span>${gstLabel}</span><b>${escapeHtml(money(receipt.financials.gstAmount))}</b></div>` : ""}<div class="total"><span>TOTAL</span><span>${escapeHtml(money(receipt.financials.total))}</span></div></div>${receipt.financials.note ? `<p class="muted">${escapeHtml(receipt.financials.note)}</p>` : ""}${receipt.order.instructions ? `<h3>Order notes</h3><p class="notes">${escapeHtml(receipt.order.instructions)}</p>` : ""}<footer><b>Thank you for dining with us.</b><p class="muted">Order receipt, not a GST tax invoice. Amounts reflect the saved order.</p><span class="muted">Prepared with FlexiOrder</span></footer><script>window.addEventListener('load',()=>window.print());</script></body></html>`;
 };

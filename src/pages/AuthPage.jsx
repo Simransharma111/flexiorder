@@ -10,6 +10,8 @@ import {
 } from "react-icons/fi";
 
 import api from "../api/axios";
+import toast from "react-hot-toast";
+import { supportsSavedLogin, chooseSavedLogin, saveLoginPassword } from "../utils/savedLogin";
 import { API_URL } from "../config/env";
 import { Capacitor } from "@capacitor/core";
 import { useAuth } from "../context/AuthContext";
@@ -25,6 +27,27 @@ export default function AuthPage({ mode = "login" }) {
   const isRegister = mode === "register";
 
   const [loading, setLoading] = useState(false);
+  const [rememberPassword, setRememberPassword] = useState(false);
+  const [choosingLogin, setChoosingLogin] = useState(false);
+  const [credentialNotice, setCredentialNotice] = useState("");
+  const savedLoginAvailable = supportsSavedLogin();
+  const chooseAccount = async () => {
+    if (loading || choosingLogin) return;
+    setChoosingLogin(true); setCredentialNotice("");
+    try {
+      const selected = await chooseSavedLogin();
+      if (selected.status === "selected" && selected.email && selected.password) {
+        setFormData(current => ({ ...current, email: selected.email, password: selected.password }));
+        setFormError(""); setSuggestLogin(false); setSuggestReset(false);
+        setCredentialNotice("Account filled. Tap Login to continue.");
+      } else if (selected.status !== "cancelled") {
+        setCredentialNotice(selected.status === "empty"
+          ? "No saved login yet. Sign in and select Save login for next time."
+          : "Password manager is unavailable. You can still type your email and password.");
+      }
+    } catch { setCredentialNotice("Could not open your password manager. You can still sign in manually."); }
+    finally { setChoosingLogin(false); }
+  };
 
   const [formError, setFormError] = useState("");
   const [suggestLogin, setSuggestLogin] = useState(false);
@@ -207,13 +230,12 @@ export default function AuthPage({ mode = "login" }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (loading) return;
+    if (loading || choosingLogin) return;
 
-    const email =
-      formData.email.trim().toLowerCase();
-
-    const password =
-      formData.password;
+    // Read the submitted fields too: some password managers fill the DOM without React events.
+    const submitted = new FormData(e.currentTarget);
+    const email = String(submitted.get("email") ?? formData.email).trim().toLowerCase();
+    const password = String(submitted.get("password") ?? formData.password);
 
     // ===================================================
     // COMMON VALIDATION
@@ -352,8 +374,17 @@ export default function AuthPage({ mode = "login" }) {
       // SAVE SESSION
       // =================================================
 
-      const sessionSaved =
-        login(user, token);
+      if (rememberPassword && savedLoginAvailable && !res.data?.mustChangePassword) {
+        try {
+          const saved = await saveLoginPassword(email, password);
+          if (saved.status === "unavailable") toast("Signed in, but your password manager could not save this login.");
+        } catch { toast("Signed in, but this login could not be saved. You can try again next time."); }
+      }
+      setFormData(current => ({ ...current, password: "", confirmPassword: "" }));
+      const sessionUser = isRegister
+        ? { ...user, setupContactPhone: formData.phone.trim() }
+        : user;
+      const sessionSaved = login(sessionUser, token);
 
       if (!sessionSaved) {
         throw new Error(
@@ -483,10 +514,8 @@ export default function AuthPage({ mode = "login" }) {
         }
       );
     } catch (err) {
-      console.error(
-        "AUTHENTICATION ERROR:",
-        err
-      );
+      // Never log request/error objects: an Axios error may include the password payload.
+      console.warn("Authentication failed", { status: err.response?.status || "network" });
 
       let message =
         "Something went wrong. Please try again.";
@@ -651,7 +680,9 @@ export default function AuthPage({ mode = "login" }) {
 
             {/* FORM */}
 
-            <form onSubmit={handleSubmit} className="mt-6 space-y-4" noValidate>
+            <form onSubmit={handleSubmit} className="mt-6 space-y-4" autoComplete="on" noValidate>
+              {!isRegister && savedLoginAvailable && <button type="button" onClick={chooseAccount} disabled={loading || choosingLogin} className="w-full rounded-2xl border border-emerald-500/40 bg-emerald-50 px-4 py-3 font-semibold text-emerald-900 disabled:opacity-50">{choosingLogin ? "Opening password manager…" : "Choose saved account"}</button>}
+              {credentialNotice && <p role="status" className="text-sm text-slate-600 dark:text-slate-300">{credentialNotice}</p>}
 
               {formError && (
                 <p
@@ -678,6 +709,8 @@ export default function AuthPage({ mode = "login" }) {
                 </p>
               )}
 
+              {isRegister && <p className="text-sm text-ink-secondary">Enter your personal name for the owner account. Next, you’ll name your restaurant. We’ll carry this phone number into restaurant setup so you don’t need to type it again.</p>}
+
               {/* OWNER DETAILS */}
 
               {isRegister && (
@@ -686,10 +719,11 @@ export default function AuthPage({ mode = "login" }) {
                     name="name"
                     type="text"
                     placeholder="Owner Name"
+                    aria-label="Your name (owner account)"
                     value={formData.name}
                     onChange={handleChange}
                     autoComplete="name"
-                    disabled={loading}
+                    disabled={loading || choosingLogin}
                     className={inputClass}
                   />
 
@@ -697,11 +731,12 @@ export default function AuthPage({ mode = "login" }) {
                     name="phone"
                     type="tel"
                     placeholder="Phone Number"
+                    aria-label="Contact phone (used for restaurant setup)"
                     value={formData.phone}
                     onChange={handleChange}
                     autoComplete="tel"
                     inputMode="tel"
-                    disabled={loading}
+                    disabled={loading || choosingLogin}
                     className={inputClass}
                   />
                 </>
@@ -715,9 +750,9 @@ export default function AuthPage({ mode = "login" }) {
                 placeholder="Email Address"
                 value={formData.email}
                 onChange={handleChange}
-                autoComplete="email"
+                autoComplete={isRegister ? "email" : "username"}
                 inputMode="email"
-                disabled={loading}
+                disabled={loading || choosingLogin}
                 className={inputClass}
               />
 
@@ -734,9 +769,14 @@ export default function AuthPage({ mode = "login" }) {
                     ? "new-password"
                     : "current-password"
                 }
-                disabled={loading}
+                disabled={loading || choosingLogin}
                 className={inputClass}
               />
+
+              {savedLoginAvailable && <label className="flex items-start gap-3 text-sm text-slate-700 dark:text-slate-200">
+                <input type="checkbox" checked={rememberPassword} onChange={event => setRememberPassword(event.target.checked)} disabled={loading || choosingLogin} className="mt-1 h-4 w-4" />
+                <span>Save login<span className="mt-1 block text-xs text-slate-500 dark:text-slate-400">Use your password manager to switch accounts next time. You control which logins are saved.</span></span>
+              </label>}
 
               {/* CONFIRM PASSWORD */}
 
@@ -750,7 +790,7 @@ export default function AuthPage({ mode = "login" }) {
                   }
                   onChange={handleChange}
                   autoComplete="new-password"
-                  disabled={loading}
+                  disabled={loading || choosingLogin}
                   className={inputClass}
                 />
               )}
@@ -764,7 +804,7 @@ export default function AuthPage({ mode = "login" }) {
                       type="checkbox"
                       checked={consentShare}
                       onChange={(event) => setConsentShare(event.target.checked)}
-                      disabled={loading}
+                      disabled={loading || choosingLogin}
                       className="mt-0.5 h-4 w-4 accent-brand"
                     />
                     <span>
@@ -776,7 +816,7 @@ export default function AuthPage({ mode = "login" }) {
                       type="checkbox"
                       checked={consentPrivacy}
                       onChange={(event) => setConsentPrivacy(event.target.checked)}
-                      disabled={loading}
+                      disabled={loading || choosingLogin}
                       className="mt-0.5 h-4 w-4 accent-brand"
                     />
                     <span>
@@ -807,7 +847,7 @@ export default function AuthPage({ mode = "login" }) {
 
               <button
                 type="submit"
-                disabled={loading}
+                disabled={loading || choosingLogin}
                 className="flex min-h-12 w-full items-center justify-center gap-2 rounded-card bg-brand px-4 text-sm font-bold text-white transition hover:bg-brand-strong disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {loading ? (

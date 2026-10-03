@@ -98,7 +98,18 @@ export const buildCategoryList = (dishes = [], defaults = []) => {
       }
     });
 
-  return ["All", ...labels.values()];
+  const ranks = new Map();
+  for (const category of defaults) {
+    const value = Number(category?.displayOrder);
+    if (Number.isFinite(value) && value >= 0) ranks.set(categoryKey(category), value > 0 ? value : Infinity);
+  }
+  for (const dish of dishes) {
+    const value = Number(dish.category?.displayOrder ?? dish.categoryId?.displayOrder);
+    if (Number.isFinite(value) && value > 0 && !ranks.has(categoryKey(dishCategoryName(dish)))) ranks.set(categoryKey(dishCategoryName(dish)), value);
+  }
+  return ["All", ...[...labels.values()].sort((a, b) =>
+    (ranks.get(categoryKey(a)) ?? Infinity) - (ranks.get(categoryKey(b)) ?? Infinity) || a.localeCompare(b)
+  )];
 };
 
 export const normalizeCategory = (category, categories = []) => {
@@ -151,8 +162,10 @@ export const resolveDishCategoryNames = (dishes = [], categories = []) => {
       : categories?.categories || []
   )
     .map((category) => ({
+      ...category,
       _id: categoryId(category),
       name: categoryName(category),
+      displayOrder: category.displayOrder ?? 0,
     }))
     .filter(
       (category) =>
@@ -164,19 +177,21 @@ export const resolveDishCategoryNames = (dishes = [], categories = []) => {
   const nameById = new Map(
     catalog.map((category) => [
       category._id.toLowerCase(),
-      category.name,
+      category,
     ])
   );
 
   return dishes.map((dish) => {
-    if (dishCategoryName(dish)) return dish;
-
     const ref =
       categoryId(dish?.categoryId) ||
       categoryId(dish?.category);
-    const name = ref && nameById.get(ref.toLowerCase());
+    const record = ref && nameById.get(ref.toLowerCase());
 
-    return name ? { ...dish, categoryName: name } : dish;
+    return record ? {
+      ...dish,
+      category: record,
+      ...(typeof dish.categoryId === "object" ? { categoryId: record } : {}),
+      categoryName: record.name,
+    } : dish;
   });
 };
-

@@ -1,3 +1,6 @@
+import { preserveCustomerName } from "./orderCustomer";
+import { prepareLegacyTakeawayPayload } from "./serviceLocations";
+import { getRestaurantId, getScopedStorageKey } from "./storageScope";
 import {
   getPendingStaffOrders,
   getStaffOrdersNeedingAttention,
@@ -28,16 +31,25 @@ const notify = (kind, detail = {}) => {
 };
 
 const runStaffSync = async (api, { force = false } = {}) => {
+  const scope = getScopedStorageKey("staff-sync");
+  const token = localStorage.getItem("token");
+  const hotelId = getRestaurantId();
+  const current = () => getScopedStorageKey("staff-sync") === scope && localStorage.getItem("token") === token;
+  const stopped = () => ({ syncedOrders: [], pending: 0, attention: 0, sessionChanged: true });
   const snapshot = getPendingStaffOrders().filter((item) => readyToRetry(item, force));
   const failed = [];
   const syncedOrders = [];
   for (const queued of snapshot) {
     try {
-      const response = await api.post("/orders", queued.payload);
+      if (!current()) return stopped();
+      const payload = await prepareLegacyTakeawayPayload(api, queued.payload, hotelId);
+      if (!current()) return stopped();
+      const response = await api.post("/orders", payload);
+      if (!current()) return stopped();
       const order = response.data?.order || response.data;
       if (!order?._id) throw new Error("The server did not confirm the order.");
       syncedOrders.push({
-        ...order,
+        ...preserveCustomerName(order, queued.payload),
         clientOrderId: queued.clientOrderId,
         pendingSync: false,
       });
@@ -49,6 +61,7 @@ const runStaffSync = async (api, { force = false } = {}) => {
             clientMutationId: queued.clientMutationId || queued.clientOrderId,
           });
         } catch {
+          if (!current()) return stopped();
           queueKitchenUpdate({
             orderId: order._id,
             status: "delivered",
@@ -58,12 +71,13 @@ const runStaffSync = async (api, { force = false } = {}) => {
         }
       }
     } catch (error) {
+      if (!current()) return stopped();
       const existingOrder = error?.response?.status === 409
         ? error.response.data?.order
         : null;
       if (existingOrder?._id) {
         syncedOrders.push({
-          ...existingOrder,
+          ...preserveCustomerName(existingOrder, queued.payload),
           clientOrderId: queued.clientOrderId,
           pendingSync: false,
         });
@@ -81,6 +95,7 @@ const runStaffSync = async (api, { force = false } = {}) => {
       }
     }
   }
+  if (!current()) return stopped();
   reconcileStaffOrderSync(snapshot, failed);
   const result = {
     syncedOrders,

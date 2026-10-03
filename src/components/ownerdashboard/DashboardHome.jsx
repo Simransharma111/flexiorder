@@ -1,9 +1,11 @@
 import { FiAlertCircle, FiCheckCircle, FiClock, FiCreditCard, FiShoppingBag, FiGlobe, FiMapPin } from "react-icons/fi";
 
 export default function DashboardHome({
+  onOrderingToggle, orderingBusy, orderingError, orderingReady, onEditBranding, onHistory,
   stats,
   hotel,
   setActiveTab,
+  allowedTabs = [],
 }) {
   const metrics = [
     {
@@ -64,11 +66,13 @@ export default function DashboardHome({
             )}
           </div>
           <div className="owner-hero-status">
-            {hotel?.orderingEnabled !== false ? (
-              <span className="status-pill is-active">Ordering Enabled</span>
-            ) : (
-              <span className="status-pill is-paused">Ordering Paused</span>
-            )}
+            <button type="button" className="owner-branding-button" onClick={onEditBranding}>Edit Branding</button>
+            <button type="button" className={`status-pill ${hotel?.orderingEnabled === false ? "is-paused" : "is-active"}`}
+              title="Controls guest QR ordering. Staff orders remain available." disabled={orderingBusy || !orderingReady} onClick={onOrderingToggle}
+              aria-label={hotel?.orderingEnabled === false ? "Ordering Paused — resume customer ordering" : "Ordering Active — pause customer ordering"}>
+              {orderingBusy ? "Saving…" : !orderingReady ? "Checking ordering…" : hotel?.orderingEnabled === false ? "Ordering Paused" : "Ordering Active"}
+            </button>
+            {orderingError && <p role="alert">{orderingError}</p>}
           </div>
         </div>
       </div>
@@ -89,46 +93,50 @@ export default function DashboardHome({
         )}
       </div>
 
+      <div className="owner-daily-actions">{allowedTabs.includes("orders") && <button type="button" className="owner-accent-bg" onClick={() => setActiveTab?.("orders")}>View orders</button>}{allowedTabs.includes("menu") && <button type="button" onClick={() => setActiveTab?.("menu")}>Manage menu</button>}</div>
+      <button type="button" className="owner-history-shortcut" onClick={onHistory}><strong>Order History</strong><span>View all previous orders</span></button>
       <div className="owner-metrics">
         {metrics.map((item) => {
           const Icon = item.icon;
+          const actionable = allowedTabs.includes(item.targetTab);
+          const Card = actionable ? "button" : "article";
           return (
-            <article
+            <Card type={actionable ? "button" : undefined}
               key={item.label}
-              onClick={() => setActiveTab && item.targetTab && setActiveTab(item.targetTab)}
-              style={{ cursor: setActiveTab ? "pointer" : "default" }}
-              className="clickable-metric-card"
+              onClick={actionable ? () => setActiveTab?.(item.targetTab) : undefined}
+              style={{ cursor: actionable ? "pointer" : "default" }}
+              className={actionable ? "clickable-metric-card" : ""}
             >
               <Icon />
               <span>{item.label}</span>
               <strong>{item.value}</strong>
-            </article>
+            </Card>
           );
         })}
       </div>
 
       <div className="owner-today__status">
-        <article onClick={() => setActiveTab?.("orders")}>
+        <button type="button" onClick={() => setActiveTab?.("orders")}>
           <span className="is-new" />
           <div>
             <strong>{stats?.pending || 0} new</strong>
             <small>Waiting for kitchen</small>
           </div>
-        </article>
-        <article onClick={() => setActiveTab?.("orders")}>
+        </button>
+        <button type="button" onClick={() => setActiveTab?.("orders")}>
           <span className="is-preparing" />
           <div>
             <strong>{stats?.preparing || 0} preparing</strong>
             <small>Work in progress</small>
           </div>
-        </article>
-        <article onClick={() => setActiveTab?.("orders")}>
+        </button>
+        <button type="button" onClick={() => setActiveTab?.("orders")}>
           <span className="is-ready" />
           <div>
             <strong>{stats?.ready || 0} ready</strong>
             <small>Waiting for delivery</small>
           </div>
-        </article>
+        </button>
       </div>
     </section>
   );

@@ -40,7 +40,7 @@ export default function DishCard({ dish, quantity, onAdd, onDecrease, orderingEn
       }
     }}
   >
-    {imageSrc && !imageFailed ? <img src={imageSrc} alt="" onError={() => setImageFailed(true)} /> : <div className="guest-visual-dish__placeholder" aria-hidden="true"><span>{placeholder}</span><small>{dish.name?.charAt(0)}</small></div>}
+    {imageSrc && !imageFailed ? <img src={imageSrc} alt="" loading="lazy" decoding="async" onError={() => setImageFailed(true)} /> : <div className="guest-visual-dish__placeholder" aria-hidden="true"><span>{placeholder}</span><small>{dish.name?.charAt(0)}</small></div>}
     <div className="guest-visual-dish__content">
       <div className="guest-visual-dish__title"><span className={`food-mark ${nonVeg ? "is-nonveg" : knownType ? "is-veg" : "is-unknown"}`} /><strong>{dish.name}</strong></div>
       {dish.description && <p>{dish.description}</p>}

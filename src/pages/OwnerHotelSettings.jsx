@@ -1,3 +1,6 @@
+import BillingSettings from "../components/settings/BillingSettings";
+import MenuResetSection from "../components/settings/MenuResetSection";
+import { confirmOrderingPause } from "../utils/orderingConfirmation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "../api/axios";
@@ -50,6 +53,8 @@ const getSettingsPayload = (hotel) => {
   }
 
   return {
+    name: String(hotel.name || "").trim(),
+    phone: String(hotel.phone || "").trim(),
     menuMode: hotel.menuMode,
     gstEnabled: hotel.gstEnabled,
     gstPercentage,
@@ -62,19 +67,30 @@ const confirmsSettings = (hotel, submitted) => (
   hasOwn(hotel, "gstPercentage") &&
   hotel.menuMode === submitted.menuMode &&
   hotel.gstEnabled === submitted.gstEnabled &&
-  hotel.gstPercentage === submitted.gstPercentage
+  hotel.gstPercentage === submitted.gstPercentage &&
+  String(hotel.name || "").trim() === submitted.name &&
+  String(hotel.phone || "").trim() === submitted.phone
 );
 
 
 
 
-export default function OwnerHotelSettings({ onHotelChange }){
+export default function OwnerHotelSettings({ onHotelChange, initialSection }){
 
 const navigate=useNavigate();
+const brandingRef=useRef(null);
+const brandingOpened=useRef(false);
 
 
 const [hotel,setHotel]=useState(null);
 
+useEffect(() => {
+  if (hotel && initialSection === "branding" && !brandingOpened.current) {
+    brandingOpened.current = true;
+    brandingRef.current?.scrollIntoView({ block: "start" });
+    brandingRef.current?.focus({ preventScroll: true });
+  }
+}, [hotel, initialSection]);
 const [loading,setLoading]=useState(false);
 const [orderingLoading,setOrderingLoading]=useState(false);
 const orderingRequestRevision=useRef(0);
@@ -205,6 +221,7 @@ const updateStaffCapability=(capability,value)=>{
 
 const updateOrderingEnabled=async(value)=>{
   if (!hotel || orderingLoading || loading || typeof value !== "boolean") return;
+  if (!value && !confirmOrderingPause()) return;
   const previousHotel = hotel;
   const requestRevision = ++orderingRequestRevision.current;
   updateField("orderingEnabled", value);
@@ -278,11 +295,9 @@ const saveRequestRevision = settingsRevision.current;
 const res = await api.patch(
   "/hotel/profile",
   {
-    name: hotel.name,
     tagline: hotel.tagline,
     description: hotel.description,
     address: hotel.address,
-    phone: hotel.phone,
     email: hotel.email,
     website: hotel.website,
     instagram: hotel.instagram,
@@ -329,7 +344,11 @@ if (!confirmsSettings(confirmedResponse, submittedSettings)) {
         updatedAt: confirmedHotelRef.current?.updatedAt || responseHotel.updatedAt,
       };
   }
-  throw new Error("The restaurant did not confirm the saved menu and GST settings.");
+  const contactMismatch = String(confirmedResponse?.name || "").trim() !== submittedSettings.name ||
+    String(confirmedResponse?.phone || "").trim() !== submittedSettings.phone;
+  throw new Error(contactMismatch
+    ? "The restaurant did not confirm the saved name and contact phone. Refresh and try again."
+    : "The restaurant did not confirm the saved menu and GST settings.");
 }
 const data = normalizeHotelSettings(hydrateHotelFeatures(confirmedResponse));
 const concurrentConfirmed = confirmedHotelRef.current;
@@ -648,7 +667,7 @@ space-y-8
 
 
 
-<section className="
+<section ref={brandingRef} tabIndex={-1} aria-label="Edit restaurant branding" className="
 bg-white/10
 border
 border-white/20
@@ -666,6 +685,7 @@ mb-5
 Hotel Information
 
 </h2>
+<p className="mb-4 text-sm">Save Settings to publish this restaurant name and contact phone to the customer menu and administrator view. These details are separate from your owner account name and sign-in details.</p>
 
 
 
@@ -675,6 +695,7 @@ Hotel Information
 value={hotel.name || ""}
 onChange={e=>updateField("name", e.target.value)}
 placeholder="Hotel name"
+aria-label="Restaurant name"
 className="p-3 rounded-xl text-black"
 />
 <input
@@ -746,6 +767,7 @@ e.target.value
 }
 
 placeholder="Phone"
+aria-label="Restaurant contact phone"
 
 className="
 p-3
@@ -937,6 +959,10 @@ p-6
     </div>
   )}
 </section>
+
+<BillingSettings hotel={hotel} />
+
+<MenuResetSection hotel={hotel} />
 
 {/* ── Single save button covers Hotel Info + Customer Menu + GST ── */}
 <div className="flex justify-end">

@@ -1,9 +1,12 @@
-import { useCallback, useEffect, useState, useMemo } from "react";
+import { orderNumber } from "../utils/orderNumber";
+import OrderHistoryDetails from "./orders/OrderHistoryDetails";
+import useDialogFocus from "../hooks/useDialogFocus";
+import { customerName } from "../utils/orderCustomer";
+import { orderKey, orderLocation } from "../utils/orderModel";
+import { useCallback, useEffect, useState, useMemo, useRef } from "react";
 import { FiDownload, FiRefreshCw, FiTrendingUp, FiShoppingBag, FiCreditCard, FiClock, FiCheckCircle, FiSearch } from "react-icons/fi";
 import api from "../api/axios";
-import { Share } from "@capacitor/share";
-import { downloadFile, isNativeApp, writeTempShareFile } from "../utils/fileDownload";
-import { buildAnalyticsReportBlob, reportFilename } from "../utils/excelReport";
+import { downloadFile, fileExportMessage } from "../utils/fileDownload";
 import {
   analyticsComparison,
   buildAnalyticsChartData,
@@ -49,6 +52,11 @@ export default function AnalyticsDashboard({ hotel = {}, orders = [], advancedEn
   const [customStart, setCustomStart] = useState(() => dateInputValue(new Date()));
   const [customEnd, setCustomEnd] = useState(() => dateInputValue(new Date()));
   const [search, setSearch] = useState("");
+  const [billId, setBillId] = useState(null);
+  const billDialogRef = useRef(null);
+  const closeBill = useCallback(() => setBillId(null), []);
+  const selectedBill = orders.find((order) => orderKey(order) === billId);
+  useDialogFocus(Boolean(selectedBill), billDialogRef, closeBill);
 
   const fetchAnalytics = useCallback(async () => {
     setLoading(true);
@@ -71,47 +79,6 @@ export default function AnalyticsDashboard({ hotel = {}, orders = [], advancedEn
   const [exporting, setExporting] = useState(false);
   const [exportStatus, setExportStatus] = useState("");
 
-  // Build a branded Excel workbook for exactly the period the owner selected
-  // (today / month / quarter / custom). On the device it saves into
-  // Downloads/FlexiOrder and immediately opens the native share sheet.
-  const exportExcel = async () => {
-    if (exporting) return;
-    setExporting(true);
-    setExportStatus("");
-    try {
-      const blob = await buildAnalyticsReportBlob({
-        hotel,
-        orders: filteredOrdersForTimeframe,
-        stats,
-        previousStats,
-        chartData,
-        popularDishes: calculatePopularDishes(filteredOrdersForTimeframe, 8),
-        range,
-        rangeLabel: range?.label || "",
-      });
-      const filename = reportFilename(hotel, range);
-      if (isNativeApp()) {
-        const saved = await downloadFile(blob, filename);
-        let shareNote = "";
-        try {
-          const uri = await writeTempShareFile(blob, filename);
-          await Share.share({ title: `${hotel?.name || "Restaurant"} report`, url: uri, dialogTitle: "Share the report" });
-          shareNote = " · sharing sheet opened";
-        } catch {
-          shareNote = "";
-        }
-        setExportStatus(`Saved to ${saved.label || "Downloads/FlexiOrder"}${shareNote}.`);
-      } else {
-        await downloadFile(blob, filename);
-        setExportStatus("Report downloaded.");
-      }
-    } catch (requestError) {
-      console.error(requestError);
-      setExportStatus("Report could not be created. Try again when the connection is stable.");
-    } finally {
-      setExporting(false);
-    }
-  };
 
   const range = useMemo(() => resolveAnalyticsRange({
     mode: rangeMode,
@@ -124,12 +91,12 @@ export default function AnalyticsDashboard({ hotel = {}, orders = [], advancedEn
 
   const previousRange = useMemo(() => previousAnalyticsRange(range), [range]);
   const filteredOrdersForTimeframe = useMemo(
-    () => filterAnalyticsOrders(orders, range, search),
-    [orders, range, search],
+    () => filterAnalyticsOrders(orders, range, search, hotel),
+    [orders, range, search, hotel],
   );
   const previousOrders = useMemo(
-    () => filterAnalyticsOrders(orders, previousRange, search),
-    [orders, previousRange, search],
+    () => filterAnalyticsOrders(orders, previousRange, search, hotel),
+    [orders, previousRange, search, hotel],
   );
   const stats = useMemo(
     () => calculateAnalyticsStats(filteredOrdersForTimeframe),
@@ -150,6 +117,35 @@ export default function AnalyticsDashboard({ hotel = {}, orders = [], advancedEn
     () => calculatePopularDishes(filteredOrdersForTimeframe),
     [filteredOrdersForTimeframe],
   );
+
+  // Build a branded Excel workbook for exactly the period the owner selected
+  // (today / month / quarter / custom), then offer sharing or download.
+  const exportExcel = async () => {
+    if (exporting) return;
+    setExporting(true);
+    setExportStatus("");
+    try {
+      const { buildAnalyticsReportBlob, reportFilename } = await import('../utils/excelReport');
+      const blob = await buildAnalyticsReportBlob({
+        hotel,
+        orders: filteredOrdersForTimeframe,
+        stats,
+        previousStats,
+        chartData,
+        popularDishes: calculatePopularDishes(filteredOrdersForTimeframe, 8),
+        range,
+        rangeLabel: range?.label || "",
+      });
+      const filename = reportFilename(hotel, range);
+      const result = await downloadFile(blob, filename, { title: `${hotel?.name || "Restaurant"} report` });
+      setExportStatus(fileExportMessage(result));
+    } catch (requestError) {
+      console.error(requestError);
+      setExportStatus("Report could not be created. Try again when the connection is stable.");
+    } finally {
+      setExporting(false);
+    }
+  };
 
   const metrics = [
     { key: "revenue", label: "Revenue", value: currency(stats.totalRevenue), comparison: analyticsComparison(stats.totalRevenue, previousStats.totalRevenue), icon: FiCreditCard },
@@ -305,6 +301,27 @@ export default function AnalyticsDashboard({ hotel = {}, orders = [], advancedEn
 
       {!range.error && (
         <>
+      <section className="analytics-chart-card mb-6" aria-label="Bills in selected period">
+        <h2>Bills in selected period</h2>
+        <p className="mb-3 text-sm text-ink-secondary">Open an order to see its customer and bill details. Completed bills can be shared.</p>
+        <div className="grid gap-2 max-h-96 overflow-y-auto">
+          {filteredOrdersForTimeframe.map((order) => {
+            const name = customerName(order);
+            const reference = orderNumber(order, hotel);
+            return <button
+              type="button"
+              key={orderKey(order)}
+              aria-label={`View bill for ${name || "unnamed customer"}, order ${reference}`}
+              onClick={() => setBillId(orderKey(order))}
+              className="flex min-h-14 flex-wrap items-center justify-between gap-2 rounded-lg border border-hairline p-3 text-left"
+            >
+              <span className="min-w-0 break-words"><strong>{name || "Customer name not provided"}</strong><span className="block text-xs text-ink-secondary">#{reference} · {orderLocation(order)} · {order.status}</span></span>
+              <span>{currency(order.totalAmount ?? order.total)}</span>
+            </button>;
+          })}
+          {!filteredOrdersForTimeframe.length && <p>No bills match this period and search.</p>}
+        </div>
+      </section>
       {/* Interactive Metric Cards */}
       <div className="analytics-metrics cursor-pointer">
         {metrics.map((m) => {
@@ -478,6 +495,7 @@ export default function AnalyticsDashboard({ hotel = {}, orders = [], advancedEn
       </article>
         </>
       )}
+      {selectedBill && <OrderHistoryDetails dialogRef={billDialogRef} order={selectedBill} hotel={hotel} onClose={closeBill} />}
     </section>
   );
 }

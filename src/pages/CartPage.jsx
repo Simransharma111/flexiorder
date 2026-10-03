@@ -1,3 +1,4 @@
+import { preserveCustomerName } from "../utils/orderCustomer";
 import {
   FiArrowLeft,
   FiMinus,
@@ -91,7 +92,7 @@ export default function CartPage() {
       if (checkoutPreflightInFlight.current) return;
       const requestRevision = ++checkoutRequestRevision.current;
       try {
-        const response = await api.get(`/qr/menu/${qrId}`, { skipAuth: true });
+        const response = await api.get(`/qr/menu/${encodeURIComponent(qrId)}`, { skipAuth: true });
         if (requestRevision !== checkoutRequestRevision.current) return;
         const hotel = response.data?.hotel || null;
         setCheckoutHotel(hotel);
@@ -150,7 +151,7 @@ export default function CartPage() {
 
   useEffect(() => {
     if (orderingConfirmed && checkoutHotel?.orderingEnabled === false) {
-      navigate(`/qr/${qrId}`, { replace: true });
+      navigate(`/qr/${encodeURIComponent(qrId)}`, { replace: true });
     }
   }, [checkoutHotel?.orderingEnabled, navigate, orderingConfirmed, qrId]);
 
@@ -191,7 +192,7 @@ export default function CartPage() {
               : errorMessage || "Ordering controls will appear after the restaurant confirms that ordering is available."}
           </p>
           <button
-            onClick={() => navigate(`/qr/${qrId}`)}
+            onClick={() => navigate(`/qr/${encodeURIComponent(qrId)}`)}
             className="mt-6 w-full bg-orange-500 hover:bg-orange-600 text-white py-3 rounded-xl font-bold"
           >
             Back to Menu
@@ -230,7 +231,7 @@ export default function CartPage() {
           </p>
 
           <button
-            onClick={() => navigate(`/qr/${qrId}`)}
+            onClick={() => navigate(`/qr/${encodeURIComponent(qrId)}`)}
             className="mt-6 w-full bg-orange-500 hover:bg-orange-600 text-white py-3 rounded-xl font-bold"
           >
             Browse Menu
@@ -304,7 +305,7 @@ export default function CartPage() {
       try {
         checkoutPreflightInFlight.current = true;
         const requestRevision = ++checkoutRequestRevision.current;
-        const menuResponse = await api.get(`/qr/menu/${qrId}`, { skipAuth: true });
+        const menuResponse = await api.get(`/qr/menu/${encodeURIComponent(qrId)}`, { skipAuth: true });
         const freshHotel = menuResponse.data?.hotel || null;
         if (requestRevision !== checkoutRequestRevision.current) {
           throw new Error("Ordering availability changed. Please review the menu and try again.");
@@ -320,7 +321,7 @@ export default function CartPage() {
         setCheckoutHotel(freshHotel);
         setOrderingConfirmed(true);
         if (freshHotel?.orderingEnabled === false) {
-          navigate(`/qr/${qrId}`, { replace: true });
+          navigate(`/qr/${encodeURIComponent(qrId)}`, { replace: true });
           return;
         }
 
@@ -446,7 +447,7 @@ export default function CartPage() {
         status: "pending",
         createdAt: new Date().toISOString(),
         ...orderData,
-        ...createdOrder,
+        ...preserveCustomerName(createdOrder, orderData),
         _id: createdOrder?._id || clientOrderId,
         clientOrderId: createdOrder?.clientOrderId || clientOrderId,
         items: mergeGuestOrderItems(createdOrder?.items, submittedItems),
@@ -461,7 +462,7 @@ export default function CartPage() {
       clearCart();
 
       setTimeout(() => {
-        navigate("/qr/" + qrId, {
+        navigate("/qr/" + encodeURIComponent(qrId), {
           replace: true,
           state: { receivedOrder: handoff },
         });
@@ -485,7 +486,7 @@ export default function CartPage() {
           ? { ...current, orderingEnabled: false }
           : current);
         setOrderingConfirmed(true);
-        navigate(`/qr/${qrId}`, { replace: true });
+        navigate(`/qr/${encodeURIComponent(qrId)}`, { replace: true });
       }
 
     } finally {
@@ -570,7 +571,7 @@ export default function CartPage() {
 
           <button
             onClick={() =>
-              navigate(`/qr/${qrId}`)
+              navigate(`/qr/${encodeURIComponent(qrId)}`)
             }
             disabled={placingOrder}
             className="w-10 h-10 rounded-xl bg-gray-100 flex items-center justify-center"

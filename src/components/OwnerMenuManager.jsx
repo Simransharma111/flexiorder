@@ -1,3 +1,5 @@
+import { downloadFile, fileExportMessage } from "../utils/fileDownload";
+import LiveMenuLink from "./menu/LiveMenuLink";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import api from "../api/axios";
 import { sortDishesForDisplay } from "../utils/menuOrdering";
@@ -46,6 +48,8 @@ import {
   FiStar,
 } from "react-icons/fi";
 import DishForm from "../components/menu/DishForm";
+import MenuPdfDialog from "../components/menu/MenuPdfDialog";
+import MenuCategoryManager from "./MenuCategoryManager";
 
 const DEFAULT_CATEGORIES = [
   "Starters",
@@ -80,6 +84,8 @@ export default function OwnerMenuManager({
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
   const [activeCategory, setActiveCategory] = useState("All");
+  const [showCategories, setShowCategories] = useState(false);
+  const [showMenuPdf, setShowMenuPdf] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [importing, setImporting] = useState(false);
   const [importProgress, setImportProgress] = useState(null);
@@ -124,7 +130,7 @@ export default function OwnerMenuManager({
       dishes,
       [
         ...DEFAULT_CATEGORIES,
-        ...canonicalCategories.map(categoryName),
+        ...canonicalCategories,
       ]
     ),
     [canonicalCategories, dishes]
@@ -184,15 +190,9 @@ export default function OwnerMenuManager({
     try {
       const res = await api.get(`/menu/${hotelId}`);
 
-      const serverDishes = Array.isArray(res.data)
-        ? res.data
-        : Array.isArray(res.data?.dishes)
-        ? res.data.dishes
-        : [];
-
       const reconciled = reconcileMenuFromServer(
         hotelId,
-        serverDishes
+        res.data
       );
 
       setDishes(reconciled);
@@ -268,7 +268,9 @@ export default function OwnerMenuManager({
     setShowForm(true);
     setLoadError("");
 
-    window.scrollTo({
+    const ownerScroller = document.querySelector(".owner-shell > .flex");
+    const scrollTarget = ownerScroller && getComputedStyle(ownerScroller).overflowY === "auto" ? ownerScroller : window;
+    scrollTarget.scrollTo({
       top: 0,
       behavior: "smooth",
     });
@@ -357,6 +359,8 @@ const resolvedFields = {
   category: resolvedCategory,
   categoryId: resolvedCategoryId,
   categoryName: resolvedCategoryName,
+  ...(editingId && categoryId(readMenuCache(hotelId).find(dish => dish._id === editingId)?.category) !== resolvedCategoryId
+    ? { subCategory: "" } : {}),
 };
 
       if (editingId) {
@@ -405,7 +409,9 @@ const resolvedFields = {
     setShowForm(true);
     setLoadError("");
 
-    window.scrollTo({
+    const ownerScroller = document.querySelector(".owner-shell > .flex");
+    const scrollTarget = ownerScroller && getComputedStyle(ownerScroller).overflowY === "auto" ? ownerScroller : window;
+    scrollTarget.scrollTo({
       top: 0,
       behavior: "smooth",
     });
@@ -477,7 +483,7 @@ const resolvedFields = {
     }
   };
 
-  const exportMenu = () => {
+  const exportMenu = async () => {
     if (!dishes.length) return;
 
     try {
@@ -486,15 +492,8 @@ const resolvedFields = {
         [serialized],
         { type: "application/json" }
       );
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-
-      link.href = url;
-      link.download = "flexiorder-menu.json";
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(url);
+      const result = await downloadFile(blob, "flexiorder-menu.json");
+      setFeedback(fileExportMessage(result));
       setLoadError("");
     } catch (err) {
       setLoadError(err?.message || "The menu could not be exported.");
@@ -646,6 +645,7 @@ const resolvedFields = {
       ) || null
     );
   }, [dishes, editingId]);
+  useRefreshOnResume(fetchDishes, OPERATIONAL_FALLBACK_POLL_MS);
 
   return (
     <div className="text-gray-900">
@@ -663,6 +663,31 @@ const resolvedFields = {
         </div>
 
         <div className="flex flex-wrap gap-2">
+          <LiveMenuLink />
+          <button
+            type="button"
+            onClick={openAddForm}
+            className="owner-accent-bg flex items-center justify-center gap-2 rounded-xl px-5 py-3 font-semibold"
+          >
+            <FiPlus />
+            Add Dish
+          </button>
+          <details className="owner-menu-tools">
+            <summary>Menu tools</summary>
+            <div className="owner-menu-tools__actions">
+          <button
+            type="button"
+            onClick={() => setShowMenuPdf(true)}
+            className="flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-700 transition hover:bg-gray-50"
+          >
+            <FiDownload />
+            Create menu PDF
+          </button>
+          <button type="button" aria-expanded={showCategories}
+            onClick={() => setShowCategories(value => !value)}
+            className="rounded-xl border border-gray-200 bg-white px-4 py-3 font-semibold">
+            {showCategories ? "Close categories" : "Manage categories"}
+          </button>
           {advancedEnabled && (
             <>
               <label className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-700 transition hover:bg-gray-50">
@@ -679,17 +704,25 @@ const resolvedFields = {
                   accept=".json,application/json"
                   onChange={importMenu}
                   disabled={importing}
-                  className="hidden"
+                  className="sr-only"
+                  aria-label="Import menu"
                 />
               </label>
 
-              <a
-                href="/examples/flexiorder-menu-demo.json"
-                download="flexiorder-menu-demo.json"
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    const response = await fetch("/examples/flexiorder-menu-demo.json");
+                    if (!response.ok) throw new Error("Could not load the demo file.");
+                    const result = await downloadFile(await response.blob(), "flexiorder-menu-demo.json");
+                    setFeedback(fileExportMessage(result));
+                  } catch (error) { setLoadError(error.message || "Could not export the demo file."); }
+                }}
                 className="flex items-center justify-center rounded-xl border border-gray-200 bg-white px-3 py-3 text-sm font-semibold text-gray-700 transition hover:bg-gray-50"
               >
                 Demo file
-              </a>
+              </button>
 
               <button
                 type="button"
@@ -703,18 +736,25 @@ const resolvedFields = {
             </>
           )}
 
-          <button
-            type="button"
-            onClick={openAddForm}
-            className="owner-accent-bg flex items-center justify-center gap-2 rounded-xl px-5 py-3 font-semibold"
-          >
-            <FiPlus />
-            Add Dish
-          </button>
+            </div>
+          </details>
         </div>
       </div>
+      {importing && <p role="status">Import in progress{importProgress ? `: ${importProgress[0]} of ${importProgress[1]} dishes` : "…"}</p>}
 
       {/* FEEDBACK */}
+      {showCategories && <section className="mb-6" aria-label="Manage menu categories">
+        <MenuCategoryManager key={hotelId} hotelId={hotelId} onCategoryUpdate={storeCategoryCatalog} />
+      </section>}
+      <MenuPdfDialog
+        open={showMenuPdf}
+        onClose={() => setShowMenuPdf(false)}
+        restaurant={restaurant || user}
+        dishes={dishes}
+        categories={canonicalCategories}
+        isOnline={isOnline}
+        pendingCount={syncSummary.pending + syncSummary.attention}
+      />
       {feedback && (
         <div
           className="ops-inline-success mb-4"
@@ -1269,3 +1309,5 @@ function SmallTag({ children }) {
     </span>
   );
 }
+import useRefreshOnResume from '../hooks/useRefreshOnResume';
+import { OPERATIONAL_FALLBACK_POLL_MS } from '../utils/refreshOnResume';

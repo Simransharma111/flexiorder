@@ -70,6 +70,9 @@ const { isOnline } = useConnectivity();
 const [hotel,setHotel]=useState(null);
 const [orderingConfirmed,setOrderingConfirmed]=useState(false);
 const menuRequestRevision=useRef(0);
+const menuFetchInFlight=useRef(null);
+const validatedMenuQr=useRef(null);
+const categoryCatalogRef=useRef(new Map());
 
 const hotelId = hotel?._id || hotel?.id;
 const hostOrderingEnabled = Boolean(
@@ -172,65 +175,86 @@ const [comboDish, setComboDish] = useState(null);
 
 const fetchMenu=useCallback(async({ silent = false } = {})=>{
 
+// Polling and socket reconnects share the current request instead of
+// superseding a slow first load every 30 seconds.
+if (menuFetchInFlight.current?.qrId === qrId) return;
+const requestToken = { qrId, controller: new AbortController() };
+menuFetchInFlight.current = requestToken;
 const cacheKey = `guestMenu_${qrId}`;
+const saveCache = value => {
+  try { localStorage.setItem(cacheKey, JSON.stringify(value)); }
+  catch { /* A full/blocked cache must not discard a successful live menu. */ }
+};
 const requestRevision = ++menuRequestRevision.current;
 
 try{
 
-if (!silent) setLoading(true);
-
-setError("");
+if (!silent) {
+  setLoading(true);
+  setError("");
+  try {
+    const cached = JSON.parse(localStorage.getItem(cacheKey) || "null");
+    if (cached?.hotel && Array.isArray(cached?.dishes)) {
+      setHotel(cached.hotel);
+      setTable(cached.table || null);
+      setDishes(normalizeMenuResponse(cached.dishes) || []);
+      setOrderingConfirmed(false);
+      setLoading(false);
+    }
+  } catch { /* Fresh data still loads if caching is unavailable. */ }
+}
 
 
 const res=await api.get(
-`/qr/menu/${qrId}`,
-{skipAuth:true}
+`/qr/menu/${encodeURIComponent(qrId)}`,
+{skipAuth:true, timeout:20000, signal:requestToken.controller.signal}
 );
 
 
 if (requestRevision === menuRequestRevision.current) {
+setError("");
 const freshHotel = res.data?.hotel || null;
-let rawDishes = res.data?.dishes || [];
+const rawDishes = res.data?.dishes || [];
 
-// Older backends send `categoryId` as a raw ObjectId without the
-// category name. The categories catalog is public — resolve names on
-// the RAW dishes (before normalization) so category filtering works on
-// every deployed backend version.
-if (Array.isArray(rawDishes) && rawDishes.some((dish) => !dishCategoryName(dish))) {
+// Render the available menu immediately, then enrich legacy category
+// references and positions in the background. A slow catalog must not
+// hold up the menu or overwrite a newer QR request.
+if (Array.isArray(rawDishes) && rawDishes.length) {
 const catalogId = freshHotel?._id || freshHotel?.id;
 if (catalogId) {
-try {
-const catalogRes = await api.get(
+void api.get(
 `/menu/categories/${catalogId}`,
 {skipAuth:true}
-);
-rawDishes = resolveDishCategoryNames(
+).then(catalogRes => {
+if (requestRevision !== menuRequestRevision.current) return;
+categoryCatalogRef.current.set(String(catalogId), catalogRes.data);
+const enriched = normalizeMenuResponse(resolveDishCategoryNames(
 rawDishes,
 catalogRes.data
-);
-} catch (catalogError) {
+));
+setDishes(enriched);
+saveCache({
+  hotel: freshHotel, table: res.data?.table || null, dishes: enriched,
+});
+}).catch(catalogError => {
 console.log("CATEGORY CATALOG ERROR", catalogError);
-}
+});
 }
 }
 
-const freshDishes = normalizeMenuResponse(rawDishes) || [];
+const knownCatalog = categoryCatalogRef.current.get(String(freshHotel?._id || freshHotel?.id));
+const freshDishes = normalizeMenuResponse(resolveDishCategoryNames(rawDishes, knownCatalog || [])) || [];
 setHotel(freshHotel);
-setOrderingConfirmed(Boolean(
-  freshHotel &&
-  typeof freshHotel === "object" &&
-  (freshHotel._id || freshHotel.id)
-));
+const validHotel = Boolean(freshHotel && typeof freshHotel === "object" && (freshHotel._id || freshHotel.id));
+validatedMenuQr.current = validHotel ? qrId : null;
+setOrderingConfirmed(validHotel);
 setTable(res.data?.table || null);
 setDishes(freshDishes);
-localStorage.setItem(
-cacheKey,
-JSON.stringify({
+saveCache({
 hotel: res.data?.hotel || null,
 table: res.data?.table || null,
 dishes: freshDishes,
-})
-);
+});
 }
 
 
@@ -244,11 +268,13 @@ err
 );
 
 if (requestRevision !== menuRequestRevision.current) return;
+validatedMenuQr.current = null;
+setOrderingConfirmed(false);
 
 try {
 const cached = JSON.parse(localStorage.getItem(cacheKey) || "null");
 
-if (cached?.dishes) {
+if ((!err.response || err.response.status >= 500) && Array.isArray(cached?.dishes)) {
 if (requestRevision === menuRequestRevision.current) {
 setHotel(cached.hotel || null);
 setOrderingConfirmed(false);
@@ -263,7 +289,7 @@ console.warn("CACHED MENU ERROR", cacheError);
 }
 
 setError(
-err?.response?.data?.message ||
+(err?.code === "ECONNABORTED" ? "The menu is taking longer than expected. Please retry." : err?.response?.data?.message) ||
 "Unable to load menu"
 );
 
@@ -271,13 +297,15 @@ err?.response?.data?.message ||
 }
 finally{
 
-if (!silent && requestRevision === menuRequestRevision.current) setLoading(false);
+if (menuFetchInFlight.current === requestToken) menuFetchInFlight.current = null;
+if (requestRevision === menuRequestRevision.current) setLoading(false);
 
 }
 
 },[qrId]);
 
 useEffect(() => {
+  validatedMenuQr.current = null;
   setOrderingConfirmed(false);
   menuRequestRevision.current += 1;
   setHotel(null);
@@ -297,7 +325,15 @@ const refreshInterval = window.setInterval(
   () => fetchMenu({ silent: true }),
   30000
 );
-return () => window.clearInterval(refreshInterval);
+return () => {
+  window.clearInterval(refreshInterval);
+  // Cancel the request owned by this route/effect, including StrictMode replay.
+  if (menuFetchInFlight.current?.qrId === qrId) {
+    menuRequestRevision.current += 1;
+    menuFetchInFlight.current.controller.abort();
+    menuFetchInFlight.current = null;
+  }
+};
 },[fetchMenu,qrId]);
 
 useEffect(() => {
@@ -312,6 +348,8 @@ useEffect(() => {
   );
   joinHotel();
   const handleSettingsUpdate = (payload) => {
+    // A settings broadcast is not proof that a cached QR is still assigned.
+    if (validatedMenuQr.current !== qrId) return;
     setHotel((current) => {
       const next = applyHotelSettingsUpdate(current, payload);
       if (next === current) return current;
@@ -328,7 +366,7 @@ useEffect(() => {
     socket.off("connect", joinHotel);
     socket.off("hotelSettingsUpdated", handleSettingsUpdate);
   };
-}, [fetchMenu, hotelId]);
+}, [fetchMenu, hotelId, qrId]);
 
 
 
@@ -607,7 +645,7 @@ return;
 
 
 navigate(
-`/cart/${qrId}`
+`/cart/${encodeURIComponent(qrId)}`
 );
 
 
@@ -987,9 +1025,9 @@ outline-none
       </label>
     )}
 
-    <button type="button" onClick={openSchedule} className="guest-food-filters__schedule">
+    {orderingEnabled && <button type="button" onClick={openSchedule} className="guest-food-filters__schedule">
       <FiCalendar /> Schedule order
-    </button>
+    </button>}
   </div>
 </section>
 

@@ -5,6 +5,7 @@ import { useNavigate } from "react-router-dom";
 import api from "../api/axios";
 import socket from "../socket";
 import { triggerLocalOrderNotification } from "../utils/fcmPush";
+import NotificationStatusNotice from "../components/NotificationStatusNotice";
 import KitchenBoard from "../components/kitchen/KitchenBoard";
 import { clearAuthSession, getStoredAuthToken, readStoredSession } from "../utils/session";
 import { getScopedStorageKey, rememberRestaurantId } from "../utils/storageScope";
@@ -39,6 +40,8 @@ import {
 import { useConnectivity } from "../context/ConnectivityContext";
 import { useSync } from "../context/SyncContext";
 import { SYNC_STATE_EVENT } from "../utils/syncQueues";
+import useRefreshOnResume from "../hooks/useRefreshOnResume";
+import { OPERATIONAL_FALLBACK_POLL_MS } from "../utils/refreshOnResume";
 
 const CACHE_KEY = "flexiorder_kitchen_active_orders";
 const HOTEL_CACHE_KEY = "flexiorder_kitchen_hotel";
@@ -136,12 +139,8 @@ export default function KitchenDashboard() {
   useEffect(() => {
     fetchHotel();
     fetchOrders();
-    const poll = window.setInterval(() => {
-      fetchHotel();
-      fetchOrders();
-    }, 30000);
-    return () => window.clearInterval(poll);
   }, [fetchHotel, fetchOrders]);
+  useRefreshOnResume(() => Promise.all([fetchHotel(), fetchOrders()]), OPERATIONAL_FALLBACK_POLL_MS);
 
   useEffect(() => {
     if (!hotel?._id) return undefined;
@@ -303,6 +302,7 @@ export default function KitchenDashboard() {
 
   return (
     <main className="ops-workspace ops-kitchen-workspace" style={getHotelThemeStyle(hotel)}>
+      <NotificationStatusNotice />
       <div className="ops-corner-actions">
         <span className={`ops-connection-dot is-${connectionStatus}`} title={connectionLabel} aria-label={connectionLabel} />
         <button type="button" className="ops-icon-button" aria-label="Refresh kitchen" onClick={refreshNow} disabled={refreshing}><FiRefreshCw className={refreshing ? "animate-spin" : ""} /></button>

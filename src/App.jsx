@@ -1,4 +1,5 @@
 import { lazy, Suspense } from "react";
+import { Capacitor } from "@capacitor/core";
 import { Navigate, Routes, Route } from "react-router-dom";
 import "./App.css";
 
@@ -24,7 +25,7 @@ const OwnerHotelSettings = lazy(() => import("./pages/OwnerHotelSettings"));
 const HotelSetupPage = lazy(() => import("./pages/HotelSetupPage"));
 const KitchenDashboard = lazy(() => import("./pages/KitchenDashboard"));
 const SuperAdminDashboard = lazy(() => import("./pages/SuperAdminDashboard"));
-const QRInventoryPage = lazy(() => import("./pages/QRInventoryPage"));
+const TableQRManager = lazy(() => import("./components/TableQRManager"));
 const ChangePassword = lazy(() => import("./pages/ChangePassword"));
 const StaffWorkspace = lazy(() => import("./pages/StaffWorkspace"));
 const StaffMenuPage = lazy(() => import("./pages/StaffMenuPage"));
@@ -50,7 +51,7 @@ export default function App() {
         {/* Directly open Auth Page */}
        <Route
   path="/"
-  element={<HomeRedirect><LandingPage /></HomeRedirect>}
+  element={<HomeRedirect>{Capacitor.isNativePlatform() ? <Navigate to="/login" replace /> : <LandingPage />}</HomeRedirect>}
 />
 
         <Route
@@ -87,12 +88,12 @@ export default function App() {
           element={<CartPage />}
         />
 
-        {/* QR Inventory */}
+        {/* Legacy owner QR bookmark opens the integrated manager. */}
         <Route
           path="/qr"
           element={
             <ProtectedRoute allowedRoles={OWNER_ROLES}>
-              <QRInventoryPage />
+              <TableQRManager />
             </ProtectedRoute>
           }
         />

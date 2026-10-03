@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
   FiX,
@@ -106,6 +106,8 @@ export default function DishForm({
   const [error, setError] =
     useState("");
 
+  const initializedDraft = useRef(null);
+
   const isEditing =
     Boolean(editingId);
 
@@ -132,6 +134,10 @@ export default function DishForm({
   ===================================================== */
 
   useEffect(() => {
+    const draftKey = editingId || dish?._id || "new";
+    if (initializedDraft.current === draftKey) return;
+    if (editingId && !dish) return;
+    initializedDraft.current = draftKey;
     /*
       NEW DISH
     */
@@ -284,6 +290,7 @@ export default function DishForm({
     setError("");
   }, [
     dish,
+    editingId,
     categoryOptions,
   ]);
 

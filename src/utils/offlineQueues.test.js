@@ -40,6 +40,38 @@ describe("offline queues", () => {
     vi.unstubAllGlobals();
   });
 
+  it("replays legacy takeaway using the reserved location and preserves its retry ID", async () => {
+    localStorage.setItem("user", JSON.stringify({ _id: "staff", role: "staff", hotelId: "hotel-1" }));
+    queueStaffOrder({ clientOrderId: "legacy-takeaway", orderType: "takeaway", tableId: null, items: [] });
+    const api = {
+      get: vi.fn().mockResolvedValue({ data: [{ _id: "counter", type: "table", tableNumber: "Takeaway" }] }),
+      post: vi.fn().mockResolvedValue({ data: { order: { _id: "saved" } } }),
+    };
+    await syncPendingStaffOrders(api);
+    expect(api.get).toHaveBeenCalledWith("/public/tables/hotel-1", { timeout: 15000 });
+    expect(api.post).toHaveBeenCalledWith("/orders", expect.objectContaining({ clientOrderId: "legacy-takeaway", tableId: "counter", orderType: "now" }));
+    expect(getPendingStaffOrders()).toHaveLength(0);
+  });
+
+  it("retains legacy takeaway when setup is missing or the account changes during lookup", async () => {
+    localStorage.setItem("user", JSON.stringify({ _id: "staff", role: "staff", hotelId: "hotel-1" }));
+    queueStaffOrder({ clientOrderId: "legacy-takeaway", orderType: "takeaway", tableId: null, items: [] });
+    const api = { get: vi.fn().mockResolvedValue({ data: [] }), post: vi.fn() };
+    await syncPendingStaffOrders(api);
+    expect(getPendingStaffOrders()).toHaveLength(1);
+    expect(api.post).not.toHaveBeenCalled();
+    localStorage.clear();
+    localStorage.setItem("user", JSON.stringify({ _id: "staff", role: "staff", hotelId: "hotel-1" }));
+    queueStaffOrder({ clientOrderId: "legacy-takeaway", orderType: "takeaway", tableId: null, items: [] });
+    api.get.mockImplementation(async () => {
+      localStorage.setItem("token", "changed-session");
+      return { data: [{ _id: "counter", type: "table", tableNumber: "Takeaway" }] };
+    });
+    expect(await syncPendingStaffOrders(api)).toMatchObject({ sessionChanged: true });
+    expect(api.post).not.toHaveBeenCalled();
+    expect(getPendingStaffOrders()[0].clientOrderId).toBe("legacy-takeaway");
+  });
+
   it("assigns an id and retry metadata to offline staff orders", () => {
     const queued = queueStaffOrder({ tableId: "table-1", items: [] });
     expect(queued.clientOrderId).toBeTruthy();

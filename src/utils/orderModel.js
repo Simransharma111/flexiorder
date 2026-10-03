@@ -1,3 +1,5 @@
+import { preserveCustomerName } from "./orderCustomer";
+import { compareServiceLocations, isTakeawayNumber } from "./serviceLocations";
 const STATUS_RANK = {
   pending: 0,
   accepted: 1,
@@ -116,6 +118,7 @@ export const orderLocation = (order) => {
   const locationType = String(
     order?.locationType || table?.locationType || table?.type || "table"
   ).toLowerCase();
+  if (locationType === "table" && isTakeawayNumber(number)) return "Takeaway";
   return locationType === "room" ? `Room ${number}` : `Table ${number}`;
 };
 
@@ -143,7 +146,7 @@ const chooseOrder = (current, incoming) => {
   const currentIsRevert = current.reverted === true || current.statusChangeType === "revert";
 
   const preserveIdentityAndSync = (selected) => ({
-    ...selected,
+    ...preserveCustomerName(selected, incoming),
     _id: incoming._id || selected._id,
     clientOrderId: incoming.clientOrderId || selected.clientOrderId,
     localId: incoming.localId || selected.localId,
@@ -160,7 +163,7 @@ const chooseOrder = (current, incoming) => {
   if (incomingRank === currentRank && orderTime(incoming) < orderTime(current)) {
     return preserveIdentityAndSync(current);
   }
-  const merged = preserveIdentityAndSync({ ...current, ...incoming });
+  const merged = preserveIdentityAndSync({ ...current, ...preserveCustomerName(incoming, current) });
   if (current.pendingSync && incoming._id && current.clientOrderId &&
       current.clientOrderId === incoming.clientOrderId) {
     merged.pendingSync = false;
@@ -211,7 +214,7 @@ export const replaceOrderAuthoritatively = (orders = [], incoming) => {
     replaced = true;
     return {
       ...order,
-      ...incoming,
+      ...preserveCustomerName(incoming, order),
       pendingMutation: incoming.pendingMutation ?? false,
       pendingSync: incoming.pendingSync ?? false,
     };
@@ -275,7 +278,7 @@ export const groupOrdersByLocation = (orders = []) => {
     group.items.push(...(Array.isArray(order.items) ? order.items : []));
     groups.set(key, group);
   });
-  return [...groups.values()];
+  return [...groups.values()].sort((a, b) => compareServiceLocations(a.location, b.location));
 };
 
 export const isDelayedOrder = (order, thresholdMinutes = 15) =>

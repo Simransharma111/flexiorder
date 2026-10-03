@@ -1,3 +1,5 @@
+import { orderNumber } from "./orderNumber";
+import { customerName } from "./orderCustomer";
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 const finiteNumber = (value, fallback = 0) => {
@@ -129,15 +131,14 @@ export const previousAnalyticsRange = (range) => {
   };
 };
 
-export const orderMatchesAnalyticsSearch = (order, search) => {
+export const orderMatchesAnalyticsSearch = (order, search, hotel) => {
   const term = String(search || "").trim().toLocaleLowerCase();
   if (!term) return true;
 
   const table = order?.tableId || order?.table || {};
   const values = [
-    order?.guestName,
-    order?.customerName,
-    order?.name,
+    orderNumber(order, hotel),
+    customerName(order),
     order?._id,
     order?.clientOrderId,
     order?.orderNumber,
@@ -155,13 +156,13 @@ export const orderMatchesAnalyticsSearch = (order, search) => {
   return values.some((value) => String(value ?? "").toLocaleLowerCase().includes(term));
 };
 
-export const filterAnalyticsOrders = (orders, range, search = "") => {
+export const filterAnalyticsOrders = (orders, range, search = "", hotel) => {
   if (!range?.start || !range?.end || range.error) return [];
   const startTime = range.start.getTime();
   const endTime = range.end.getTime();
 
   return (Array.isArray(orders) ? orders : []).filter((order) => {
-    if (order?.status === "cancelled" || !orderMatchesAnalyticsSearch(order, search)) return false;
+    if (order?.status === "cancelled" || !orderMatchesAnalyticsSearch(order, search, hotel)) return false;
     const date = getOrderAnalyticsDate(order);
     return date && date.getTime() >= startTime && date.getTime() <= endTime;
   });

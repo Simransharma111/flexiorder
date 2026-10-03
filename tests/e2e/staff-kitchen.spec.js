@@ -3,6 +3,7 @@ import {
   fulfillJson,
   hotel,
   installSession,
+  installNativeBridge,
   kitchenOrder,
   mockGuestMenu,
   mockStaffWorkspace,
@@ -145,7 +146,7 @@ test("God Mode kitchen moves only the activated order directly to compact Ready"
 
   await page.goto("/kitchen");
   await expect(page.locator(".ops-order-card--new")).toHaveCount(2);
-  const first = page.getByRole("button", { name: /^Mark ready Table 8 order/ }).first();
+  const first = page.locator(".ops-order-card--new").filter({ hasText: "Order #1042" }).getByRole("button", { name: /^Mark ready Table 8 order/ });
   await first.focus();
   await page.keyboard.press("Enter");
   await expect(page.locator(".ops-order-card--ready")).toHaveCount(1);
@@ -212,6 +213,7 @@ test("God Mode queues direct Ready offline once and replays the same mutation id
   });
 
   await page.goto("/kitchen");
+  await expect(page.getByRole("button", { name: /^Mark ready Table 8 order/ })).toBeVisible();
   await context.setOffline(true);
   await page.getByRole("button", { name: /^Mark ready Table 8 order/ }).click();
   await expect(page.locator(".ops-order-card--ready")).toBeVisible();
@@ -673,12 +675,20 @@ test("delivered history shares one paperless receipt truthfully and retains PDF 
   await details.getByRole("button", { name: "Share receipt" }).click();
   await expect(details.getByText("+919876543210", { exact: true })).toBeVisible();
   await details.getByRole("button", { name: "Confirm and open share" }).click();
-  await expect(details.getByText("Share opened. Confirm delivery in the app you selected.")).toBeVisible();
+  await expect(details.getByText("Share sheet opened. Confirm the destination in the app you choose.")).toBeVisible();
   const shared = await page.evaluate(() => window.__receiptShare);
   expect(shared.fileNames).toEqual(["order-receipt-R-8001.pdf"]);
   expect(shared.text).toContain("Paneer Tikka");
   expect(shared.text).not.toContain("Sent");
 
+  await page.evaluate(() => { window.__receiptShare = null; });
+  await details.getByRole("button", { name: "Download PDF" }).click();
+  await expect.poll(() => page.evaluate(() => window.__receiptShare?.fileNames)).toEqual(["order-receipt-R-8001.pdf"]);
+  await expect(details.getByText("Share sheet opened. Confirm the destination in the app you choose.")).toBeVisible();
+
+  await page.evaluate(() => {
+    Object.defineProperty(navigator, "canShare", { configurable: true, value: () => false });
+  });
   const downloadPromise = page.waitForEvent("download");
   await details.getByRole("button", { name: "Download PDF" }).click();
   const download = await downloadPromise;
@@ -712,13 +722,15 @@ test("receipt sharing reports cancellation and unsupported platforms without cla
   await details.getByRole("button", { name: "Share receipt" }).click();
   await expect(details.getByText("+442079460958", { exact: true })).toBeVisible();
   await details.getByRole("button", { name: "Confirm and open share" }).click();
-  await expect(details.getByText("Share cancelled. Nothing was marked as sent.")).toBeVisible();
+  await expect(details.getByText("Sharing cancelled. No file was sent.")).toBeVisible();
 
   await page.evaluate(() => {
     Object.defineProperty(navigator, "canShare", { configurable: true, value: () => false });
   });
+  const downloadPromise = page.waitForEvent("download");
   await details.getByRole("button", { name: "Confirm and open share" }).click();
-  await expect(details.getByText("File sharing is unavailable here. Use Download PDF or Print.")).toBeVisible();
+  expect((await downloadPromise).suggestedFilename()).toMatch(/^order-receipt-.*\.pdf$/);
+  await expect(details.getByText("Download started. Check your browser downloads.")).toBeVisible();
   await details.getByRole("button", { name: "Print" }).click();
   await expect(details.getByText("Print view opened.")).toBeVisible();
 });
@@ -908,4 +920,178 @@ test("customer visual and simple menus use one compact category chooser", async 
   await page.reload();
   await expect(page.getByRole("button", { name: /Category All/ })).toBeVisible();
   await expect(page.locator(".guest-menu-main-panel .menu-subcategory-trigger")).toHaveCount(1);
+});
+
+test("waiter draft survives tabs, review and cancelled discard; explicit discard clears it", async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 740 });
+  await installSession(page, "staff");
+  await mockStaffWorkspace(page);
+  await page.goto('/owner/order');
+  await expect(page.getByText('Flexi Test Kitchen', { exact: true })).toBeVisible();
+  await page.getByRole('tab', { name: 'Take Order' }).click();
+  await page.getByRole('button', { name: 'Table 8' }).click();
+  await page.getByRole('button', { name: 'Add Paneer Tikka' }).click();
+  await page.getByRole('button', { name: 'Review order, 1 item' }).click();
+  await expect(page.getByRole('region', { name: 'Selected order items' })).toBeFocused();
+  await page.getByRole('button', { name: 'Add more dishes' }).click();
+  await expect(page.getByRole('textbox', { name: 'Search dishes' })).toBeFocused();
+  await page.getByRole('tab', { name: 'Orders', exact: true }).click();
+  await page.getByRole('tab', { name: 'Take Order' }).click();
+  await expect(page.getByRole('button', { name: 'Review order, 1 item' })).toBeVisible();
+  await page.getByRole('button', { name: 'Back to tables' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Discard this order?' });
+  await expect(dialog.getByRole('button', { name: 'Keep editing' })).toBeFocused();
+  await page.keyboard.press('Shift+Tab');
+  await expect(dialog.getByRole('button', { name: 'Discard order' })).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(dialog).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Back to tables' })).toBeFocused();
+  await expect(page.getByRole('button', { name: 'Review order, 1 item' })).toBeVisible();
+  await page.getByRole('button', { name: 'Back to tables' }).click();
+  await dialog.getByRole('button', { name: 'Discard order' }).click();
+  await expect(page.getByRole('heading', { name: 'Choose a table or room' })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
+
+test("waiter options contain focus and restore it, with clear filtered location recovery", async ({ page }) => {
+  await installSession(page, 'staff');
+  await mockStaffWorkspace(page);
+  await page.goto('/owner/order');
+  const trigger = page.getByRole('button', { name: 'More waiter options' });
+  await trigger.click();
+  const dialog = page.getByRole('dialog', { name: 'Waiter options' });
+  await expect(dialog.getByRole('button', { name: 'Close waiter options' })).toBeFocused();
+  await page.keyboard.press('Shift+Tab');
+  expect(await dialog.evaluate(node => node.contains(document.activeElement))).toBe(true);
+  await page.keyboard.press('Escape');
+  await expect(trigger).toBeFocused();
+  await page.getByRole('tab', { name: 'Take Order' }).click();
+  await page.getByRole('textbox', { name: 'Search table or room' }).fill('missing');
+  await expect(page.getByText('No matching tables or rooms.')).toBeVisible();
+  await page.getByRole('button', { name: 'Clear location search' }).click();
+  await page.getByRole('button', { name: 'Table 8' }).click();
+  await page.getByRole('textbox', { name: 'Search dishes' }).fill('missing');
+  await expect(page.getByText('No dishes match these filters.')).toBeVisible();
+  await page.getByRole('button', { name: 'Clear dish filters' }).click();
+  await expect(page.getByRole('button', { name: 'Add Paneer Tikka' })).toBeVisible();
+});
+
+test("native Back closes waiter options before protecting an unsent order", async ({ page }) => {
+  await installNativeBridge(page);
+  await installSession(page, 'staff');
+  await mockStaffWorkspace(page);
+  await page.goto('/owner/order');
+  await page.getByRole('tab', { name: 'Take Order' }).click();
+  await page.getByRole('button', { name: 'Table 8' }).click();
+  await page.getByRole('button', { name: 'Add Paneer Tikka' }).click();
+  await page.getByRole('button', { name: 'More waiter options' }).click();
+  await page.evaluate(() => window.__emitNativeEvent('App', 'backButton'));
+  await expect(page.getByRole('dialog', { name: 'Waiter options' })).toHaveCount(0);
+  await expect(page.getByRole('dialog', { name: 'Discard this order?' })).toHaveCount(0);
+  await page.evaluate(() => window.__emitNativeEvent('App', 'backButton'));
+  await expect(page.getByRole('dialog', { name: 'Discard this order?' })).toBeVisible();
+  await page.evaluate(() => window.__emitNativeEvent('App', 'backButton'));
+  await expect(page.getByRole('dialog', { name: 'Discard this order?' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Review order, 1 item' })).toBeVisible();
+  expect(await page.evaluate(() => window.__nativeExitCount)).toBe(0);
+});
+
+test("failed waiter loading is not shown as an empty restaurant and retry recovers", async ({ page }) => {
+  await installSession(page, 'staff');
+  await mockStaffWorkspace(page);
+  let fail = true;
+  await page.route('**/hotel/me', route => fulfillJson(route, fail ? { message: 'Unavailable' } : hotel, fail ? 503 : 200));
+  await page.goto('/owner/order');
+  await expect(page.getByText('Could not load your restaurant. Check your connection and retry.')).toBeVisible();
+  await expect(page.getByText('No tables or rooms are set up yet.', { exact: false })).toHaveCount(0);
+  fail = false;
+  await page.getByRole('button', { name: 'Retry workspace' }).click();
+  await page.getByRole('tab', { name: 'Take Order' }).click();
+  await expect(page.getByRole('button', { name: 'Table 8' })).toBeVisible();
+});
+
+test("waiter can take orders when only the orders list fails", async ({ page }) => {
+  await installSession(page, 'staff');
+  await mockStaffWorkspace(page);
+  await page.route('**/kitchen/orders', route => fulfillJson(route, { message: 'Unavailable' }, 503));
+  await page.goto('/owner/order');
+  await expect(page.getByText('Could not refresh the workspace. Saved information may be out of date.')).toBeVisible();
+  await page.getByRole('tab', { name: 'Take Order' }).click();
+  await page.getByRole('button', { name: 'Table 8' }).click();
+  await expect(page.getByRole('button', { name: 'Add Paneer Tikka' })).toBeVisible();
+});
+
+test("native Back protects a retained draft from the Orders tab", async ({ page }) => {
+  await installNativeBridge(page);
+  await installSession(page, 'staff');
+  await mockStaffWorkspace(page);
+  await page.goto('/owner/order');
+  await page.getByRole('tab', { name: 'Take Order' }).click();
+  await page.getByRole('button', { name: 'Table 8' }).click();
+  await page.getByRole('button', { name: 'Add Paneer Tikka' }).click();
+  await page.getByRole('tab', { name: 'Orders', exact: true }).click();
+  await page.evaluate(() => window.__emitNativeEvent('App', 'backButton'));
+  const dialog = page.getByRole('dialog', { name: 'Discard this order?' });
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole('button', { name: 'Keep editing' }).click();
+  await expect(page.getByRole('button', { name: 'Review order, 1 item' })).toBeVisible();
+  await page.getByRole('button', { name: 'Back to tables' }).click();
+  await dialog.getByRole('button', { name: 'Discard order' }).click();
+  await expect(page.getByRole('heading', { name: 'Choose a table or room' })).toBeFocused();
+  expect(await page.evaluate(() => window.__nativeExitCount)).toBe(0);
+});
+
+test("cached dishes retain filter recovery after a failed refresh", async ({ page }) => {
+  await installSession(page, 'staff');
+  await mockStaffWorkspace(page);
+  await page.goto('/owner/order');
+  await page.getByRole('tab', { name: 'Take Order' }).click();
+  await page.getByRole('button', { name: 'Table 8' }).click();
+  await expect(page.getByRole('button', { name: 'Add Paneer Tikka' })).toBeVisible();
+  await page.route('**/menu/hotel-1', route => fulfillJson(route, { message: 'Unavailable' }, 503));
+  await page.getByRole('textbox', { name: 'Search dishes' }).fill('missing');
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await expect(page.getByRole('button', { name: 'Retry menu' })).toBeVisible({ timeout: 20000 });
+  await page.getByRole('button', { name: 'Clear dish filters' }).click();
+  await expect(page.getByRole('button', { name: 'Add Paneer Tikka' })).toBeVisible();
+});
+
+test("waiter takeaway uses its service location through offline retry, history and receipt", async ({ page, context }) => {
+  await installSession(page, "staff");
+  await mockStaffWorkspace(page);
+  await page.route("**/table", route => fulfillJson(route, { tables: [{ _id: "takeaway-location", type: "table", tableNumber: "Takeaway", qrId: null }] }));
+  const submitted = [];
+  let saved;
+  await page.route("**/api/orders", route => {
+    const body = route.request().postDataJSON();
+    submitted.push(body);
+    saved = kitchenOrder({ _id: "saved-takeaway", clientOrderId: body.clientOrderId, orderType: body.orderType, tableId: body.tableId, locationType: "table", locationNumber: "Takeaway", roomNumber: "Takeaway", status: "delivered", totalAmount: 283.5 });
+    return fulfillJson(route, { success: true, order: saved }, 201);
+  });
+  await page.goto("/owner/order");
+  await page.getByRole("tab", { name: "Take Order" }).click();
+  await expect(page.getByRole("button", { name: "Place Order", exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "Takeaway order", exact: true }).click();
+  await page.getByRole("button", { name: "Add Paneer Tikka" }).click();
+  await context.setOffline(true);
+  await page.getByRole("button", { name: "Place Order", exact: true }).click();
+  const queued = await page.evaluate(() => {
+    const key = Object.keys(localStorage).find(key => key.startsWith("flexiorder_pending_staff_orders:"));
+    return JSON.parse(localStorage.getItem(key) || "[]");
+  });
+  expect(queued).toHaveLength(1);
+  expect(queued[0].payload).toMatchObject({ tableId: "takeaway-location", orderType: "now" });
+  expect(queued[0].payload.clientOrderId).toBeTruthy();
+  await context.setOffline(false);
+  await expect.poll(() => submitted.length).toBe(1);
+  expect(submitted[0]).toMatchObject({ tableId: "takeaway-location", orderType: "now", clientOrderId: queued[0].payload.clientOrderId });
+  await page.route("**/kitchen/orders", route => fulfillJson(route, { orders: [saved] }));
+  await page.reload();
+  await page.getByRole("tab", { name: "History", exact: true }).click();
+  await page.getByRole("button", { name: "More options for Takeaway" }).click();
+  await page.getByRole("button", { name: "View full details" }).click();
+  const details = page.getByRole("dialog", { name: "Order details for Takeaway" });
+  await expect(details).toBeVisible();
+  await expect(details.getByRole("button", { name: "Download PDF" })).toBeVisible();
+  await expect(details).toContainText("283.50");
 });
