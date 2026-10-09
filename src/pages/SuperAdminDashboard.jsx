@@ -931,6 +931,8 @@ export default function SuperAdminDashboard() {
           </div>
 
           <div className="flex flex-wrap gap-2.5">
+            {import.meta.env.VITE_ADMIN_CUSTOMERS_DEMO === "true" && <button type="button" onClick={() => navigate("/superadmin/customers")} className="min-h-11 rounded-card border border-hairline bg-white px-4 text-sm font-bold text-ink">Customers · Demo</button>}
+
 
             <button
               type="button"

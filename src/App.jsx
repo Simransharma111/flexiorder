@@ -24,6 +24,9 @@ const OwnerDashboard = lazy(() => import("./pages/OwnerDashboard"));
 const OwnerHotelSettings = lazy(() => import("./pages/OwnerHotelSettings"));
 const HotelSetupPage = lazy(() => import("./pages/HotelSetupPage"));
 const KitchenDashboard = lazy(() => import("./pages/KitchenDashboard"));
+const CustomersPage = import.meta.env.VITE_ADMIN_CUSTOMERS_DEMO === "true"
+  ? lazy(() => import("./pages/admin/CustomersPage"))
+  : null;
 const SuperAdminDashboard = lazy(() => import("./pages/SuperAdminDashboard"));
 const TableQRManager = lazy(() => import("./components/TableQRManager"));
 const ChangePassword = lazy(() => import("./pages/ChangePassword"));
@@ -108,6 +111,11 @@ export default function App() {
             </ProtectedRoute>
           }
         />
+
+        {import.meta.env.VITE_ADMIN_CUSTOMERS_DEMO === "true" && <Route
+          path="/superadmin/customers/:customerId?"
+          element={<ProtectedRoute allowedRoles={["superadmin"]}><CustomersPage /></ProtectedRoute>}
+        />}
 
         {/* ================= HOTEL SETUP ================= */}
 
