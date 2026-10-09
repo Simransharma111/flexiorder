@@ -9,3 +9,9 @@ Customers list/profile and email templates use synthetic fixtures. Defaults rese
 Validation: npm run check passed on this candidate (lint, unit tests, production build). Relevant CRM/auth routing browser tests use installed Google Chrome with video disabled; see workspace deployment record for final results and URL.
 
 Rollback: delete/disable the preview deployment. Production and restaurant backend are unchanged.
+
+## Production authorization — 2026-10-09
+
+After reviewing preview access, the user explicitly requested publishing this sample-data demo on the existing production website without a Vercel login. The same tested app code and demo build flag are approved for production. The Customers area still requires the existing Super Admin login. It remains a synthetic prototype, not a real CRM ledger.
+
+Release validation:321 unit tests and40 desktop/mobile CRM/auth routing browser cases passed. No code changes since that validation. To remove the demo entry, remove the explicit VITE_ADMIN_CUSTOMERS_DEMO=true buildCommand override and redeploy; the application flag defaults off.
