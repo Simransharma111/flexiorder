@@ -1,10 +1,11 @@
 import { expect, test } from '@playwright/test';
 import { fulfillJson, installSession, isolateTestNetwork, mockStaffWorkspace } from './helpers';
-const enabled = process.env.VITE_ADMIN_CUSTOMERS_DEMO === 'true';
+const live = process.env.VITE_ADMIN_CUSTOMERS_LIVE === 'true';
+const enabled = !live && process.env.VITE_ADMIN_CUSTOMERS_DEMO === 'true';
 test.beforeEach(async ({ page }) => { await isolateTestNetwork(page); });
 
 test('CRM is absent when its demo flag is disabled', async ({ page }) => {
-  test.skip(enabled, 'Default build test');
+  test.skip(enabled || live, 'Default build test');
   await installSession(page, 'superadmin');
   await page.route('**/admin/hotels', route => fulfillJson(route, { hotels: [] }));
   await page.goto('/superadmin');
